@@ -1,0 +1,43 @@
+{
+  "name": "backbet",
+  "version": "1.0.0",
+  "description": "backendBet",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dioneyfroes-coder/backBet.git"
+  },
+  "author": "dioneyfroes-coder",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dioneyfroes-coder/backBet/issues"
+  },
+  "homepage": "https://github.com/dioneyfroes-coder/backBet#readme",
+  "dependencies": {
+    "@nestjs/common": "^11.1.8",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.8",
+    "@nestjs/jwt": "^11.0.1",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/swagger": "^11.2.1",
+    "@nestjs/typeorm": "^11.0.0",
+    "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "pg": "^8.16.3",
+    "typeorm": "^0.3.27"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.8",
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.9.2",
+    "@types/passport-jwt": "^4.0.1",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.5",
+    "typescript": "^5.9.3"
+  }
+}
