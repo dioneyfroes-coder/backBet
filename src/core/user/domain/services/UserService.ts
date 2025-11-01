@@ -64,4 +64,3 @@ export class UserService {
     await this.userRepository.update(user);
   }
 }
-

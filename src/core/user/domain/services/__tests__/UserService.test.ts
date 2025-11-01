@@ -46,13 +46,13 @@ describe('UserService', () => {
         'existingUser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findByEmail.mockResolvedValue(existingUser);
 
-      await expect(userService.registerUser(mockCreateUserInput))
-        .rejects
-        .toThrow('Email already exists');
+      await expect(userService.registerUser(mockCreateUserInput)).rejects.toThrow(
+        'Email already exists',
+      );
       expect(mockUserRepository.save).not.toHaveBeenCalled();
     });
 
@@ -61,7 +61,7 @@ describe('UserService', () => {
       const cryptoMock = {
         randomUUID: jest.fn().mockReturnValue(randomUUID),
         subtle: {} as SubtleCrypto,
-        getRandomValues: () => new Uint8Array(16)
+        getRandomValues: () => new Uint8Array(16),
       };
       globalThis.crypto = cryptoMock as Crypto;
 
@@ -102,7 +102,7 @@ describe('UserService', () => {
         'oldusername',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
@@ -115,9 +115,7 @@ describe('UserService', () => {
     it('should throw error when user is not found', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.updateProfile(userId, updateData))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.updateProfile(userId, updateData)).rejects.toThrow('User not found');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
 
@@ -128,17 +126,17 @@ describe('UserService', () => {
         'oldusername',
         'SUSPENDED' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.updateProfile(userId, updateData))
-        .rejects
-        .toThrow('User is suspended');
+      await expect(userService.updateProfile(userId, updateData)).rejects.toThrow(
+        'User is suspended',
+      );
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
   });
-  
+
   describe('changeEmail', () => {
     const userId = 'test-user-id';
     const newEmail = 'newemail@example.com';
@@ -150,7 +148,7 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.findByEmail.mockResolvedValue(null);
@@ -164,9 +162,7 @@ describe('UserService', () => {
     it('should throw error when user is not found', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.changeEmail(userId, newEmail))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.changeEmail(userId, newEmail)).rejects.toThrow('User not found');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
 
@@ -177,7 +173,7 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       const existingUser = new User(
         'other-id',
@@ -185,14 +181,14 @@ describe('UserService', () => {
         'otheruser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.findByEmail.mockResolvedValue(existingUser);
 
-      await expect(userService.changeEmail(userId, newEmail))
-        .rejects
-        .toThrow('Email already exists');
+      await expect(userService.changeEmail(userId, newEmail)).rejects.toThrow(
+        'Email already exists',
+      );
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
 
@@ -203,20 +199,18 @@ describe('UserService', () => {
         'testuser',
         'SUSPENDED' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.changeEmail(userId, newEmail))
-        .rejects
-        .toThrow('User is suspended');
+      await expect(userService.changeEmail(userId, newEmail)).rejects.toThrow('User is suspended');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
   });
 
   describe('suspendUser', () => {
     const userId = 'test-user-id';
-    
+
     it('should suspend a user successfully', async () => {
       const user = new User(
         userId,
@@ -224,7 +218,7 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
@@ -233,17 +227,15 @@ describe('UserService', () => {
       expect(mockUserRepository.update).toHaveBeenCalledWith(
         expect.objectContaining({
           id: userId,
-          status: 'SUSPENDED'
-        })
+          status: 'SUSPENDED',
+        }),
       );
     });
 
     it('should throw error when user is not found', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.suspendUser(userId))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.suspendUser(userId)).rejects.toThrow('User not found');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
 
@@ -254,20 +246,18 @@ describe('UserService', () => {
         'testuser',
         'SUSPENDED' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.suspendUser(userId))
-        .rejects
-        .toThrow('User is already suspended');
+      await expect(userService.suspendUser(userId)).rejects.toThrow('User is already suspended');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
   });
 
   describe('activateUser', () => {
     const userId = 'test-user-id';
-    
+
     it('should activate a pending user successfully', async () => {
       const user = new User(
         userId,
@@ -275,7 +265,7 @@ describe('UserService', () => {
         'testuser',
         'PENDING_VERIFICATION' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
@@ -284,17 +274,15 @@ describe('UserService', () => {
       expect(mockUserRepository.update).toHaveBeenCalledWith(
         expect.objectContaining({
           id: userId,
-          status: 'ACTIVE'
-        })
+          status: 'ACTIVE',
+        }),
       );
     });
 
     it('should throw error when user is not found', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.activateUser(userId))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.activateUser(userId)).rejects.toThrow('User not found');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
 
@@ -305,13 +293,11 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE' as UserStatus,
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.activateUser(userId))
-        .rejects
-        .toThrow('User is already active');
+      await expect(userService.activateUser(userId)).rejects.toThrow('User is already active');
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
   });

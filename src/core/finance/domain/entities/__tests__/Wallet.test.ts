@@ -24,14 +24,13 @@ describe('Wallet', () => {
     });
 
     it('should throw error for negative amount', () => {
-      expect(() => wallet.deposit(-100))
-        .toThrow('Amount must be positive');
+      expect(() => wallet.deposit(-100)).toThrow('Amount must be positive');
     });
   });
 
   describe('withdraw', () => {
     beforeEach(() => {
-      wallet.deposit(200);  // Initial balance
+      wallet.deposit(200); // Initial balance
     });
 
     it('should subtract amount from balance', () => {
@@ -41,19 +40,17 @@ describe('Wallet', () => {
     });
 
     it('should throw error for negative amount', () => {
-      expect(() => wallet.withdraw(-100))
-        .toThrow('Amount must be positive');
+      expect(() => wallet.withdraw(-100)).toThrow('Amount must be positive');
     });
 
     it('should throw error for insufficient funds', () => {
-      expect(() => wallet.withdraw(300))
-        .toThrow('Insufficient funds');
+      expect(() => wallet.withdraw(300)).toThrow('Insufficient funds');
     });
   });
 
   describe('lock', () => {
     beforeEach(() => {
-      wallet.deposit(200);  // Initial balance
+      wallet.deposit(200); // Initial balance
     });
 
     it('should move amount from balance to locked balance', () => {
@@ -64,20 +61,18 @@ describe('Wallet', () => {
     });
 
     it('should throw error for negative amount', () => {
-      expect(() => wallet.lock(-100))
-        .toThrow('Amount must be positive');
+      expect(() => wallet.lock(-100)).toThrow('Amount must be positive');
     });
 
     it('should throw error for insufficient funds', () => {
-      expect(() => wallet.lock(300))
-        .toThrow('Insufficient funds');
+      expect(() => wallet.lock(300)).toThrow('Insufficient funds');
     });
   });
 
   describe('unlock', () => {
     beforeEach(() => {
-      wallet.deposit(200);  // Initial balance
-      wallet.lock(100);  // Lock some funds
+      wallet.deposit(200); // Initial balance
+      wallet.lock(100); // Lock some funds
     });
 
     it('should move amount from locked balance to available balance', () => {
@@ -87,13 +82,11 @@ describe('Wallet', () => {
     });
 
     it('should throw error for negative amount', () => {
-      expect(() => wallet.unlock(-100))
-        .toThrow('Amount must be positive');
+      expect(() => wallet.unlock(-100)).toThrow('Amount must be positive');
     });
 
     it('should throw error for insufficient locked funds', () => {
-      expect(() => wallet.unlock(200))
-        .toThrow('Amount exceeds locked balance');
+      expect(() => wallet.unlock(200)).toThrow('Amount exceeds locked balance');
     });
   });
 });

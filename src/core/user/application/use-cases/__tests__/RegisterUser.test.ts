@@ -83,10 +83,12 @@ describe('RegisterUser Use Case', () => {
     const error = new Error('User service error');
     mockUserService.registerUser.mockRejectedValue(error);
 
-    await expect(registerUser.execute({
-      email: 'test@example.com',
-      username: 'testuser',
-    })).rejects.toThrow(error);
+    await expect(
+      registerUser.execute({
+        email: 'test@example.com',
+        username: 'testuser',
+      }),
+    ).rejects.toThrow(error);
 
     expect(mockWalletService.createWallet).not.toHaveBeenCalled();
   });
@@ -105,9 +107,11 @@ describe('RegisterUser Use Case', () => {
     mockUserService.registerUser.mockResolvedValue(mockUser);
     mockWalletService.createWallet.mockRejectedValue(error);
 
-    await expect(registerUser.execute({
-      email: 'test@example.com',
-      username: 'testuser',
-    })).rejects.toThrow(error);
+    await expect(
+      registerUser.execute({
+        email: 'test@example.com',
+        username: 'testuser',
+      }),
+    ).rejects.toThrow(error);
   });
 });

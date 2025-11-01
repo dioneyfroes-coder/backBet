@@ -12,7 +12,7 @@ describe('WalletService', () => {
       findByUserId: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
-      delete: jest.fn()
+      delete: jest.fn(),
     };
     walletService = new WalletService(mockWalletRepository);
   });
@@ -20,7 +20,7 @@ describe('WalletService', () => {
   describe('createWallet', () => {
     const createWalletDTO: ICreateWalletDTO = {
       userId: '1',
-      currency: 'BRL'
+      currency: 'BRL',
     };
 
     it('deve criar uma nova carteira com sucesso', async () => {
@@ -41,7 +41,7 @@ describe('WalletService', () => {
 
       const result = await walletService.createWallet({
         ...createWalletDTO,
-        currency: 'USD'
+        currency: 'USD',
       });
 
       expect(result.currency).toBe('USD');
@@ -50,9 +50,9 @@ describe('WalletService', () => {
     it('deve lançar erro se já existir uma carteira para o usuário', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(new Wallet('1', 'BRL'));
 
-      await expect(walletService.createWallet(createWalletDTO))
-        .rejects
-        .toThrow('Wallet already exists for user');
+      await expect(walletService.createWallet(createWalletDTO)).rejects.toThrow(
+        'Wallet already exists for user',
+      );
     });
   });
 
@@ -71,9 +71,7 @@ describe('WalletService', () => {
     it('deve lançar erro se a carteira não existir', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
 
-      await expect(walletService.deposit('1', 100))
-        .rejects
-        .toThrow('Wallet not found');
+      await expect(walletService.deposit('1', 100)).rejects.toThrow('Wallet not found');
     });
   });
 
@@ -93,9 +91,7 @@ describe('WalletService', () => {
     it('deve lançar erro se a carteira não existir', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
 
-      await expect(walletService.withdraw('1', 50))
-        .rejects
-        .toThrow('Wallet not found');
+      await expect(walletService.withdraw('1', 50)).rejects.toThrow('Wallet not found');
     });
 
     it('deve lançar erro se tentar sacar mais do que o saldo', async () => {
@@ -103,9 +99,7 @@ describe('WalletService', () => {
       wallet.deposit(100);
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
 
-      await expect(walletService.withdraw('1', 150))
-        .rejects
-        .toThrow('Insufficient funds');
+      await expect(walletService.withdraw('1', 150)).rejects.toThrow('Insufficient funds');
     });
   });
 });

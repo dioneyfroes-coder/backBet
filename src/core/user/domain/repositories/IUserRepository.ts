@@ -1,3 +1,6 @@
+import { Wallet } from '@/core/finance/domain/entities/Wallet';
+import { User } from '../entities/User';
+
 // users/domain/repositories/IUserRepository.ts
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;

@@ -9,7 +9,7 @@ export class Email {
   private isValid(email: string): boolean {
     if (!email || typeof email !== 'string') return false;
     if (email.includes(' ')) return false;
-    
+
     const parts = email.split('@');
     if (parts.length !== 2) return false;
 
@@ -18,9 +18,10 @@ export class Email {
 
     const domainParts = domain.split('.');
     if (domainParts.length < 2) return false;
-    if (domainParts.some(part => !part)) return false;
+    if (domainParts.some((part) => !part)) return false;
 
-    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    const emailRegex =
+      /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     return emailRegex.test(email);
   }
 

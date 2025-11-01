@@ -21,12 +21,12 @@ describe('WalletService', () => {
   describe('createWallet', () => {
     const createWalletDto: ICreateWalletDTO = {
       userId: 'test-user-id',
-      currency: 'BRL'
+      currency: 'BRL',
     };
 
     it('should create a new wallet when user does not have one', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
-      
+
       const result = await walletService.createWallet(createWalletDto);
 
       expect(result).toBeInstanceOf(Wallet);
@@ -39,7 +39,7 @@ describe('WalletService', () => {
     it('should create a wallet with specified currency', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
       const currencyDto = { ...createWalletDto, currency: 'USD' };
-      
+
       const result = await walletService.createWallet(currencyDto);
 
       expect(result).toBeInstanceOf(Wallet);
@@ -53,9 +53,9 @@ describe('WalletService', () => {
       const existingWallet = new Wallet(createWalletDto.userId, 'BRL');
       mockWalletRepository.findByUserId.mockResolvedValue(existingWallet);
 
-      await expect(walletService.createWallet(createWalletDto))
-        .rejects
-        .toThrow('Wallet already exists for user');
+      await expect(walletService.createWallet(createWalletDto)).rejects.toThrow(
+        'Wallet already exists for user',
+      );
       expect(mockWalletRepository.save).not.toHaveBeenCalled();
     });
   });
@@ -77,9 +77,7 @@ describe('WalletService', () => {
     it('should throw error when wallet is not found', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
 
-      await expect(walletService.deposit(userId, amount))
-        .rejects
-        .toThrow('Wallet not found');
+      await expect(walletService.deposit(userId, amount)).rejects.toThrow('Wallet not found');
       expect(mockWalletRepository.update).not.toHaveBeenCalled();
     });
   });
@@ -103,20 +101,16 @@ describe('WalletService', () => {
     it('should throw error when wallet is not found', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
 
-      await expect(walletService.withdraw(userId, amount))
-        .rejects
-        .toThrow('Wallet not found');
+      await expect(walletService.withdraw(userId, amount)).rejects.toThrow('Wallet not found');
       expect(mockWalletRepository.update).not.toHaveBeenCalled();
     });
 
     it('should throw error when insufficient funds', async () => {
       const wallet = new Wallet(userId, 'BRL');
-      wallet.deposit(50);  // Less than withdrawal amount
+      wallet.deposit(50); // Less than withdrawal amount
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
 
-      await expect(walletService.withdraw(userId, amount))
-        .rejects
-        .toThrow('Insufficient funds');
+      await expect(walletService.withdraw(userId, amount)).rejects.toThrow('Insufficient funds');
       expect(mockWalletRepository.update).not.toHaveBeenCalled();
     });
   });

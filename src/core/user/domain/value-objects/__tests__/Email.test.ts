@@ -25,14 +25,14 @@ describe('Email Value Object', () => {
 
   describe('constructor', () => {
     it('should create an Email with valid email addresses', () => {
-      validEmails.forEach(validEmail => {
+      validEmails.forEach((validEmail) => {
         const email = new Email(validEmail);
         expect(email.value).toBe(validEmail);
       });
     });
 
     it('should throw error for invalid email addresses', () => {
-      invalidEmails.forEach(invalidEmail => {
+      invalidEmails.forEach((invalidEmail) => {
         expect(() => new Email(invalidEmail)).toThrow('Invalid email format');
       });
     });

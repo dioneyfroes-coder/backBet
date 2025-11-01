@@ -1,4 +1,4 @@
-import { IWalletDTO } from "@/core/finance/types/wallet.types";
+import { IWalletDTO } from '@/core/finance/types/wallet.types';
 
 export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
 

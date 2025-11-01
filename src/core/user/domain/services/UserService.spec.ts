@@ -12,7 +12,7 @@ describe('UserService', () => {
       findByEmail: jest.fn(),
       findById: jest.fn(),
       save: jest.fn(),
-      update: jest.fn()
+      update: jest.fn(),
     };
     userService = new UserService(mockUserRepository);
   });
@@ -20,7 +20,7 @@ describe('UserService', () => {
   describe('registerUser', () => {
     const validInput = {
       email: 'test@example.com',
-      username: 'testuser'
+      username: 'testuser',
     };
 
     it('deve criar um novo usuário com sucesso', async () => {
@@ -37,18 +37,18 @@ describe('UserService', () => {
     });
 
     it('deve lançar erro se o email já existir', async () => {
-      mockUserRepository.findByEmail.mockResolvedValue(new User(
-        '1',
-        new Email('test@example.com'),
-        'existinguser',
-        'ACTIVE',
-        new Date(),
-        new Date()
-      ));
+      mockUserRepository.findByEmail.mockResolvedValue(
+        new User(
+          '1',
+          new Email('test@example.com'),
+          'existinguser',
+          'ACTIVE',
+          new Date(),
+          new Date(),
+        ),
+      );
 
-      await expect(userService.registerUser(validInput))
-        .rejects
-        .toThrow('Email already exists');
+      await expect(userService.registerUser(validInput)).rejects.toThrow('Email already exists');
 
       expect(mockUserRepository.save).not.toHaveBeenCalled();
     });
@@ -62,7 +62,7 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.update.mockResolvedValue(undefined);
@@ -76,9 +76,7 @@ describe('UserService', () => {
     it('deve lançar erro se o usuário não existir', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.suspendUser('1'))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.suspendUser('1')).rejects.toThrow('User not found');
     });
 
     it('deve lançar erro se o usuário já estiver suspenso', async () => {
@@ -88,13 +86,11 @@ describe('UserService', () => {
         'testuser',
         'SUSPENDED',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.suspendUser('1'))
-        .rejects
-        .toThrow('User is already suspended');
+      await expect(userService.suspendUser('1')).rejects.toThrow('User is already suspended');
     });
   });
 
@@ -106,7 +102,7 @@ describe('UserService', () => {
         'testuser',
         'PENDING_VERIFICATION',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.update.mockResolvedValue(undefined);
@@ -120,9 +116,7 @@ describe('UserService', () => {
     it('deve lançar erro se o usuário não existir', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.activateUser('1'))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.activateUser('1')).rejects.toThrow('User not found');
     });
 
     it('deve lançar erro se o usuário já estiver ativo', async () => {
@@ -132,13 +126,11 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.activateUser('1'))
-        .rejects
-        .toThrow('User is already active');
+      await expect(userService.activateUser('1')).rejects.toThrow('User is already active');
     });
   });
 
@@ -150,7 +142,7 @@ describe('UserService', () => {
         'oldusername',
         'ACTIVE',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.update.mockResolvedValue(undefined);
@@ -164,9 +156,9 @@ describe('UserService', () => {
     it('deve lançar erro se o usuário não existir', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.updateProfile('1', { username: 'newusername' }))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.updateProfile('1', { username: 'newusername' })).rejects.toThrow(
+        'User not found',
+      );
     });
 
     it('deve lançar erro se o usuário estiver suspenso', async () => {
@@ -176,13 +168,13 @@ describe('UserService', () => {
         'testuser',
         'SUSPENDED',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.updateProfile('1', { username: 'newusername' }))
-        .rejects
-        .toThrow('User is suspended');
+      await expect(userService.updateProfile('1', { username: 'newusername' })).rejects.toThrow(
+        'User is suspended',
+      );
     });
   });
 
@@ -194,7 +186,7 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.findByEmail.mockResolvedValue(null);
@@ -209,9 +201,9 @@ describe('UserService', () => {
     it('deve lançar erro se o usuário não existir', async () => {
       mockUserRepository.findById.mockResolvedValue(null);
 
-      await expect(userService.changeEmail('1', 'new@example.com'))
-        .rejects
-        .toThrow('User not found');
+      await expect(userService.changeEmail('1', 'new@example.com')).rejects.toThrow(
+        'User not found',
+      );
     });
 
     it('deve lançar erro se o usuário estiver suspenso', async () => {
@@ -221,13 +213,13 @@ describe('UserService', () => {
         'testuser',
         'SUSPENDED',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
 
-      await expect(userService.changeEmail('1', 'new@example.com'))
-        .rejects
-        .toThrow('User is suspended');
+      await expect(userService.changeEmail('1', 'new@example.com')).rejects.toThrow(
+        'User is suspended',
+      );
     });
 
     it('deve lançar erro se o novo email já existir', async () => {
@@ -237,21 +229,16 @@ describe('UserService', () => {
         'testuser',
         'ACTIVE',
         new Date(),
-        new Date()
+        new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
-      mockUserRepository.findByEmail.mockResolvedValue(new User(
-        '2',
-        new Email('new@example.com'),
-        'otheruser',
-        'ACTIVE',
-        new Date(),
-        new Date()
-      ));
+      mockUserRepository.findByEmail.mockResolvedValue(
+        new User('2', new Email('new@example.com'), 'otheruser', 'ACTIVE', new Date(), new Date()),
+      );
 
-      await expect(userService.changeEmail('1', 'new@example.com'))
-        .rejects
-        .toThrow('Email already exists');
+      await expect(userService.changeEmail('1', 'new@example.com')).rejects.toThrow(
+        'Email already exists',
+      );
     });
   });
 });

@@ -15,7 +15,7 @@ export class RegisterUser {
       currency: input.currency || 'BRL',
     });
 
-    return { 
+    return {
       user: user.toDTO(),
       wallet: wallet.toDTO(),
     };

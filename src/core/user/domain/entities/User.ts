@@ -4,7 +4,7 @@ import { IUserDTO, UserStatus } from '../../types/user.types';
 export class User {
   constructor(
     public readonly id: string,
-    public readonly email: Email,
+    public email: Email,
     public username: string,
     public status: UserStatus,
     public readonly createdAt: Date,

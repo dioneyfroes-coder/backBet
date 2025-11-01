@@ -1,10 +1,8 @@
-import { WalletService } from "@/core/finance/domain/services/WalletService";
-import { IWalletDTO } from "@/core/finance/types/wallet.types";
+import { WalletService } from '@/core/finance/domain/services/WalletService';
+import { IWalletDTO } from '@/core/finance/types/wallet.types';
 
 export class DepositFunds {
-  constructor(
-    private walletService: WalletService,
-  ) {}
+  constructor(private walletService: WalletService) {}
 
   async execute(userId: string, amount: number): Promise<IWalletDTO> {
     if (amount <= 0) {
