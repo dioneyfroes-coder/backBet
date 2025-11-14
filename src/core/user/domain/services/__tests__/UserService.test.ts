@@ -301,4 +301,60 @@ describe('UserService', () => {
       expect(mockUserRepository.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('findById', () => {
+    it('should return user when found', async () => {
+      const userId = 'test-user-id';
+      const user = new User(
+        userId,
+        new Email('test@example.com'),
+        'testuser',
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+      );
+      mockUserRepository.findById.mockResolvedValue(user);
+
+      const result = await userService.findById(userId);
+
+      expect(result).toEqual(user);
+      expect(mockUserRepository.findById).toHaveBeenCalledWith(userId);
+    });
+
+    it('should return null when user not found', async () => {
+      mockUserRepository.findById.mockResolvedValue(null);
+
+      const result = await userService.findById('non-existent');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('findByEmail', () => {
+    it('should return user when email found', async () => {
+      const email = 'test@example.com';
+      const user = new User(
+        'test-id',
+        new Email(email),
+        'testuser',
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+      );
+      mockUserRepository.findByEmail.mockResolvedValue(user);
+
+      const result = await userService.findByEmail(email);
+
+      expect(result).toEqual(user);
+      expect(mockUserRepository.findByEmail).toHaveBeenCalledWith(email);
+    });
+
+    it('should return null when email not found', async () => {
+      mockUserRepository.findByEmail.mockResolvedValue(null);
+
+      const result = await userService.findByEmail('non-existent@example.com');
+
+      expect(result).toBeNull();
+    });
+  });
 });

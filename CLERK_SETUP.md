@@ -1,0 +1,384 @@
+# 🔐 Integração Clerk - BackBet Sprint 1
+
+## Visão Geral
+
+O BackBet utiliza **Clerk** como serviço de autenticação moderno e seguro na fase inicial. O Clerk fornece:
+
+- ✅ Autenticação via OAuth (Google, GitHub, etc)
+- ✅ Gerenciamento de sessões e tokens
+- ✅ Multi-factor authentication (MFA)
+- ✅ Segurança OWASP compliance
+- ✅ Dashboard de administração
+
+### Roadmap de Autenticação
+
+```
+Fase 1 (Atual):  Clerk OAuth ← Você está aqui
+Fase 2:          Integração com sistema próprio (JWT)
+Fase 3:          Microsserviço de autenticação dedicado
+```
+
+---
+
+## Setup Inicial do Clerk
+
+### 1. Criar Conta no Clerk
+
+1. Ir para [clerk.com](https://clerk.com)
+2. Criar conta ou fazer login
+3. Criar nova aplicação "BackBet"
+
+### 2. Obter API Keys
+
+No dashboard do Clerk:
+1. Ir em **Developers** → **API Keys**
+2. Copiar as seguintes keys:
+   - **CLERK_PUBLISHABLE_KEY** (público, pode exposr)
+   - **CLERK_SECRET_KEY** (secreto, guardar seguro)
+   - **CLERK_API_KEY** (para server-side)
+
+### 3. Configurar No Backend
+
+Criar arquivo `.env.local`:
+
+```env
+CLERK_API_KEY=pk_live_xxxxx
+CLERK_SECRET_KEY=sk_live_xxxxx
+CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
+```
+
+Ou usar `.env` diretamente (não commitar):
+
+```bash
+cp .env.example .env
+# Editar .env com as keys reais
+```
+
+---
+
+## Arquitetura de Autenticação
+
+### Fluxo de Login
+
+```
+1. Cliente (Frontend)
+   ├─ Redireciona para Clerk OAuth
+   ├─ Usuário faz login no Clerk
+   └─ Clerk retorna session ID e token
+
+2. BackBet Server
+   ├─ Recebe token do cliente
+   ├─ Valida com Clerk (clerkMiddleware)
+   ├─ Extrai userId de req.auth.userId
+   ├─ Busca/cria usuário no banco
+   └─ Retorna dados com carteira
+
+3. Cliente
+   └─ Armazena session e token (Clerk SDK)
+```
+
+### Fluxo de Requisições Autenticadas
+
+```
+Cliente
+  │
+  ├─ Header: Authorization: Bearer <token_clerk>
+  │
+  ▼
+Express Server
+  │
+  ├─ clerkMiddleware() [autenticação]
+  │  └─ Popula req.auth.userId
+  │
+  ├─ protectedRoute() [autorização]
+  │  └─ Verifica se req.auth.userId existe
+  │
+  ├─ Controller
+  │  └─ Usa userId para buscar dados do usuário
+  │
+  └─ Response com dados
+```
+
+---
+
+## Endpoints da API
+
+### Autenticação
+
+#### `POST /api/auth/register`
+Registra novo usuário no BackBet
+
+**Requisição:**
+```json
+{
+  "email": "usuario@example.com",
+  "password": "senhaForte123!",
+  "username": "usuario_123",
+  "firstName": "João",
+  "lastName": "Silva"
+}
+```
+
+**Resposta (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Usuário registrado com sucesso",
+    "user": {
+      "id": "uuid-xxx",
+      "email": "usuario@example.com",
+      "username": "usuario_123",
+      "status": "PENDING_VERIFICATION",
+      "createdAt": "2025-11-14T10:30:00Z"
+    }
+  },
+  "meta": {
+    "timestamp": "2025-11-14T10:30:00Z"
+  }
+}
+```
+
+**Erros:**
+- `409 CONFLICT` - Email já cadastrado
+- `400 BAD_REQUEST` - Validação falhou
+
+---
+
+#### `POST /api/auth/login`
+Autentica usuário (via Clerk OAuth no cliente)
+
+**Nota:** O login é feito no cliente através do Clerk SDK. Este endpoint é informativo.
+
+**Resposta:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "AUTH_METHOD_CLERK",
+    "message": "Login deve ser feito via Clerk OAuth. Use o SDK de front-end."
+  }
+}
+```
+
+---
+
+#### `GET /api/auth/me`
+Retorna dados do usuário autenticado
+
+**Headers:**
+```
+Authorization: Bearer <clerk_token>
+```
+
+**Resposta (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid-xxx",
+    "email": "usuario@example.com",
+    "username": "usuario_123",
+    "firstName": "João",
+    "lastName": "Silva",
+    "status": "ACTIVE",
+    "createdAt": "2025-11-14T10:00:00Z"
+  }
+}
+```
+
+**Erros:**
+- `401 UNAUTHORIZED` - Token ausente ou inválido
+- `404 NOT_FOUND` - Usuário não encontrado
+
+---
+
+#### `POST /api/auth/logout`
+Faz logout (gerenciado pelo Clerk no cliente)
+
+**Headers:**
+```
+Authorization: Bearer <clerk_token>
+```
+
+**Resposta (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Logout realizado com sucesso"
+  }
+}
+```
+
+---
+
+## Integração Frontend (React/Next.js)
+
+### Setup do Clerk SDK
+
+```bash
+npm install @clerk/nextjs  # Para Next.js
+# ou
+npm install @clerk/react   # Para React puro
+```
+
+### Com Next.js
+
+```typescript
+// app/layout.tsx
+import { ClerkProvider } from '@clerk/nextjs'
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <ClerkProvider>
+      <html>
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
+  )
+}
+```
+
+### Proteger Rotas
+
+```typescript
+// app/dashboard/page.tsx
+import { useAuth } from '@clerk/nextjs'
+
+export default function Dashboard() {
+  const { userId, sessionId, isLoaded, isSignedIn } = useAuth()
+
+  if (!isLoaded) return <div>Loading...</div>
+
+  if (!isSignedIn) {
+    return <div>Not signed in</div>
+  }
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <p>User ID: {userId}</p>
+    </div>
+  )
+}
+```
+
+### Fazer Requisições Autenticadas
+
+```typescript
+// hooks/useApi.ts
+import { useAuth } from '@clerk/nextjs'
+
+export function useApi() {
+  const { getToken } = useAuth()
+
+  return async (endpoint: string, options: RequestInit = {}) => {
+    const token = await getToken()
+    
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    return response.json()
+  }
+}
+```
+
+---
+
+## Segurança
+
+### ✅ O Clerk Fornece
+
+- Validação de tokens JWT
+- Rate limiting automático
+- Proteção contra CSRF
+- Encriptação de dados
+- Conformidade com GDPR/CCPA
+
+### ✅ BackBet Implementa
+
+- Rate limiting por endpoint sensível (5 req/min para login)
+- Validação de inputs com Zod
+- Helmet para headers de segurança
+- Correlação de requisições para auditoria
+- Logging de todas as ações de autenticação
+
+### ⚠️ Configurações Importantes
+
+1. **HTTPS obrigatório em produção**
+   - Clerk rejeita requisições HTTP
+
+2. **Variáveis de ambiente seguras**
+   - Nunca commitar `.env`
+   - Usar `.env.local` ou variáveis de ambiente do servidor
+
+3. **Tokens não devem ser logados**
+   - Implementado em `BaseController.handleError()`
+   - Logs contêm apenas error code e message
+
+---
+
+## Migrations para Microsserviço Próprio (Fase 2)
+
+Quando implementarmos autenticação própria com JWT:
+
+1. **Banco de dados para usuários**
+   - Hash de passwords com bcrypt
+   - Campos: id, email, password_hash, created_at
+
+2. **Geração de tokens JWT**
+   - Access token: 15 minutos
+   - Refresh token: 7 dias
+
+3. **Endpoints JWT**
+   - `POST /auth/token` - Gera access token
+   - `POST /auth/refresh` - Renova access token
+   - `POST /auth/logout` - Invalida token (blacklist)
+
+4. **Compatibilidade com Clerk**
+   - Inicialmente: Ambos funcionam simultaneamente
+   - Depois: Migração gradual de usuários
+   - Finalmente: Remover Clerk, usar microsserviço
+
+---
+
+## Troubleshooting
+
+### Erro: "Invalid API Key"
+- Verificar se `CLERK_API_KEY` está correto no `.env`
+- Verificar se a key é da aplicação correta no Clerk
+
+### Erro: "Token Expired"
+- Clerk gerencia expiração automaticamente
+- Frontend deve usar `getToken()` para token fresco
+
+### Erro: "CORS Error"
+- Adicionar domain do frontend em Clerk Dashboard
+- Verificar `CORS_ORIGIN` no `.env` do backend
+
+### Erro: "Email Conflict"
+- Usuário já existe no sistema
+- Implementar "forgot password" para recuperar acesso
+
+---
+
+## Referências
+
+- [Clerk Documentation](https://clerk.com/docs)
+- [Clerk Express SDK](https://clerk.com/docs/references/node/overview)
+- [Clerk API Reference](https://clerk.com/docs/reference/backend-api)
+- [JWT Best Practices](https://tools.ietf.org/html/rfc8725)
+
+---
+
+**Próximo Passo:** Implementar controllers de usuário e finanças (Sprint 1 - Semana 2)

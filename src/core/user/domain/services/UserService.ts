@@ -63,4 +63,12 @@ export class UserService {
     user.email = new Email(newEmail);
     await this.userRepository.update(user);
   }
+
+  async findById(userId: string): Promise<User | null> {
+    return this.userRepository.findById(userId);
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findByEmail(email);
+  }
 }

@@ -7,7 +7,7 @@
 ## 📅 Sprint 1: API REST & Autenticação (Semana 1-2)
 
 ### Objetivos
-- [ ] Implementar API REST com Express/Fastify
+- [ ] Implementar API REST com Express
 - [ ] Setup de autenticação JWT
 - [ ] Validação de requisições
 
