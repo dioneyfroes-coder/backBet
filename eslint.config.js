@@ -10,8 +10,9 @@ export default [
   {
     ignores: ["node_modules", "dist", "build"],
     rules: {
-      // Exemplo de personalizações
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      // Ajustes para reduzir falsos positivos em construtores e DTOs durante o desenvolvimento
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["off", { "argsIgnorePattern": "^_" }],
       "no-console": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/explicit-function-return-type": "off",
