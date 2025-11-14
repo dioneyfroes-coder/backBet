@@ -11,7 +11,7 @@ export class Money {
   }
 
   private validate(): void {
-    if (typeof this.amount !== 'number' || this.amount < 0) {
+    if (typeof this.amount !== 'number' || this.amount < 0 || isNaN(this.amount)) {
       throw new Error('Invalid money amount');
     }
     if (!['BRL', 'USD', 'EUR'].includes(this.currency)) {
