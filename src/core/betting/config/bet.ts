@@ -2,12 +2,14 @@
 import { BetRepository } from '../domain/repositories/BetRepository';
 import type { IBetRepository } from '../domain/repositories/IBetRepository';
 import { EventRepository } from '../domain/repositories/EventRepository';
+import type { IEventRepository } from '../domain/repositories/IEventRepository';
 import { WalletRepository } from '@/core/finance/domain/repositories/WalletRepository';
 import { WalletService } from '../../finance/domain/services/WalletService';
 import { BetService } from '../domain/services/BetService';
+
 // Criação das instâncias concretas
-const betRepository: IBetRepository = new BetRepository() as unknown as IBetRepository;
-const eventRepository = new EventRepository();
+const betRepository: IBetRepository = new BetRepository();
+const eventRepository: IEventRepository = new EventRepository();
 const walletRepository = new WalletRepository();
 const walletService = new WalletService(walletRepository);
 

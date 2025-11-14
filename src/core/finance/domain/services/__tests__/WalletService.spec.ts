@@ -25,7 +25,7 @@ describe('WalletService', () => {
 
     it('deve criar uma nova carteira com sucesso', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
-      mockWalletRepository.save.mockResolvedValue(undefined);
+      mockWalletRepository.save.mockResolvedValue(new Wallet('1', 'BRL'));
 
       const result = await walletService.createWallet(createWalletDTO);
 
@@ -37,11 +37,11 @@ describe('WalletService', () => {
 
     it('deve criar uma nova carteira com moeda específica', async () => {
       mockWalletRepository.findByUserId.mockResolvedValue(null);
-      mockWalletRepository.save.mockResolvedValue(undefined);
+      mockWalletRepository.save.mockResolvedValue(new Wallet('1', 'USD'));
 
       const result = await walletService.createWallet({
         ...createWalletDTO,
-        currency: 'USD',
+        currency: 'USD'
       });
 
       expect(result.currency).toBe('USD');
@@ -60,7 +60,7 @@ describe('WalletService', () => {
     it('deve realizar um depósito com sucesso', async () => {
       const wallet = new Wallet('1', 'BRL');
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
-      mockWalletRepository.update.mockResolvedValue(undefined);
+      mockWalletRepository.update.mockResolvedValue(wallet);
 
       const result = await walletService.deposit('1', 100);
 
@@ -80,7 +80,7 @@ describe('WalletService', () => {
       const wallet = new Wallet('1', 'BRL');
       wallet.deposit(100);
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
-      mockWalletRepository.update.mockResolvedValue(undefined);
+      mockWalletRepository.update.mockResolvedValue(wallet);
 
       const result = await walletService.withdraw('1', 50);
 
@@ -100,6 +100,26 @@ describe('WalletService', () => {
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
 
       await expect(walletService.withdraw('1', 150)).rejects.toThrow('Insufficient funds');
+    });
+  });
+
+  describe('findByUserId', () => {
+    it('deve encontrar uma carteira pelo ID do usuário', async () => {
+      const wallet = new Wallet('1', 'BRL');
+      mockWalletRepository.findByUserId.mockResolvedValue(wallet);
+
+      const result = await walletService.findByUserId('1');
+
+      expect(result).toEqual(wallet);
+      expect(mockWalletRepository.findByUserId).toHaveBeenCalledWith('1');
+    });
+
+    it('deve retornar null se carteira não existir', async () => {
+      mockWalletRepository.findByUserId.mockResolvedValue(null);
+
+      const result = await walletService.findByUserId('1');
+
+      expect(result).toBeNull();
     });
   });
 });

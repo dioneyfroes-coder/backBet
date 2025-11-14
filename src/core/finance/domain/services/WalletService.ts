@@ -28,6 +28,10 @@ export class WalletService {
     return wallet;
   }
 
+  async findByUserId(userId: string): Promise<Wallet | null> {
+    return this.walletRepository.findByUserId(userId);
+  }
+
   async withdraw(userId: string, amount: number): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
