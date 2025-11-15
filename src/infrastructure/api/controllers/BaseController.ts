@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { AppError } from '@shared/errors/AppError';
+import { AppError } from '../errors/AppError';
 
 export interface ApiResponse<T = any> {
   success: boolean;
