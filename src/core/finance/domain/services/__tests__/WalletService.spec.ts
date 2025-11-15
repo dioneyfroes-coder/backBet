@@ -13,6 +13,7 @@ describe('WalletService', () => {
       save: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getHistory: jest.fn(),
     };
     walletService = new WalletService(mockWalletRepository);
   });

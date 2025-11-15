@@ -32,6 +32,10 @@ export class WalletService {
     return this.walletRepository.findByUserId(userId);
   }
 
+  async getHistory(userId: string, limit = 10, offset = 0) {
+    return this.walletRepository.getHistory(userId, limit, offset);
+  }
+
   async withdraw(userId: string, amount: number): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {

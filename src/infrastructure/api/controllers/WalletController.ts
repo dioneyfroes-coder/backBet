@@ -5,6 +5,7 @@ import { DepositDTO, WithdrawDTO } from '../dtos/WalletDTOs';
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
+import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 
 /**
  * Controller de carteiras
@@ -14,7 +15,8 @@ export class WalletController extends BaseController {
   constructor(
     private getWalletUseCase: GetWallet,
     private depositUseCase: Deposit,
-    private withdrawUseCase: Withdraw
+    private withdrawUseCase: Withdraw,
+    private getHistoryUseCase: GetHistory
   ) {
     super();
   }
@@ -291,11 +293,14 @@ export class WalletController extends BaseController {
         return this.unauthorized(res, 'Autenticação requerida');
       }
 
-      // TODO: Implementar busca de histórico de transações
+      const limit = Number(req.query.limit || 10);
+      const offset = Number(req.query.offset || 0);
+
+      const result = await this.getHistoryUseCase.execute(userId, limit, offset);
 
       return this.ok(res, {
-        transactions: [],
-        pagination: { limit: 10, offset: 0, total: 0 },
+        transactions: result.transactions,
+        pagination: { limit, offset, total: result.total },
       });
     } catch (error) {
       return this.handleError(error, res);

@@ -1,8 +1,10 @@
 import { IWalletDTO } from '../../types/wallet.types';
+import { Transaction } from './Transaction';
 
 export class Wallet {
   private _balance: number = 0;
   private _lockedBalance: number = 0;
+  private _transactions: Transaction[] = [];
 
   constructor(
     private readonly _userId: string,
@@ -30,6 +32,13 @@ export class Wallet {
       throw new Error('Amount must be positive');
     }
     this._balance += amount;
+    // registrar transação de depósito
+    try {
+      const tx = new Transaction(crypto.randomUUID(), this._userId, 'deposit', amount, this._currency, undefined, new Date());
+      this._transactions.unshift(tx);
+    } catch (err) {
+      // não bloquear operação principal por erro de logging
+    }
   }
 
   withdraw(amount: number): void {
@@ -40,6 +49,13 @@ export class Wallet {
       throw new Error('Insufficient funds');
     }
     this._balance -= amount;
+    // registrar transação de saque
+    try {
+      const tx = new Transaction(crypto.randomUUID(), this._userId, 'withdraw', amount, this._currency, undefined, new Date());
+      this._transactions.unshift(tx);
+    } catch (err) {
+      // ignorar
+    }
   }
 
   lock(amount: number): void {
@@ -71,5 +87,9 @@ export class Wallet {
       lockedBalance: this._lockedBalance,
       currency: this._currency,
     };
+  }
+
+  getTransactions(): Transaction[] {
+    return [...this._transactions];
   }
 }

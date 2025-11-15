@@ -6,6 +6,7 @@ import { WalletRepository } from '@core/finance/domain/repositories/WalletReposi
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
+import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -21,11 +22,13 @@ export function createWalletRoutes(): Router {
   const getWalletUseCase = new GetWallet(walletService);
   const depositUseCase = new Deposit(walletService);
   const withdrawUseCase = new Withdraw(walletService);
+  const getHistoryUseCase = new GetHistory(walletService);
 
   const walletController = new WalletController(
     getWalletUseCase,
     depositUseCase,
     withdrawUseCase
+    ,getHistoryUseCase
   );
 
   // Rotas protegidas
