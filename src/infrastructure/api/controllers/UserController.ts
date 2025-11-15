@@ -2,14 +2,20 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { UpdateProfileDTO, ChangeEmailDTO, UpdateProfileDTOType, ChangeEmailDTOType } from '../dtos/UserDTOs';
-import { UserService } from '@core/user/domain/services/UserService';
+import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile';
+import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
+import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
 
 /**
  * Controller de usuários
  * Gerencia operações de perfil e dados do usuário
  */
 export class UserController extends BaseController {
-  constructor(private userService: UserService) {
+  constructor(
+    private getUserProfileUseCase: GetUserProfile,
+    private updateProfileUseCase: UpdateProfile,
+    private changeEmailUseCase: ChangeEmail
+  ) {
     super();
   }
 
@@ -50,7 +56,7 @@ export class UserController extends BaseController {
         return this.unauthorized(res, 'Autenticação requerida');
       }
 
-      const user = await this.userService.findById(userId);
+      const user = await this.getUserProfileUseCase.execute(userId);
       if (!user) {
         return this.notFound(res, 'Usuário não encontrado');
       }
@@ -130,10 +136,15 @@ export class UserController extends BaseController {
         return this.badRequest(res, 'Dados inválidos');
       }
 
-      // TODO: Implementar lógica de atualização no UserService
-      // Por enquanto, retornar o usuário atualizado
+      // Construir username a partir de firstName/lastName quando fornecido
+      const username = payload.firstName
+        ? `${payload.firstName}${payload.lastName ? '.' + payload.lastName : ''}`
+        : undefined;
 
-      const user = await this.userService.findById(userId);
+      // Delegar atualização para use-case (que chama o UserService)
+      await this.updateProfileUseCase.execute(userId, { username: username || '' });
+
+      const user = await this.getUserProfileUseCase.execute(userId);
       if (!user) {
         return this.notFound(res, 'Usuário não encontrado');
       }
@@ -219,31 +230,23 @@ export class UserController extends BaseController {
         return this.badRequest(res, 'Dados inválidos');
       }
 
-      // Verificar se novo email já existe
-      const existingUser = await this.userService.findByEmail(payload.email);
-      if (existingUser && existingUser.id !== userId) {
-        return this.conflict(res, 'Email já cadastrado');
-      }
+      // Delegar mudança de email para use-case
+      await this.changeEmailUseCase.execute(userId, payload.email);
 
-      const user = await this.userService.findById(userId);
-      if (!user) {
-        return this.notFound(res, 'Usuário não encontrado');
-      }
-
-      // TODO: Implementar lógica de mudança de email com verificação
-      // Por enquanto, retornar sucesso
-
+      const updatedUser = await this.getUserProfileUseCase.execute(userId);
       return this.ok(res, {
         message: 'Email alterado com sucesso',
-        user: {
-          id: user.id,
-          email: payload.email,
-          username: user.username,
-          firstName: user.username.split('.')[0],
-          lastName: user.username.split('.')[1] || '',
-          status: user.status,
-          createdAt: user.createdAt,
-        },
+        user: updatedUser
+          ? {
+              id: updatedUser.id,
+              email: updatedUser.email.value,
+              username: updatedUser.username,
+              firstName: updatedUser.username.split('.')[0],
+              lastName: updatedUser.username.split('.')[1] || '',
+              status: updatedUser.status,
+              createdAt: updatedUser.createdAt,
+            }
+          : null,
       });
     } catch (error) {
       return this.handleError(error, res);

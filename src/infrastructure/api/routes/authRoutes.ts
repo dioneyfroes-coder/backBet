@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AuthController } from '../controllers/AuthController';
+import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { UserService } from '../../../core/user/domain/services/UserService';
 import { WalletService } from '../../../core/finance/domain/services/WalletService';
@@ -17,8 +18,11 @@ export function createAuthRoutes(): Router {
   const userService = new UserService(userRepository);
   const walletService = new WalletService(walletRepository);
 
+  // Use-cases
+  const registerUserUseCase = new RegisterUser(userService, walletService);
+
   // Instanciar controller
-  const authController = new AuthController(userService, walletService);
+  const authController = new AuthController(registerUserUseCase, userService);
 
   /**
    * POST /auth/register

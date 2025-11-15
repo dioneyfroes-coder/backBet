@@ -3,6 +3,9 @@ import { protectedRoute } from '../middleware/AuthMiddleware';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { WalletRepository } from '@core/finance/domain/repositories/WalletRepository';
+import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
+import { Deposit } from '@core/finance/application/use-cases/Deposit';
+import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -13,7 +16,17 @@ export function createWalletRoutes(): Router {
   // Injeção de dependências
   const walletRepository = new WalletRepository();
   const walletService = new WalletService(walletRepository);
-  const walletController = new WalletController(walletService);
+
+  // Use-cases
+  const getWalletUseCase = new GetWallet(walletService);
+  const depositUseCase = new Deposit(walletService);
+  const withdrawUseCase = new Withdraw(walletService);
+
+  const walletController = new WalletController(
+    getWalletUseCase,
+    depositUseCase,
+    withdrawUseCase
+  );
 
   // Rotas protegidas
   router.get('/me', protectedRoute, (req, res) =>

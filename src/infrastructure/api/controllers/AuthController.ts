@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { RegisterDTO, LoginDTO, RefreshTokenDTO, LogoutDTO, RegisterDTOType } from '../dtos/AuthDTOs';
+import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { UserService } from '@core/user/domain/services/UserService';
-import { WalletService } from '@core/finance/domain/services/WalletService';
 
 /**
  * Controller de autenticação
@@ -11,8 +11,8 @@ import { WalletService } from '@core/finance/domain/services/WalletService';
  */
 export class AuthController extends BaseController {
   constructor(
-    private userService: UserService,
-    private walletService: WalletService
+    private registerUserUseCase: RegisterUser,
+    private userService: UserService
   ) {
     super();
   }
@@ -58,33 +58,17 @@ export class AuthController extends BaseController {
         return this.badRequest(res, 'Dados inválidos');
       }
 
-      // Verificar se usuário já existe
-      const existingUser = await this.userService.findByEmail(payload.email);
-      if (existingUser) {
-        return this.conflict(res, 'Email já cadastrado');
-      }
-
-      // Registrar usuário
-      const user = await this.userService.registerUser({
+      // Delegar registro para use-case
+      const result = await this.registerUserUseCase.execute({
         email: payload.email,
         username: payload.username,
-      });
-
-      // Criar carteira inicial em BRL
-      await this.walletService.createWallet({
-        userId: user.id,
         currency: 'BRL',
       });
 
       return this.created(res, {
         message: 'Usuário registrado com sucesso',
-        user: {
-          id: user.id,
-          email: user.email.value,
-          username: user.username,
-          status: user.status,
-          createdAt: user.createdAt,
-        },
+        user: result.user,
+        wallet: result.wallet,
       });
     } catch (error) {
       return this.handleError(error, res);

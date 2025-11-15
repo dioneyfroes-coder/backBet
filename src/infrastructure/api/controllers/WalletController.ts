@@ -2,14 +2,20 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { DepositDTO, WithdrawDTO } from '../dtos/WalletDTOs';
-import { WalletService } from '@core/finance/domain/services/WalletService';
+import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
+import { Deposit } from '@core/finance/application/use-cases/Deposit';
+import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 
 /**
  * Controller de carteiras
  * Gerencia operações de depósito, saque e histórico
  */
 export class WalletController extends BaseController {
-  constructor(private walletService: WalletService) {
+  constructor(
+    private getWalletUseCase: GetWallet,
+    private depositUseCase: Deposit,
+    private withdrawUseCase: Withdraw
+  ) {
     super();
   }
 
@@ -50,7 +56,7 @@ export class WalletController extends BaseController {
         return this.unauthorized(res, 'Autenticação requerida');
       }
 
-      const wallet = await this.walletService.findByUserId(userId);
+      const wallet = await this.getWalletUseCase.execute(userId);
       if (!wallet) {
         return this.notFound(res, 'Carteira não encontrada');
       }
@@ -129,13 +135,13 @@ export class WalletController extends BaseController {
         return this.badRequest(res, 'Dados inválidos');
       }
 
-      const wallet = await this.walletService.findByUserId(userId);
+      const wallet = await this.getWalletUseCase.execute(userId);
       if (!wallet) {
         return this.notFound(res, 'Carteira não encontrada');
       }
 
       // Realiza o depósito via serviço (pode lançar se houver erro)
-      const updatedWallet = await this.walletService.deposit(userId, payload.amount);
+      const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
 
       return this.created(res, {
         message: 'Depósito realizado com sucesso',
@@ -214,7 +220,7 @@ export class WalletController extends BaseController {
         return this.badRequest(res, 'Dados inválidos');
       }
 
-      const wallet = await this.walletService.findByUserId(userId);
+      const wallet = await this.getWalletUseCase.execute(userId);
       if (!wallet) {
         return this.notFound(res, 'Carteira não encontrada');
       }
@@ -225,7 +231,7 @@ export class WalletController extends BaseController {
       }
 
       // Realiza o saque via serviço (pode lançar se houver erro)
-      const updatedWallet = await this.walletService.withdraw(userId, payload.amount);
+  const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
 
       return this.created(res, {
         message: 'Saque realizado com sucesso',
