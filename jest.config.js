@@ -8,6 +8,9 @@ export default {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@core/(.*)$': '<rootDir>/src/core/$1',
+    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+    '^@infrastructure/(.*)$': '<rootDir>/src/infrastructure/$1',
   },
   collectCoverage: true,
   coverageDirectory: 'coverage',
