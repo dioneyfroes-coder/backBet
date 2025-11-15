@@ -128,13 +128,17 @@ export class ApiServer {
       console.error('Error:', err);
 
       const statusCode = err.statusCode || err.status || 500;
+      const code = err.code || 'INTERNAL_SERVER_ERROR';
       const message = err.message || 'Internal Server Error';
 
       res.status(statusCode).json({
+        success: false,
         error: {
-          code: err.code || 'INTERNAL_SERVER_ERROR',
+          code,
           message,
-          statusCode,
+          details: err.details,
+        },
+        meta: {
           timestamp: new Date().toISOString(),
           requestId: (_req as any).id,
         },

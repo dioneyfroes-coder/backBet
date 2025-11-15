@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { AppError } from '../errors/AppError';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -87,7 +88,7 @@ export abstract class BaseController {
           },
           {}
         );
-        throw { code: 'VALIDATION_ERROR', message: 'Dados inválidos', details };
+        throw new AppError('VALIDATION_ERROR', 'Dados inválidos', 400, details);
       }
       throw error;
     }
@@ -95,6 +96,10 @@ export abstract class BaseController {
 
   protected async handleError(error: any, res: Response): Promise<Response> {
     console.error('Controller error:', error);
+
+    if (error instanceof AppError) {
+      return this.error(res, error.code, error.message, error.statusCode, error.details);
+    }
 
     if (error.code === 'VALIDATION_ERROR') {
       return this.badRequest(res, error.message, error.details);
