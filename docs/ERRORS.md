@@ -18,22 +18,28 @@ Standard response format
 
 Primary error codes and HTTP mapping
 
-- `VALIDATION_ERROR` — 400
-  - Usage: Input validation failures (Zod). `details` contains a field → message map.
-- `BAD_REQUEST` — 400
-  - Usage: Malformed request or business rule violation (e.g. insufficient funds).
-- `UNAUTHORIZED` — 401
-  - Usage: Missing/invalid authentication token.
-- `FORBIDDEN` — 403
-  - Usage: Authenticated user lacks permission to perform the action.
-- `NOT_FOUND` — 404
-  - Usage: Resource not found (user, wallet, bet, event).
-- `CONFLICT` — 409
-  - Usage: Resource conflict (e.g. duplicate email).
-- `RATE_LIMIT_EXCEEDED` — 429
-  - Usage: Rate limiting policy exceeded. May include `retryAfter` inside `error.details`.
-- `INTERNAL_SERVER_ERROR` — 500
-  - Usage: Unexpected server error.
+| Code | HTTP | Usage |
+|------|------|-------|
+| `VALIDATION_ERROR` | 400 | Input validation failures (Zod, value-object checks). `details` contains field → message map. |
+| `BAD_REQUEST` | 400 | Business rule violation (e.g. insufficient funds, market closed, user suspended). |
+| `UNAUTHORIZED` | 401 | Missing or invalid authentication token. |
+| `FORBIDDEN` | 403 | Authenticated user lacks permission. |
+| `NOT_FOUND` | 404 | Resource not found (user, wallet, bet, event, market, odd). |
+| `CONFLICT` | 409 | Resource conflict (e.g. duplicate email, wallet already exists). |
+| `RATE_LIMIT_EXCEEDED` | 429 | Rate limiting policy exceeded. May include `retryAfter` in `error.details`. |
+| `INTERNAL_SERVER_ERROR` | 500 | Unexpected server error. |
+
+### Real occurrences in codebase
+
+Based on a scan of `src/`, the error codes are primarily thrown in:
+
+- **VALIDATION_ERROR**: Email format, bet amounts, odds, event/market/bet ID validation, Money operations, currency validation.
+- **BAD_REQUEST**: Insufficient funds, market/event state violations (closed, suspended, non-pending bet, etc.), negative operations, state mismatches.
+- **NOT_FOUND**: User not found, wallet not found, bet not found, event not found, market not found, odd not found.
+- **CONFLICT**: Email already exists, wallet already exists for user.
+- **UNAUTHORIZED**: (Currently via middleware; not explicitly thrown in domain code.)
+- **FORBIDDEN**: (Currently via middleware; not explicitly thrown in domain code.)
+- **RATE_LIMIT_EXCEEDED**: (To be implemented via rate-limiting middleware.)
 
 Examples
 

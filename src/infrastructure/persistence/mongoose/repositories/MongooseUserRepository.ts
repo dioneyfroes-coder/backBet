@@ -1,0 +1,108 @@
+import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
+import { User } from '@/core/user/domain/entities/User';
+import { Email } from '@/core/user/domain/value-objects/Email';
+import { AppError } from '@/shared/errors/AppError';
+import { UserModel, IUserDocument } from '../schemas/UserSchema';
+
+export class MongooseUserRepository implements IUserRepository {
+  async save(user: User): Promise<void> {
+    try {
+      const userData: Partial<IUserDocument> = {
+        _id: user.id as any,
+        email: user.email.toString(),
+        username: user.username,
+        status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
+
+      await UserModel.findByIdAndUpdate(user.id, userData, { upsert: true });
+    } catch (error: any) {
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        throw new AppError(
+          `Um usuário com este ${field} já existe`,
+          'CONFLICT',
+          409,
+          { field }
+        );
+      }
+      throw new AppError(
+        'Erro ao salvar usuário',
+        'INTERNAL_SERVER_ERROR',
+        500,
+        { originalError: error.message }
+      );
+    }
+  }
+
+  async findById(id: string): Promise<User | null> {
+    try {
+      const userData = await UserModel.findById(id).lean() as IUserDocument | null;
+      if (!userData) {
+        return null;
+      }
+      return this.mapToDomain(userData);
+    } catch (error: any) {
+      throw new AppError(
+        'Erro ao buscar usuário',
+        'INTERNAL_SERVER_ERROR',
+        500,
+        { originalError: error.message }
+      );
+    }
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    try {
+      const userData = await UserModel.findOne({ email }).lean() as IUserDocument | null;
+      if (!userData) {
+        return null;
+      }
+      return this.mapToDomain(userData);
+    } catch (error: any) {
+      throw new AppError(
+        'Erro ao buscar usuário por email',
+        'INTERNAL_SERVER_ERROR',
+        500,
+        { originalError: error.message }
+      );
+    }
+  }
+
+  async update(user: User): Promise<void> {
+    try {
+      const userData: Partial<IUserDocument> = {
+        username: user.username,
+        status: user.status,
+        updatedAt: user.updatedAt,
+      };
+
+      const result = await UserModel.findByIdAndUpdate(user.id, userData, { new: true });
+      if (!result) {
+        throw new AppError('Usuário não encontrado', 'NOT_FOUND', 404);
+      }
+    } catch (error: any) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(
+        'Erro ao atualizar usuário',
+        'INTERNAL_SERVER_ERROR',
+        500,
+        { originalError: error.message }
+      );
+    }
+  }
+
+  private mapToDomain(data: IUserDocument): User {
+    return new User(
+      data._id!.toString(),
+      new Email(data.email),
+      data.username,
+      data.status,
+      data.createdAt,
+      data.updatedAt
+    );
+  }
+}

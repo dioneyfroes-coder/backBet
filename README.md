@@ -304,7 +304,7 @@ src/
 - [ ] Validação de entradas (Joi/Yup)
 - [ ] OWASP Top 10 checks
 - [ ] Dependências auditadas (npm audit)
-- [ ] Docker setup
+  
 - [ ] Kubernetes manifests
 - [ ] GitHub Actions CI/CD
 - [ ] SonarQube integration
@@ -399,7 +399,7 @@ Notas importantes:
 
 ### 3️⃣ Médio Prazo (1 Mês)
 ```
-[ ] Docker setup
+  
 [ ] GitHub Actions CI/CD
 [ ] Logging estruturado
 [ ] Cache Redis

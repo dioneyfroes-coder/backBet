@@ -5,19 +5,18 @@ import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { UserService } from '../../../core/user/domain/services/UserService';
 import { WalletService } from '../../../core/finance/domain/services/WalletService';
-import { UserRepository } from '../../../core/user/domain/repositories/UserRepository';
-import { WalletRepository } from '../../../core/finance/domain/repositories/WalletRepository';
+import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
 
-export function createAuthRoutes(): Router {
+export async function createAuthRoutes(): Promise<Router> {
   const router = Router();
 
-  // Instanciar repositórios (em memória por enquanto)
-  const userRepository = new UserRepository();
-  const walletRepository = new WalletRepository();
+  // Instanciar repositórios via factory
+  const userRepository = await createUserRepository();
+  const walletRepository = await createWalletRepository();
 
   // Instanciar serviços
-  const userService = new UserService(userRepository);
-  const walletService = new WalletService(walletRepository);
+  const userService = new UserService(userRepository as any);
+  const walletService = new WalletService(walletRepository as any);
 
   // Use-cases
   const registerUserUseCase = new RegisterUser(userService, walletService);

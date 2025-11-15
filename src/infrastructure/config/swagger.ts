@@ -365,6 +365,24 @@ const swaggerOptions = {
             details: { oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { type: 'object' }] },
           },
         },
+        Transaction: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            type: { type: 'string', example: 'DEPOSIT' },
+            amount: { type: 'number', example: 100.5 },
+            currency: { type: 'string', example: 'BRL' },
+            description: { type: 'string', example: 'Depósito via cartão' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+        TransactionHistory: {
+          type: 'object',
+          properties: {
+            transactions: { type: 'array', items: { $ref: '#/components/schemas/Transaction' } },
+            total: { type: 'integer', example: 42 }
+          }
+        },
         UnauthorizedError: {
           type: 'object',
           properties: {

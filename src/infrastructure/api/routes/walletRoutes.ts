@@ -3,7 +3,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
-import { WalletRepository } from '@core/finance/domain/repositories/WalletRepository';
+import { createWalletRepository } from '@/infrastructure/persistence/factory';
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
@@ -12,12 +12,12 @@ import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 /**
  * Factory para criar rotas de carteira com injeção de dependências
  */
-export function createWalletRoutes(): Router {
+export async function createWalletRoutes(): Promise<Router> {
   const router = Router();
 
-  // Injeção de dependências
-  const walletRepository = new WalletRepository();
-  const walletService = new WalletService(walletRepository);
+  // Injeção de dependências via factory
+  const walletRepository = await createWalletRepository();
+  const walletService = new WalletService(walletRepository as any);
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
