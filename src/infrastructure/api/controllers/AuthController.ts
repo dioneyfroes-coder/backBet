@@ -18,8 +18,37 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * POST /auth/register
-   * Registra novo usuário e cria carteira inicial
+   * @openapi
+   * /api/auth/register:
+   *   post:
+   *     tags:
+   *       - Auth
+   *     summary: Registra novo usuário e cria carteira inicial
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/RegisterRequest'
+   *     responses:
+   *       '201':
+   *         description: Usuário registrado com sucesso
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/RegisterResponse'
+   *       '400':
+   *         description: Dados inválidos
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
+   *       '409':
+   *         description: Email já cadastrado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ConflictError'
    */
   async register(req: Request, res: Response): Promise<Response> {
     try {
@@ -63,9 +92,36 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * POST /auth/login
-   * Autentica usuário com Clerk e retorna token
-   * Nota: Em produção, será feito via Clerk OAuth
+   * @openapi
+   * /api/auth/login:
+   *   post:
+   *     tags:
+   *       - Auth
+   *     summary: Autentica usuário (placeholder - usar Clerk OAuth em produção)
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               email:
+   *                 type: string
+   *                 format: email
+   *               password:
+   *                 type: string
+   *                 example: 'Senha'
+   *     responses:
+   *       '200':
+   *         description: Token retornado
+   *         content:
+   *           application/json:
+   *             $ref: '#/components/schemas/AuthResponse'
+   *       '401':
+   *         description: Credenciais inválidas
+   *         content:
+   *           application/json:
+   *             $ref: '#/components/schemas/ErrorResponse'
    */
   async login(req: Request, res: Response): Promise<Response> {
     try {
@@ -93,8 +149,31 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * POST /auth/refresh
-   * Renova access token usando refresh token
+   * @openapi
+   * /api/auth/refresh:
+   *   post:
+   *     tags:
+   *       - Auth
+   *     summary: Renova access token usando refresh token (placeholder)
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               refreshToken:
+   *                 type: string
+   *     responses:
+   *       '200':
+   *         description: Token renovado
+   *         content:
+   *           application/json:
+   *             $ref: '#/components/schemas/AuthResponse'
+   *       '400':
+   *         content:
+   *           application/json:
+   *             $ref: '#/components/schemas/ErrorResponse'
    */
   async refreshToken(req: Request, res: Response): Promise<Response> {
     try {
@@ -110,8 +189,33 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * GET /auth/me
-   * Retorna dados do usuário autenticado
+   * @openapi
+   * /api/auth/me:
+   *   get:
+   *     tags:
+   *       - Auth
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Retorna dados do usuário autenticado
+   *     responses:
+   *       '200':
+   *         description: Dados do usuário
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/MeResponse'
+   *       '401':
+   *         description: Não autenticado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/UnauthorizedError'
+   *       '404':
+   *         description: Usuário não encontrado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/ErrorResponse'
    */
   async me(req: AuthenticatedRequest, res: Response): Promise<Response> {
     try {
@@ -142,8 +246,27 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * POST /auth/logout
-   * Faz logout e invalida session
+   * @openapi
+   * /api/auth/logout:
+   *   post:
+   *     tags:
+   *       - Auth
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Faz logout e invalida session (gerenciado pelo Clerk)
+   *     responses:
+   *       '200':
+   *         description: Logout realizado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LogoutResponse'
+   *       '401':
+   *         description: Não autenticado
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async logout(req: AuthenticatedRequest, res: Response): Promise<Response> {
     try {

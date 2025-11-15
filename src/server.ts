@@ -1,5 +1,9 @@
+import 'dotenv/config';
 import { createApiServer } from './infrastructure/api/ApiServer';
 import { createAuthRoutes } from './infrastructure/api/routes/authRoutes';
+import { createUserRoutes } from './infrastructure/api/routes/userRoutes';
+import { createWalletRoutes } from './infrastructure/api/routes/walletRoutes';
+import { createBetRoutes } from './infrastructure/api/routes/betRoutes';
 
 /**
  * Função principal para iniciar o servidor BackBet
@@ -17,15 +21,20 @@ async function main() {
 
     // Registrar rotas
     const authRoutes = createAuthRoutes();
-    apiServer.registerRoutes(authRoutes);
+    apiServer.registerRoutes(authRoutes, '/auth');
+
+    const userRoutes = createUserRoutes();
+    apiServer.registerRoutes(userRoutes, '/users');
+
+    const walletRoutes = createWalletRoutes();
+    apiServer.registerRoutes(walletRoutes, '/wallets');
+
+  const betRoutes = createBetRoutes();
+  apiServer.registerRoutes(betRoutes, '/bets');
 
     // TODO: Registrar outras rotas
-    // const userRoutes = createUserRoutes();
-    // apiServer.registerRoutes(userRoutes);
-    // const walletRoutes = createWalletRoutes();
-    // apiServer.registerRoutes(walletRoutes);
     // const betRoutes = createBetRoutes();
-    // apiServer.registerRoutes(betRoutes);
+    // apiServer.registerRoutes(betRoutes, '/bets');
 
     // Registrar handlers globais
     apiServer.get404Handler();

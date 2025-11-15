@@ -41,6 +41,8 @@
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "pg": "^8.16.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.27",
     "zod": "^4.1.12"
   },
@@ -53,6 +55,8 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.10.1",
     "@types/passport-jwt": "^4.0.1",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "eslint": "^9.38.0",

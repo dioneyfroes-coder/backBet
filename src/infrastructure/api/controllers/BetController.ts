@@ -1,0 +1,169 @@
+import { Request, Response } from 'express';
+import { BaseController } from './BaseController';
+import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { PlaceBetDTO, CancelBetDTO, PlaceBetDTOType, CancelBetDTOType } from '../dtos/BetDTOs';
+import { BetService } from '../../../core/betting/domain/services/BetService';
+
+/**
+ * Controller de apostas
+ * Endpoints documentados com @openapi
+ */
+export class BetController extends BaseController {
+  constructor(private betService: BetService) {
+    super();
+  }
+
+  /**
+   * @openapi
+   * /api/bets/event/{eventId}:
+   *   get:
+   *     tags:
+   *       - Bets
+   *     summary: Lista apostas de um evento
+   *     parameters:
+   *       - in: path
+   *         name: eventId
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     responses:
+   *       '200':
+   *         description: Lista de apostas do evento
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/BetListResponse'
+   */
+  async getEventBets(req: Request, res: Response): Promise<Response> {
+    try {
+      const { eventId } = req.params;
+      if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
+
+      const bets = await this.betService.getEventBets(eventId);
+      return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/bets:
+   *   post:
+   *     tags:
+   *       - Bets
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Coloca uma nova aposta
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/PlaceBetRequest'
+   *     responses:
+   *       '201':
+   *         description: Aposta criada
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/BetResponse'
+   *       '400':
+   *         description: Dados inválidos
+   */
+  async placeBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    try {
+      const userId = req.auth?.userId;
+      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+
+      const payload = this.validateSchema(PlaceBetDTO, req.body) as PlaceBetDTOType;
+
+      const bet = await this.betService.placeBet({
+        userId,
+        eventId: payload.eventId,
+        marketId: payload.marketId,
+        oddId: payload.oddId,
+        amount: payload.amount,
+        type: payload.type as any,
+      });
+      return this.created(res, bet.toJSON());
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/bets/{betId}/cancel:
+   *   post:
+   *     tags:
+   *       - Bets
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Cancela uma aposta pendente
+   *     parameters:
+   *       - in: path
+   *         name: betId
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/CancelBetRequest'
+   *     responses:
+   *       '200':
+   *         description: Aposta cancelada
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/BetResponse'
+   *       '400':
+   *         description: Não pode cancelar
+   */
+  async cancelBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    try {
+      const userId = req.auth?.userId;
+      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+
+  const payload = this.validateSchema(CancelBetDTO, { betId: req.params.betId, ...(req.body || {}) }) as CancelBetDTOType;
+  const bet = await this.betService.cancelBet({ betId: payload.betId, reason: payload.reason ?? '', canceledBy: userId });
+      return this.ok(res, bet.toJSON());
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/bets/me:
+   *   get:
+   *     tags:
+   *       - Bets
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Lista apostas do usuário autenticado
+   *     responses:
+   *       '200':
+   *         description: Lista de apostas do usuário
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/BetListResponse'
+   */
+  async getMyBets(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    try {
+      const userId = req.auth?.userId;
+      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+
+      const bets = await this.betService.getUserBets(userId);
+      return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+}
