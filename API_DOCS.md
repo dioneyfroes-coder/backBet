@@ -72,8 +72,7 @@ Registra novo usuário
   "success": false,
   "error": {
     "code": "CONFLICT",
-    "message": "Email já cadastrado",
-    "statusCode": 409
+    "message": "Email já cadastrado"
   }
 }
 ```
@@ -193,11 +192,88 @@ Alterar email
 ### `GET /wallets/me`
 Saldo da carteira do usuário
 
+**Exemplo de histórico de transações (GET /wallets/history):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": "a1b2c3d4-...",
+        "type": "DEPOSIT",
+        "amount": 100.0,
+        "currency": "BRL",
+        "description": "Depósito via cartão",
+        "createdAt": "2025-11-14T12:00:00.000Z"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
 ### `POST /wallets/deposit`
 Depositar fundos
 
+**Request:**
+```json
+{
+  "amount": 100.5,
+  "currency": "BRL",
+  "description": "Depósito via cartão"
+}
+```
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Depósito realizado com sucesso",
+    "transaction": {
+      "id": "a1b2c3d4-...",
+      "type": "DEPOSIT",
+      "amount": 100.5,
+      "currency": "BRL",
+      "description": "Depósito via cartão",
+      "createdAt": "2025-11-14T12:00:00.000Z"
+    }
+  },
+  "meta": { "timestamp": "2025-11-14T12:00:00.000Z" }
+}
+```
+
 ### `POST /wallets/withdraw`
 Sacar fundos
+
+**Request:**
+```json
+{
+  "amount": 50.0,
+  "currency": "BRL",
+  "description": "Saque para conta bancária"
+}
+```
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Saque realizado com sucesso",
+    "transaction": {
+      "id": "d4c3b2a1-...",
+      "type": "WITHDRAW",
+      "amount": 50.0,
+      "currency": "BRL",
+      "description": "Saque para conta bancária",
+      "createdAt": "2025-11-14T13:00:00.000Z"
+    }
+  },
+  "meta": { "timestamp": "2025-11-14T13:00:00.000Z" }
+}
+```
 
 ### `GET /wallets/history`
 Histórico de transações
@@ -222,11 +298,91 @@ Odds de um evento
 ### `GET /bets`
 Listar apostas do usuário
 
+**Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "bets": [
+      {
+        "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
+        "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+        "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "marketId": "market-123",
+        "amount": 50.0,
+        "odds": 1.85,
+        "potentialReturn": 92.5,
+        "status": "PENDING",
+        "type": "SINGLE",
+        "createdAt": "2025-11-14T23:30:00.000Z"
+      }
+    ]
+  },
+  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
+}
+```
+
 ### `GET /bets/:id`
 Detalhes da aposta
 
+**Success (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "bet": {
+      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
+      "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+      "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "marketId": "market-123",
+      "amount": 50.0,
+      "odds": 1.85,
+      "potentialReturn": 92.5,
+      "status": "PENDING",
+      "type": "SINGLE",
+      "createdAt": "2025-11-14T23:30:00.000Z"
+    }
+  },
+  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
+}
+```
+
 ### `POST /bets`
 Colocar aposta
+
+**Request:**
+```json
+{
+  "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "marketId": "market-123",
+  "oddId": "odd-456",
+  "amount": 50.0,
+  "type": "SINGLE",
+  "currency": "BRL"
+}
+```
+
+**Success (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "bet": {
+      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
+      "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+      "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "marketId": "market-123",
+      "amount": 50.0,
+      "odds": 1.85,
+      "potentialReturn": 92.5,
+      "status": "PENDING",
+      "type": "SINGLE",
+      "createdAt": "2025-11-14T23:30:00.000Z"
+    }
+  },
+  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
+}
+```
 
 ### `POST /bets/:id/cancel`
 Cancelar aposta
@@ -243,7 +399,6 @@ Cancelar aposta
   "error": {
     "code": "ERROR_CODE",
     "message": "Descrição do erro",
-    "statusCode": 400,
     "details": {
       "field": "Detalhes específicos"
     }
@@ -292,12 +447,13 @@ X-RateLimit-Reset: 1731489000
 **Erro 429 (Too Many Requests):**
 ```json
 {
+  "success": false,
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
     "message": "Limite de requisições atingido",
-    "statusCode": 429,
-    "retryAfter": 60
-  }
+    "details": { "retryAfter": 60 }
+  },
+  "meta": { "timestamp": "2025-11-14T10:30:00.000Z" }
 }
 ```
 

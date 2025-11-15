@@ -1,0 +1,1513 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "BackBet API",
+    "version": "1.0.0",
+    "description": "API de Apostas - Backend",
+    "contact": {
+      "name": "BackBet Team",
+      "url": "https://github.com/dioneyfroes-coder/backBet"
+    },
+    "license": {
+      "name": "ISC"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Desenvolvimento"
+    },
+    {
+      "url": "https://api.backbet.com",
+      "description": "Produção"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Bearer token ou User ID em desenvolvimento"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "cadaeb28-c7f7-425b-91f7-73a27141ae49"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "user@example.com"
+          },
+          "username": {
+            "type": "string",
+            "example": "joaosilva"
+          },
+          "firstName": {
+            "type": "string",
+            "example": "João"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Silva"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING_VERIFICATION",
+              "ACTIVE",
+              "SUSPENDED"
+            ],
+            "example": "ACTIVE"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-14T23:20:42.778Z"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "username",
+          "status",
+          "createdAt"
+        ]
+      },
+      "Wallet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "balance": {
+            "type": "object",
+            "properties": {
+              "amount": {
+                "type": "number",
+                "example": 1000
+              },
+              "currency": {
+                "type": "string",
+                "example": "BRL"
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8,
+            "example": "SecurePass@123"
+          },
+          "firstName": {
+            "type": "string",
+            "minLength": 2,
+            "example": "João"
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 2,
+            "example": "Silva"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "pattern": "^[a-zA-Z0-9_]+$",
+            "example": "joaosilva"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName",
+          "username"
+        ]
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "accessToken": {
+                "type": "string",
+                "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              },
+              "refreshToken": {
+                "type": "string",
+                "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example",
+            "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example",
+            "user": {
+              "id": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+              "email": "user@example.com",
+              "username": "joaosilva",
+              "firstName": "João",
+              "lastName": "Silva",
+              "status": "PENDING_VERIFICATION",
+              "createdAt": "2025-11-14T23:20:42.778Z"
+            }
+          },
+          "meta": {
+            "timestamp": "2025-11-15T15:18:29.622Z"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "BAD_REQUEST"
+              },
+              "message": {
+                "type": "string",
+                "example": "Dados inválidos"
+              },
+              "details": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ValidationError"
+                  },
+                  {
+                    "type": "object"
+                  }
+                ]
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": false,
+          "error": {
+            "code": "BAD_REQUEST",
+            "message": "Dados inválidos",
+            "details": {
+              "username": "Invalid input: expected string"
+            }
+          },
+          "meta": {
+            "timestamp": "2025-11-15T15:18:29.623Z"
+          }
+        }
+      },
+      "RegisterResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "example": "Usuário registrado com sucesso"
+              },
+              "user": {
+                "$ref": "#/components/schemas/User"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "message": "Usuário registrado com sucesso",
+            "user": {
+              "id": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+              "email": "user@example.com",
+              "username": "joaosilva",
+              "status": "PENDING_VERIFICATION",
+              "createdAt": "2025-11-14T23:20:42.778Z"
+            }
+          },
+          "meta": {
+            "timestamp": "2025-11-14T23:20:42.778Z"
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/User"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "id": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+            "email": "user@example.com",
+            "username": "joaosilva",
+            "firstName": "João",
+            "lastName": "Silva",
+            "status": "ACTIVE",
+            "createdAt": "2025-11-14T23:20:42.778Z"
+          },
+          "meta": {
+            "timestamp": "2025-11-14T23:21:06.343Z"
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "example": "Logout realizado com sucesso"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": true,
+          "data": {
+            "message": "Logout realizado com sucesso"
+          },
+          "meta": {
+            "timestamp": "2025-11-14T23:22:00.000Z"
+          }
+        }
+      },
+      "ConflictError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "CONFLICT"
+              },
+              "message": {
+                "type": "string",
+                "example": "Email já cadastrado"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": false,
+          "error": {
+            "code": "CONFLICT",
+            "message": "Email já cadastrado"
+          },
+          "meta": {
+            "timestamp": "2025-11-14T23:20:00.000Z"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "description": "Detalhes de validação por campo",
+        "additionalProperties": {
+          "type": "string",
+          "example": "Campo obrigatório"
+        },
+        "example": {
+          "email": "Formato de email inválido",
+          "username": "Tamanho mínimo: 3"
+        }
+      },
+      "AppError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "BAD_REQUEST"
+          },
+          "message": {
+            "type": "string",
+            "example": "Mensagem de erro"
+          },
+          "details": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "example": "DEPOSIT"
+          },
+          "amount": {
+            "type": "number",
+            "example": 100.5
+          },
+          "currency": {
+            "type": "string",
+            "example": "BRL"
+          },
+          "description": {
+            "type": "string",
+            "example": "Depósito via cartão"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TransactionHistory": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transaction"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "example": 42
+          }
+        }
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "UNAUTHORIZED"
+              },
+              "message": {
+                "type": "string",
+                "example": "Autenticação requerida"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "example": {
+          "success": false,
+          "error": {
+            "code": "UNAUTHORIZED",
+            "message": "Autenticação requerida"
+          },
+          "meta": {
+            "timestamp": "2025-11-14T23:21:00.000Z"
+          }
+        }
+      },
+      "PlaceBetRequest": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "marketId": {
+            "type": "string",
+            "example": "market-123"
+          },
+          "oddId": {
+            "type": "string",
+            "example": "odd-456"
+          },
+          "amount": {
+            "type": "number",
+            "example": 50,
+            "minimum": 0.01
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "SINGLE",
+              "MULTIPLE"
+            ],
+            "example": "SINGLE"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "BRL",
+              "USD",
+              "EUR"
+            ],
+            "example": "BRL"
+          }
+        },
+        "required": [
+          "eventId",
+          "marketId",
+          "oddId",
+          "amount"
+        ]
+      },
+      "CancelBetRequest": {
+        "type": "object",
+        "properties": {
+          "betId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Erro no mercado"
+          }
+        },
+        "required": [
+          "betId"
+        ]
+      },
+      "BetResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "cadaeb28-c7f7-425b-91f7-73a27141ae49"
+          },
+          "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          "marketId": {
+            "type": "string",
+            "example": "market-123"
+          },
+          "amount": {
+            "type": "number",
+            "example": 50
+          },
+          "odds": {
+            "type": "number",
+            "example": 1.85
+          },
+          "potentialReturn": {
+            "type": "number",
+            "example": 92.5
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "WON",
+              "LOST",
+              "CANCELED"
+            ],
+            "example": "PENDING"
+          },
+          "type": {
+            "type": "string",
+            "example": "SINGLE"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-14T23:30:00.000Z"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BetListResponse": {
+        "type": "object",
+        "properties": {
+          "bets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BetResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Status do servidor"
+    },
+    {
+      "name": "Auth",
+      "description": "Autenticação e registro de usuários"
+    },
+    {
+      "name": "Users",
+      "description": "Gerenciamento de usuários"
+    },
+    {
+      "name": "Wallets",
+      "description": "Gerenciamento de carteiras"
+    },
+    {
+      "name": "Bets",
+      "description": "Gerenciamento de apostas"
+    }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Registra novo usuário e cria carteira inicial",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuário registrado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email já cadastrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Autentica usuário (placeholder - usar Clerk OAuth em produção)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "Senha"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token retornado",
+            "content": {
+              "application/json": {
+                "$ref": "#/components/schemas/AuthResponse"
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciais inválidas",
+            "content": {
+              "application/json": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Renova access token usando refresh token (placeholder)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token renovado",
+            "content": {
+              "application/json": {
+                "$ref": "#/components/schemas/AuthResponse"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Retorna dados do usuário autenticado",
+        "responses": {
+          "200": {
+            "description": "Dados do usuário",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Usuário não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Faz logout e invalida session (gerenciado pelo Clerk)",
+        "responses": {
+          "200": {
+            "description": "Logout realizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bets/event/{eventId}": {
+      "get": {
+        "tags": [
+          "Bets"
+        ],
+        "summary": "Lista apostas de um evento",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de apostas do evento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bets": {
+      "post": {
+        "tags": [
+          "Bets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Coloca uma nova aposta",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceBetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Aposta criada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos"
+          }
+        }
+      }
+    },
+    "/api/bets/{betId}/cancel": {
+      "post": {
+        "tags": [
+          "Bets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Cancela uma aposta pendente",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "betId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelBetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aposta cancelada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Não pode cancelar"
+          }
+        }
+      }
+    },
+    "/api/bets/me": {
+      "get": {
+        "tags": [
+          "Bets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Lista apostas do usuário autenticado",
+        "responses": {
+          "200": {
+            "description": "Lista de apostas do usuário",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BetListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/me": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Retorna dados completos do usuário autenticado",
+        "responses": {
+          "200": {
+            "description": "Usuário encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Usuário não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Atualiza perfil do usuário autenticado",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "firstName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "example": "João"
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "example": "Silva"
+                  },
+                  "bio": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Apaixonado por apostas desportivas"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil atualizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/me/email": {
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Altera email do usuário autenticado",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "newemail@example.com"
+                  },
+                  "verificationCode": {
+                    "type": "string",
+                    "description": "Código de verificação enviado por email"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email alterado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email já cadastrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallets/me": {
+      "get": {
+        "tags": [
+          "Wallets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Retorna a carteira do usuário autenticado",
+        "responses": {
+          "200": {
+            "description": "Carteira encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Carteira não encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallets/deposit": {
+      "post": {
+        "tags": [
+          "Wallets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Realiza depósito na carteira do usuário",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "example": 100
+                  },
+                  "currency": {
+                    "type": "string",
+                    "enum": [
+                      "BRL",
+                      "USD",
+                      "EUR"
+                    ],
+                    "example": "BRL"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Depósito via cartão de crédito"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Depósito realizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallets/withdraw": {
+      "post": {
+        "tags": [
+          "Wallets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Realiza saque da carteira do usuário",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0.01,
+                    "example": 50
+                  },
+                  "currency": {
+                    "type": "string",
+                    "enum": [
+                      "BRL",
+                      "USD",
+                      "EUR"
+                    ],
+                    "example": "BRL"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Saque para conta bancária"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saque realizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos ou saldo insuficiente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wallets/history": {
+      "get": {
+        "tags": [
+          "Wallets"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Retorna histórico de transações da carteira",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Número de transações a retornar"
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "Deslocamento para paginação"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Histórico retornado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
