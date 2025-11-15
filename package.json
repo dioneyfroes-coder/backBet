@@ -27,6 +27,7 @@
   "homepage": "https://github.com/dioneyfroes-coder/backBet#readme",
   "dependencies": {
     "@clerk/express": "^1.7.49",
+    "dotenv": "^16.1.4",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
