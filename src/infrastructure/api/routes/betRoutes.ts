@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { BetController } from '../controllers/BetController';
 import { BetService } from '@core/betting/domain/services/BetService';
@@ -29,10 +30,10 @@ export function createBetRoutes(): Router {
 
   const betController = new BetController(placeBetUseCase, cancelBetUseCase, getUserBetsUseCase, getEventBetsUseCase);
 
-  router.get('/event/:eventId', (req, res) => betController.getEventBets(req, res));
-  router.post('/', protectedRoute, (req, res) => betController.placeBet(req, res));
-  router.post('/:betId/cancel', protectedRoute, (req, res) => betController.cancelBet(req, res));
-  router.get('/me', protectedRoute, (req, res) => betController.getMyBets(req, res));
+  router.get('/event/:eventId', asyncHandler((req, res) => betController.getEventBets(req, res)));
+  router.post('/', protectedRoute, asyncHandler((req, res) => betController.placeBet(req, res)));
+  router.post('/:betId/cancel', protectedRoute, asyncHandler((req, res) => betController.cancelBet(req, res)));
+  router.get('/me', protectedRoute, asyncHandler((req, res) => betController.getMyBets(req, res)));
 
   return router;
 }

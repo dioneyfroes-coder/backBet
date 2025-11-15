@@ -1,9 +1,11 @@
 export type Currency = 'BRL' | 'USD' | 'EUR';
 
+import { AppError } from '@/shared/errors/AppError';
+
 export class CurrencyValueObject {
   constructor(private readonly value: Currency) {
     if (!this.isValid(value)) {
-      throw new Error('Invalid currency');
+      throw new AppError('VALIDATION_ERROR', 'Invalid currency', 400);
     }
   }
 

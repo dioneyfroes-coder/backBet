@@ -2,6 +2,7 @@ import { Wallet } from '../entities/Wallet';
 import { IWalletRepository } from '../repositories/IWalletRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { CurrencyValueObject } from '../value-objects/Currency';
+import { AppError } from '@/shared/errors/AppError';
 
 export class WalletService {
   constructor(private walletRepository: IWalletRepository) {}
@@ -9,7 +10,7 @@ export class WalletService {
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {
     const existingWallet = await this.walletRepository.findByUserId(input.userId);
     if (existingWallet) {
-      throw new Error('Wallet already exists for user');
+      throw new AppError('CONFLICT', 'Wallet already exists for user', 409);
     }
 
     const currency = new CurrencyValueObject(input.currency as 'BRL' | 'USD' | 'EUR');
@@ -21,7 +22,7 @@ export class WalletService {
   async deposit(userId: string, amount: number): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
-      throw new Error('Wallet not found');
+      throw new AppError('NOT_FOUND', 'Wallet not found', 404);
     }
     wallet.deposit(amount);
     await this.walletRepository.update(wallet);
@@ -39,7 +40,7 @@ export class WalletService {
   async withdraw(userId: string, amount: number): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
-      throw new Error('Wallet not found');
+      throw new AppError('NOT_FOUND', 'Wallet not found', 404);
     }
     wallet.withdraw(amount);
     await this.walletRepository.update(wallet);

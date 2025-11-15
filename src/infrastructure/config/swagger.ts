@@ -209,7 +209,10 @@ const swaggerOptions = {
                   example: 'Dados inválidos',
                 },
                 details: {
-                  type: 'object',
+                  oneOf: [
+                    { $ref: '#/components/schemas/ValidationError' },
+                    { type: 'object' }
+                  ],
                 },
               },
             },
@@ -340,6 +343,26 @@ const swaggerOptions = {
               message: 'Email já cadastrado',
             },
             meta: { timestamp: '2025-11-14T23:20:00.000Z' },
+          },
+        },
+        ValidationError: {
+          type: 'object',
+          description: 'Detalhes de validação por campo',
+          additionalProperties: {
+            type: 'string',
+            example: 'Campo obrigatório',
+          },
+          example: {
+            email: 'Formato de email inválido',
+            username: 'Tamanho mínimo: 3',
+          },
+        },
+        AppError: {
+          type: 'object',
+          properties: {
+            code: { type: 'string', example: 'BAD_REQUEST' },
+            message: { type: 'string', example: 'Mensagem de erro' },
+            details: { oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { type: 'object' }] },
           },
         },
         UnauthorizedError: {

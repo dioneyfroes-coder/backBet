@@ -49,30 +49,26 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/ErrorResponse'
    */
   async getMe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const user = await this.getUserProfileUseCase.execute(userId);
-      if (!user) {
-        return this.notFound(res, 'Usuário não encontrado');
-      }
-
-      return this.ok(res, {
-        id: user.id,
-        email: user.email.value,
-        username: user.username,
-        firstName: user.username.split('.')[0],
-        lastName: user.username.split('.')[1] || '',
-        status: user.status,
-        createdAt: user.createdAt,
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const user = await this.getUserProfileUseCase.execute(userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    return this.ok(res, {
+      id: user.id,
+      email: user.email.value,
+      username: user.username,
+      firstName: user.username.split('.')[0],
+      lastName: user.username.split('.')[1] || '',
+      status: user.status,
+      createdAt: user.createdAt,
+    });
   }
 
   /**
@@ -124,46 +120,42 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async updateProfile(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const payload = this.validateSchema(UpdateProfileDTO, req.body);
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      // Construir username a partir de firstName/lastName quando fornecido
-      const username = payload.firstName
-        ? `${payload.firstName}${payload.lastName ? '.' + payload.lastName : ''}`
-        : undefined;
-
-      // Delegar atualização para use-case (que chama o UserService)
-      await this.updateProfileUseCase.execute(userId, { username: username || '' });
-
-      const user = await this.getUserProfileUseCase.execute(userId);
-      if (!user) {
-        return this.notFound(res, 'Usuário não encontrado');
-      }
-
-      return this.ok(res, {
-        message: 'Perfil atualizado com sucesso',
-        user: {
-          id: user.id,
-          email: user.email.value,
-          username: user.username,
-          firstName: payload.firstName || user.username.split('.')[0],
-          lastName: payload.lastName || user.username.split('.')[1] || '',
-          status: user.status,
-          createdAt: user.createdAt,
-        },
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const payload = this.validateSchema(UpdateProfileDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    // Construir username a partir de firstName/lastName quando fornecido
+    const username = payload.firstName
+      ? `${payload.firstName}${payload.lastName ? '.' + payload.lastName : ''}`
+      : undefined;
+
+    // Delegar atualização para use-case (que chama o UserService)
+    await this.updateProfileUseCase.execute(userId, { username: username || '' });
+
+    const user = await this.getUserProfileUseCase.execute(userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    return this.ok(res, {
+      message: 'Perfil atualizado com sucesso',
+      user: {
+        id: user.id,
+        email: user.email.value,
+        username: user.username,
+        firstName: payload.firstName || user.username.split('.')[0],
+        lastName: payload.lastName || user.username.split('.')[1] || '',
+        status: user.status,
+        createdAt: user.createdAt,
+      },
+    });
   }
 
   /**
@@ -218,38 +210,34 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/ConflictError'
    */
   async changeEmail(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const payload = this.validateSchema(ChangeEmailDTO, req.body);
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      // Delegar mudança de email para use-case
-      await this.changeEmailUseCase.execute(userId, payload.email);
-
-      const updatedUser = await this.getUserProfileUseCase.execute(userId);
-      return this.ok(res, {
-        message: 'Email alterado com sucesso',
-        user: updatedUser
-          ? {
-              id: updatedUser.id,
-              email: updatedUser.email.value,
-              username: updatedUser.username,
-              firstName: updatedUser.username.split('.')[0],
-              lastName: updatedUser.username.split('.')[1] || '',
-              status: updatedUser.status,
-              createdAt: updatedUser.createdAt,
-            }
-          : null,
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const payload = this.validateSchema(ChangeEmailDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    // Delegar mudança de email para use-case
+    await this.changeEmailUseCase.execute(userId, payload.email);
+
+    const updatedUser = await this.getUserProfileUseCase.execute(userId);
+    return this.ok(res, {
+      message: 'Email alterado com sucesso',
+      user: updatedUser
+        ? {
+            id: updatedUser.id,
+            email: updatedUser.email.value,
+            username: updatedUser.username,
+            firstName: updatedUser.username.split('.')[0],
+            lastName: updatedUser.username.split('.')[1] || '',
+            status: updatedUser.status,
+            createdAt: updatedUser.createdAt,
+          }
+        : null,
+    });
   }
 }

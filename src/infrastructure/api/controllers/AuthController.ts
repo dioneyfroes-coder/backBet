@@ -51,28 +51,24 @@ export class AuthController extends BaseController {
    *               $ref: '#/components/schemas/ConflictError'
    */
   async register(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = this.validateSchema(RegisterDTO, req.body);
+    const payload = this.validateSchema(RegisterDTO, req.body);
 
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      // Delegar registro para use-case
-      const result = await this.registerUserUseCase.execute({
-        email: payload.email,
-        username: payload.username,
-        currency: 'BRL',
-      });
-
-      return this.created(res, {
-        message: 'Usuário registrado com sucesso',
-        user: result.user,
-        wallet: result.wallet,
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
     }
+
+    // Delegar registro para use-case
+    const result = await this.registerUserUseCase.execute({
+      email: payload.email,
+      username: payload.username,
+      currency: 'BRL',
+    });
+
+    return this.created(res, {
+      message: 'Usuário registrado com sucesso',
+      user: result.user,
+      wallet: result.wallet,
+    });
   }
 
   /**
@@ -108,28 +104,24 @@ export class AuthController extends BaseController {
    *             $ref: '#/components/schemas/ErrorResponse'
    */
   async login(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = this.validateSchema(LoginDTO, req.body);
+    const payload = this.validateSchema(LoginDTO, req.body);
 
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      // Buscar usuário
-      const user = await this.userService.findByEmail(payload.email);
-      if (!user) {
-        return this.unauthorized(res, 'Email ou senha inválidos');
-      }
-
-      // Validar senha (integrar com Clerk depois)
-      // Por enquanto, retornar erro informando que precisa usar OAuth
-      return this.internalError(
-        res,
-        'Login deve ser feito via Clerk OAuth. Use o SDK de front-end.'
-      );
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
     }
+
+    // Buscar usuário
+    const user = await this.userService.findByEmail(payload.email);
+    if (!user) {
+      return this.unauthorized(res, 'Email ou senha inválidos');
+    }
+
+    // Validar senha (integrar com Clerk depois)
+    // Por enquanto, retornar erro informando que precisa usar OAuth
+    return this.internalError(
+      res,
+      'Login deve ser feito via Clerk OAuth. Use o SDK de front-end.'
+    );
   }
 
   /**
@@ -160,16 +152,12 @@ export class AuthController extends BaseController {
    *             $ref: '#/components/schemas/ErrorResponse'
    */
   async refreshToken(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = this.validateSchema(RefreshTokenDTO, req.body);
+    const payload = this.validateSchema(RefreshTokenDTO, req.body);
 
-      // Implementar refresh token com Clerk
-      return this.ok(res, {
-        message: 'Refresh via Clerk OAuth necessário',
-      });
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    // Implementar refresh token com Clerk
+    return this.ok(res, {
+      message: 'Refresh via Clerk OAuth necessário',
+    });
   }
 
   /**
@@ -202,31 +190,27 @@ export class AuthController extends BaseController {
    *               $ref: '#/components/schemas/ErrorResponse'
    */
   async me(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      // Buscar usuário
-      const user = await this.userService.findById(userId);
-      if (!user) {
-        return this.notFound(res, 'Usuário não encontrado');
-      }
-
-      return this.ok(res, {
-        id: user.id,
-        email: user.email.value,
-        username: user.username,
-        firstName: user.username.split('.')[0], // TODO: Adicionar firstName/lastName ao User
-        lastName: user.username.split('.')[1] || '',
-        status: user.status,
-        createdAt: user.createdAt,
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    // Buscar usuário
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    return this.ok(res, {
+      id: user.id,
+      email: user.email.value,
+      username: user.username,
+      firstName: user.username.split('.')[0], // TODO: Adicionar firstName/lastName ao User
+      lastName: user.username.split('.')[1] || '',
+      status: user.status,
+      createdAt: user.createdAt,
+    });
   }
 
   /**
@@ -253,13 +237,9 @@ export class AuthController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async logout(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      // Logout é gerenciado pelo Clerk no cliente
-      return this.ok(res, {
-        message: 'Logout realizado com sucesso',
-      });
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    // Logout é gerenciado pelo Clerk no cliente
+    return this.ok(res, {
+      message: 'Logout realizado com sucesso',
+    });
   }
 }

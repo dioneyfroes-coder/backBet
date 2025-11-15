@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '@core/user/domain/services/UserService';
@@ -29,17 +30,11 @@ export function createUserRoutes(): Router {
   );
 
   // Rotas protegidas
-  router.get('/me', protectedRoute, (req, res) =>
-    userController.getMe(req, res)
-  );
+  router.get('/me', protectedRoute, asyncHandler((req, res) => userController.getMe(req, res)));
 
-  router.patch('/me', protectedRoute, (req, res) =>
-    userController.updateProfile(req, res)
-  );
+  router.patch('/me', protectedRoute, asyncHandler((req, res) => userController.updateProfile(req, res)));
 
-  router.patch('/me/email', protectedRoute, (req, res) =>
-    userController.changeEmail(req, res)
-  );
+  router.patch('/me/email', protectedRoute, asyncHandler((req, res) => userController.changeEmail(req, res)));
 
   return router;
 }

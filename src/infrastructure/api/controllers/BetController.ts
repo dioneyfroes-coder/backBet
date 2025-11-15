@@ -45,15 +45,11 @@ export class BetController extends BaseController {
    *               $ref: '#/components/schemas/BetListResponse'
    */
   async getEventBets(req: Request, res: Response): Promise<Response> {
-    try {
-      const { eventId } = req.params;
-      if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
+    const { eventId } = req.params;
+    if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
 
-  const bets = await this.getEventBetsUseCase.execute(eventId);
-      return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    const bets = await this.getEventBetsUseCase.execute(eventId);
+    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
   }
 
   /**
@@ -82,24 +78,20 @@ export class BetController extends BaseController {
    *         description: Dados inválidos
    */
   async placeBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
-      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+    const userId = req.auth?.userId;
+    if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
-      const payload = this.validateSchema(PlaceBetDTO, req.body) as PlaceBetDTOType;
+    const payload = this.validateSchema(PlaceBetDTO, req.body) as PlaceBetDTOType;
 
-      const bet = await this.placeBetUseCase.execute({
-        userId,
-        eventId: payload.eventId,
-        marketId: payload.marketId,
-        oddId: payload.oddId,
-        amount: payload.amount,
-        type: payload.type as any,
-      });
-      return this.created(res, bet.toJSON());
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    const bet = await this.placeBetUseCase.execute({
+      userId,
+      eventId: payload.eventId,
+      marketId: payload.marketId,
+      oddId: payload.oddId,
+      amount: payload.amount,
+      type: payload.type as any,
+    });
+    return this.created(res, bet.toJSON());
   }
 
   /**
@@ -135,16 +127,12 @@ export class BetController extends BaseController {
    *         description: Não pode cancelar
    */
   async cancelBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
-      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+    const userId = req.auth?.userId;
+    if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
-  const payload = this.validateSchema(CancelBetDTO, { betId: req.params.betId, ...(req.body || {}) }) as CancelBetDTOType;
-  const bet = await this.cancelBetUseCase.execute({ betId: payload.betId, reason: payload.reason ?? '', canceledBy: userId });
-  return this.ok(res, bet.toJSON());
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    const payload = this.validateSchema(CancelBetDTO, { betId: req.params.betId, ...(req.body || {}) }) as CancelBetDTOType;
+    const bet = await this.cancelBetUseCase.execute({ betId: payload.betId, reason: payload.reason ?? '', canceledBy: userId });
+    return this.ok(res, bet.toJSON());
   }
 
   /**
@@ -165,14 +153,10 @@ export class BetController extends BaseController {
    *               $ref: '#/components/schemas/BetListResponse'
    */
   async getMyBets(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
-      if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+    const userId = req.auth?.userId;
+    if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
-  const bets = await this.getUserBetsUseCase.execute(userId);
-  return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
-    } catch (error) {
-      return this.handleError(error, res);
-    }
+    const bets = await this.getUserBetsUseCase.execute(userId);
+    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
   }
 }

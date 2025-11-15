@@ -1,3 +1,5 @@
+import { AppError } from '@/shared/errors/AppError';
+
 export class Odds {
   private static readonly MIN_VALUE = 1.01;
   private static readonly MAX_VALUE = 1000;
@@ -9,15 +11,15 @@ export class Odds {
 
   private validate(): void {
     if (typeof this.value !== 'number' || isNaN(this.value)) {
-      throw new Error('Odds value must be a valid number');
+      throw new AppError('VALIDATION_ERROR', 'Odds value must be a valid number', 400);
     }
 
     if (this.value < Odds.MIN_VALUE) {
-      throw new Error(`Odds must be greater than or equal to ${Odds.MIN_VALUE}`);
+      throw new AppError('VALIDATION_ERROR', `Odds must be greater than or equal to ${Odds.MIN_VALUE}`, 400);
     }
 
     if (this.value > Odds.MAX_VALUE) {
-      throw new Error(`Odds cannot be greater than ${Odds.MAX_VALUE}`);
+      throw new AppError('VALIDATION_ERROR', `Odds cannot be greater than ${Odds.MAX_VALUE}`, 400);
     }
   }
 
@@ -28,7 +30,7 @@ export class Odds {
    */
   calculatePotentialReturn(stake: number): number {
     if (typeof stake !== 'number' || stake <= 0 || isNaN(stake)) {
-      throw new Error('Invalid stake amount');
+      throw new AppError('VALIDATION_ERROR', 'Invalid stake amount', 400);
     }
     return Number((this.value * stake).toFixed(2)); // garante precisão de casas decimais
   }

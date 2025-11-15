@@ -2,6 +2,7 @@ import { User } from '../entities/User';
 import { IUserRepository } from '../repositories/IUserRepository';
 import { Email } from '../value-objects/Email';
 import { ICreateUserDTO } from '../../types/user.types';
+import { AppError } from '@/shared/errors/AppError';
 
 export class UserService {
   constructor(private userRepository: IUserRepository) {}
@@ -9,7 +10,7 @@ export class UserService {
   async registerUser(input: ICreateUserDTO): Promise<User> {
     const emailExists = await this.userRepository.findByEmail(input.email);
     if (emailExists) {
-      throw new Error('Email already exists');
+      throw new AppError('CONFLICT', 'Email already exists', 409);
     }
 
     const user = new User(
@@ -27,8 +28,8 @@ export class UserService {
 
   async suspendUser(userId: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
-    if (!user) throw new Error('User not found');
-    if (user.status === 'SUSPENDED') throw new Error('User is already suspended');
+  if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+  if (user.status === 'SUSPENDED') throw new AppError('BAD_REQUEST', 'User is already suspended', 400);
 
     user.status = 'SUSPENDED';
     await this.userRepository.update(user);
@@ -36,8 +37,8 @@ export class UserService {
 
   async activateUser(userId: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
-    if (!user) throw new Error('User not found');
-    if (user.status === 'ACTIVE') throw new Error('User is already active');
+  if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+  if (user.status === 'ACTIVE') throw new AppError('BAD_REQUEST', 'User is already active', 400);
 
     user.status = 'ACTIVE';
     await this.userRepository.update(user);
@@ -45,8 +46,8 @@ export class UserService {
 
   async updateProfile(userId: string, updateData: { username: string }): Promise<void> {
     const user = await this.userRepository.findById(userId);
-    if (!user) throw new Error('User not found');
-    if (user.status === 'SUSPENDED') throw new Error('User is suspended');
+  if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+  if (user.status === 'SUSPENDED') throw new AppError('BAD_REQUEST', 'User is suspended', 400);
 
     user.username = updateData.username;
     await this.userRepository.update(user);
@@ -54,11 +55,11 @@ export class UserService {
 
   async changeEmail(userId: string, newEmail: string): Promise<void> {
     const user = await this.userRepository.findById(userId);
-    if (!user) throw new Error('User not found');
-    if (user.status === 'SUSPENDED') throw new Error('User is suspended');
+  if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+  if (user.status === 'SUSPENDED') throw new AppError('BAD_REQUEST', 'User is suspended', 400);
 
-    const emailExists = await this.userRepository.findByEmail(newEmail);
-    if (emailExists) throw new Error('Email already exists');
+  const emailExists = await this.userRepository.findByEmail(newEmail);
+  if (emailExists) throw new AppError('CONFLICT', 'Email already exists', 409);
 
     user.email = new Email(newEmail);
     await this.userRepository.update(user);

@@ -1,5 +1,6 @@
 import { IWalletDTO } from '../../types/wallet.types';
 import { Transaction } from './Transaction';
+import { AppError } from '@/shared/errors/AppError';
 
 export class Wallet {
   private _balance: number = 0;
@@ -29,7 +30,7 @@ export class Wallet {
 
   deposit(amount: number): void {
     if (amount <= 0) {
-      throw new Error('Amount must be positive');
+      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
     }
     this._balance += amount;
     // registrar transação de depósito
@@ -43,10 +44,10 @@ export class Wallet {
 
   withdraw(amount: number): void {
     if (amount <= 0) {
-      throw new Error('Amount must be positive');
+      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
     }
     if (this._balance < amount) {
-      throw new Error('Insufficient funds');
+      throw new AppError('BAD_REQUEST', 'Insufficient funds', 400);
     }
     this._balance -= amount;
     // registrar transação de saque
@@ -60,10 +61,10 @@ export class Wallet {
 
   lock(amount: number): void {
     if (amount <= 0) {
-      throw new Error('Amount must be positive');
+      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
     }
     if (this._balance < amount) {
-      throw new Error('Insufficient funds');
+      throw new AppError('BAD_REQUEST', 'Insufficient funds', 400);
     }
     this._balance -= amount;
     this._lockedBalance += amount;
@@ -71,10 +72,10 @@ export class Wallet {
 
   unlock(amount: number): void {
     if (amount <= 0) {
-      throw new Error('Amount must be positive');
+      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
     }
     if (this._lockedBalance < amount) {
-      throw new Error('Amount exceeds locked balance');
+      throw new AppError('BAD_REQUEST', 'Amount exceeds locked balance', 400);
     }
     this._lockedBalance -= amount;
     this._balance += amount;

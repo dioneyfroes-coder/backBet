@@ -1,8 +1,10 @@
 // users/domain/value-objects/Email.ts
+import { AppError } from '@/shared/errors/AppError';
+
 export class Email {
   constructor(public readonly value: string) {
     if (!this.isValid(value)) {
-      throw new Error('Invalid email format');
+      throw new AppError('VALIDATION_ERROR', 'Invalid email format', 400);
     }
   }
 

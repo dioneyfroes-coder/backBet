@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
@@ -32,21 +33,13 @@ export function createWalletRoutes(): Router {
   );
 
   // Rotas protegidas
-  router.get('/me', protectedRoute, (req, res) =>
-    walletController.getMe(req, res)
-  );
+  router.get('/me', protectedRoute, asyncHandler((req, res) => walletController.getMe(req, res)));
 
-  router.post('/deposit', protectedRoute, (req, res) =>
-    walletController.deposit(req, res)
-  );
+  router.post('/deposit', protectedRoute, asyncHandler((req, res) => walletController.deposit(req, res)));
 
-  router.post('/withdraw', protectedRoute, (req, res) =>
-    walletController.withdraw(req, res)
-  );
+  router.post('/withdraw', protectedRoute, asyncHandler((req, res) => walletController.withdraw(req, res)));
 
-  router.get('/history', protectedRoute, (req, res) =>
-    walletController.getHistory(req, res)
-  );
+  router.get('/history', protectedRoute, asyncHandler((req, res) => walletController.getHistory(req, res)));
 
   return router;
 }

@@ -180,7 +180,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 | **Núcleo Apostas** | 🟡 Estrutura Pronta | Testes em implementação |
 | **Domínio Compartilhado** | ✅ Completo | 100% cobertura, abstrações sólidas |
 | **Build TypeScript** | ✅ Sucesso | Zero erros de compilação |
-| **Testes Totais** | ✅ 146 passando | 100% coverage em 12 suites |
+| **Testes Totais** | ✅ 150 passando | 100% coverage em 12 suites |
 | **Lint / Format** | ✅ Limpo | Zero warnings |
 
 ---
@@ -188,7 +188,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 ## 📊 Cobertura de Testes
 
 ```
-Total de Testes: 146
+Total de Testes: 150
 Suites: 12
 
 Cobertura:
@@ -345,6 +345,29 @@ src/
 - **[ARCHITECTURE.md](./src/core/ARCHITECTURE.md)** - Padrões DDD, fluxos de integração
 - **[Finance_docs.md](./src/core/finance/Finance_docs.md)** - Detalhes do núcleo financeiro
 - **[Bet_docs.md](./src/core/betting/Bet_docs.md)** - Detalhes do núcleo de apostas
+
+## 💬 API Docs e Tratamento de Erros
+
+A API possui documentação OpenAPI disponível localmente em `/api/docs` (Swagger UI) e a especificação em `/api/docs.json`.
+
+Formato de erro padrão retornado por todos os endpoints:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "Descrição legível do erro",
+    "details": { "campo": "mensagem de validação" }
+  },
+  "meta": { "timestamp": "2025-11-15T12:00:00.000Z" }
+}
+```
+
+Notas importantes:
+- Todas as validações de entrada lançam um `AppError` com `code`, `message` e `statusCode` para permitir mapeamento consistente para HTTP.
+- Os controllers são "thin": delegam para use-cases e não capturam erros localmente. Um middleware `asyncHandler` e o handler global de erros fazem o trabalho de apresentar respostas uniformes.
+- Consulte a especificação OpenAPI (`/api/docs.json`) para exemplos de `ErrorResponse`, `ConflictError` e `ValidationError`.
 
 ---
 

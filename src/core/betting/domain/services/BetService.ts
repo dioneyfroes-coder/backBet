@@ -7,6 +7,7 @@ import { IEventRepository } from '../repositories/IEventRepository';
 import { BetAmount } from '../value-objects/BetAmount';
 import { IWalletService } from '@/core/finance/domain/services/IWalletService';
 import { ICreateBetDTO, ICancelBetDTO, IResolveBetDTO } from '../../types/bet.types';
+import { AppError } from '@/shared/errors/AppError';
 
 export class BetService {
   constructor(
@@ -17,17 +18,17 @@ export class BetService {
 
   async placeBet(input: ICreateBetDTO): Promise<Bet> {
     const event = await this.eventRepository.findById(input.eventId);
-    if (!event) throw new Error('Event not found');
-    if (event.status !== 'SCHEDULED') throw new Error('Event is not open for betting');
+  if (!event) throw new AppError('NOT_FOUND', 'Event not found', 404);
+  if (event.status !== 'SCHEDULED') throw new AppError('BAD_REQUEST', 'Event is not open for betting', 400);
 
     const market = event.markets.get(input.marketId);
-    if (!market) throw new Error('Market not found');
-    if (market.status !== 'OPEN') throw new Error('Market is not open for betting');
+  if (!market) throw new AppError('NOT_FOUND', 'Market not found', 404);
+  if (market.status !== 'OPEN') throw new AppError('BAD_REQUEST', 'Market is not open for betting', 400);
 
     const odd = market.odds.get(input.oddId);
-    if (!odd) throw new Error('Odd not found');
+  if (!odd) throw new AppError('NOT_FOUND', 'Odd not found', 404);
 
-    const wallet = await this.walletService.withdraw(input.userId, input.amount);
+  const wallet = await this.walletService.withdraw(input.userId, input.amount);
 
     const bet = new Bet(
       randomUUID(),
@@ -48,14 +49,14 @@ export class BetService {
   }
 
   async cancelBet(input: ICancelBetDTO): Promise<Bet> {
-    const bet = await this.betRepository.findById(input.betId);
-    if (!bet) throw new Error('Bet not found');
-    if (bet.status !== 'PENDING') throw new Error('Bet cannot be canceled');
+  const bet = await this.betRepository.findById(input.betId);
+  if (!bet) throw new AppError('NOT_FOUND', 'Bet not found', 404);
+  if (bet.status !== 'PENDING') throw new AppError('BAD_REQUEST', 'Bet cannot be canceled', 400);
 
     const event = await this.eventRepository.findById(bet.eventId);
-    if (!event) throw new Error('Event not found');
+    if (!event) throw new AppError('NOT_FOUND', 'Event not found', 404);
     if (event.status !== 'SCHEDULED')
-      throw new Error('Cannot cancel bet on ongoing or finished event');
+      throw new AppError('BAD_REQUEST', 'Cannot cancel bet on ongoing or finished event', 400);
 
     bet.cancel(input.reason);
     await this.walletService.deposit(bet.userId, bet.amount.value);
@@ -65,9 +66,9 @@ export class BetService {
   }
 
   async resolveBet(input: IResolveBetDTO): Promise<Bet> {
-    const bet = await this.betRepository.findById(input.betId);
-    if (!bet) throw new Error('Bet not found');
-    if (bet.status !== 'PENDING') throw new Error('Bet is not pending');
+  const bet = await this.betRepository.findById(input.betId);
+  if (!bet) throw new AppError('NOT_FOUND', 'Bet not found', 404);
+  if (bet.status !== 'PENDING') throw new AppError('BAD_REQUEST', 'Bet is not pending', 400);
 
     bet.resolve(input.result);
 

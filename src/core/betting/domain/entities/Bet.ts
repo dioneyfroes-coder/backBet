@@ -3,6 +3,7 @@
 import { BetStatus, BetType } from '../../types/bet.types';
 import { BetAmount } from '../value-objects/BetAmount';
 import { Odds } from '../value-objects/Odds';
+import { AppError } from '@/shared/errors/AppError';
 
 export class Bet {
   private _status: BetStatus;
@@ -48,7 +49,7 @@ export class Bet {
   // ---------- Domain Methods ----------
   resolve(result: 'WON' | 'LOST'): void {
     if (this._status !== 'PENDING') {
-      throw new Error('Only pending bets can be resolved.');
+      throw new AppError('BAD_REQUEST', 'Only pending bets can be resolved.', 400);
     }
 
     this._status = result;
@@ -57,7 +58,7 @@ export class Bet {
 
   cancel(reason: string): void {
     if (this._status !== 'PENDING') {
-      throw new Error('Only pending bets can be canceled.');
+      throw new AppError('BAD_REQUEST', 'Only pending bets can be canceled.', 400);
     }
 
     this._status = 'CANCELED';
@@ -70,15 +71,15 @@ export class Bet {
     const isNonEmptyString = (val: any): val is string =>
       typeof val === 'string' && val.trim().length > 0;
 
-    if (!isNonEmptyString(this.id)) throw new Error('Invalid bet ID');
-    if (!isNonEmptyString(this.userId)) throw new Error('Invalid user ID');
-    if (!isNonEmptyString(this.eventId)) throw new Error('Invalid event ID');
-    if (!isNonEmptyString(this.marketId)) throw new Error('Invalid market ID');
+    if (!isNonEmptyString(this.id)) throw new AppError('VALIDATION_ERROR', 'Invalid bet ID', 400);
+    if (!isNonEmptyString(this.userId)) throw new AppError('VALIDATION_ERROR', 'Invalid user ID', 400);
+    if (!isNonEmptyString(this.eventId)) throw new AppError('VALIDATION_ERROR', 'Invalid event ID', 400);
+    if (!isNonEmptyString(this.marketId)) throw new AppError('VALIDATION_ERROR', 'Invalid market ID', 400);
 
-    if (!(this.createdAt instanceof Date)) throw new Error('Invalid creation date');
+    if (!(this.createdAt instanceof Date)) throw new AppError('VALIDATION_ERROR', 'Invalid creation date', 400);
 
     if (this._resolvedAt && !(this._resolvedAt instanceof Date))
-      throw new Error('Invalid resolution date');
+      throw new AppError('VALIDATION_ERROR', 'Invalid resolution date', 400);
   }
 
   // ---------- Utility ----------

@@ -51,27 +51,23 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/ErrorResponse'
    */
   async getMe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const wallet = await this.getWalletUseCase.execute(userId);
-      if (!wallet) {
-        return this.notFound(res, 'Carteira não encontrada');
-      }
-
-      return this.ok(res, {
-        userId: wallet.userId,
-        balance: wallet.balance,
-        lockedBalance: wallet.lockedBalance,
-        currency: wallet.currency,
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const wallet = await this.getWalletUseCase.execute(userId);
+    if (!wallet) {
+      return this.notFound(res, 'Carteira não encontrada');
+    }
+
+    return this.ok(res, {
+      userId: wallet.userId,
+      balance: wallet.balance,
+      lockedBalance: wallet.lockedBalance,
+      currency: wallet.currency,
+    });
   }
 
   /**
@@ -125,38 +121,34 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async deposit(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const payload = this.validateSchema(DepositDTO, req.body);
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      const wallet = await this.getWalletUseCase.execute(userId);
-      if (!wallet) {
-        return this.notFound(res, 'Carteira não encontrada');
-      }
-
-      // Realiza o depósito via serviço (pode lançar se houver erro)
-      const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
-
-      return this.created(res, {
-        message: 'Depósito realizado com sucesso',
-        wallet: {
-          userId: updatedWallet.userId,
-          balance: updatedWallet.balance,
-          lockedBalance: updatedWallet.lockedBalance,
-          currency: updatedWallet.currency,
-        },
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const payload = this.validateSchema(DepositDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    const wallet = await this.getWalletUseCase.execute(userId);
+    if (!wallet) {
+      return this.notFound(res, 'Carteira não encontrada');
+    }
+
+    // Realiza o depósito via serviço (pode lançar se houver erro)
+    const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
+
+    return this.created(res, {
+      message: 'Depósito realizado com sucesso',
+      wallet: {
+        userId: updatedWallet.userId,
+        balance: updatedWallet.balance,
+        lockedBalance: updatedWallet.lockedBalance,
+        currency: updatedWallet.currency,
+      },
+    });
   }
 
   /**
@@ -210,43 +202,39 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async withdraw(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const payload = this.validateSchema(WithdrawDTO, req.body);
-      if (!payload) {
-        return this.badRequest(res, 'Dados inválidos');
-      }
-
-      const wallet = await this.getWalletUseCase.execute(userId);
-      if (!wallet) {
-        return this.notFound(res, 'Carteira não encontrada');
-      }
-
-      // Verificar saldo
-      if (wallet.balance < payload.amount) {
-        return this.badRequest(res, 'Saldo insuficiente');
-      }
-
-      // Realiza o saque via serviço (pode lançar se houver erro)
-  const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
-
-      return this.created(res, {
-        message: 'Saque realizado com sucesso',
-        wallet: {
-          userId: updatedWallet.userId,
-          balance: updatedWallet.balance,
-          lockedBalance: updatedWallet.lockedBalance,
-          currency: updatedWallet.currency,
-        },
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const payload = this.validateSchema(WithdrawDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    const wallet = await this.getWalletUseCase.execute(userId);
+    if (!wallet) {
+      return this.notFound(res, 'Carteira não encontrada');
+    }
+
+    // Verificar saldo
+    if (wallet.balance < payload.amount) {
+      return this.badRequest(res, 'Saldo insuficiente');
+    }
+
+    // Realiza o saque via serviço (pode lançar se houver erro)
+    const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
+
+    return this.created(res, {
+      message: 'Saque realizado com sucesso',
+      wallet: {
+        userId: updatedWallet.userId,
+        balance: updatedWallet.balance,
+        lockedBalance: updatedWallet.lockedBalance,
+        currency: updatedWallet.currency,
+      },
+    });
   }
 
   /**
@@ -286,24 +274,20 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async getHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    try {
-      const userId = req.auth?.userId;
+    const userId = req.auth?.userId;
 
-      if (!userId) {
-        return this.unauthorized(res, 'Autenticação requerida');
-      }
-
-      const limit = Number(req.query.limit || 10);
-      const offset = Number(req.query.offset || 0);
-
-      const result = await this.getHistoryUseCase.execute(userId, limit, offset);
-
-      return this.ok(res, {
-        transactions: result.transactions,
-        pagination: { limit, offset, total: result.total },
-      });
-    } catch (error) {
-      return this.handleError(error, res);
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
     }
+
+    const limit = Number(req.query.limit || 10);
+    const offset = Number(req.query.offset || 0);
+
+    const result = await this.getHistoryUseCase.execute(userId, limit, offset);
+
+    return this.ok(res, {
+      transactions: result.transactions,
+      pagination: { limit, offset, total: result.total },
+    });
   }
 }
