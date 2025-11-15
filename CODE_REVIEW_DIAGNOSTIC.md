@@ -1,0 +1,130 @@
+# 📋 DIAGNÓSTICO DE REVISÃO DE CÓDIGO
+
+## 1. ESTRUTURA & ORGANIZAÇÃO
+
+### ✅ Pontos Positivos:
+- DDD bem estruturado (domain, application, infrastructure)
+- Controllers + Routes + DTOs organizados
+- Pastas por domínio (user, betting, finance, shared)
+
+### ⚠️ Problemas Encontrados:
+1. **Documentação desnecessária** (16 arquivos .md)
+   - VALIDATION_CHECKLIST.md, PHASE_2_ROADMAP.md, INDEX.md, SESSION_SUMMARY_14_11_2025.md, etc.
+   - Manter apenas: README.md, QUICKSTART.md, API_DOCS.md
+
+2. **Pasta `coverage/` desnecessária**
+   - Remover (gerada por jest --coverage)
+
+3. **Inconsistência de pastas**
+   - `src/core/betting/aplication` (typo: "aplication" vs "application")
+   - `src/core/finance/domain/repositories/` vs `src/core/user/domain/repositories/` (paths OK mas diferentes padrões)
+
+4. **Imports com caminhos complexos**
+   - Muitos `../../../core/` (9+ níveis de profundidade)
+   - Solução: usar path aliases em `tsconfig.json` (@core/*, @infrastructure/*)
+
+## 2. DEPENDENCIES & PACKAGES
+
+### ⚠️ Problemas:
+1. **NestJS instalado mas não usado**
+   - @nestjs/common, @nestjs/config, @nestjs/core, @nestjs/jwt, @nestjs/passport, @nestjs/swagger, @nestjs/typeorm
+   - Stack: Express (funciona bem), não NestJS
+   - **Ação**: Remover @nestjs/* (exceto @nestjs/testing se necessário)
+
+2. **TypeORM instalado mas não integrado**
+   - Repositórios usam arrays in-memory
+   - **Ação**: Remover ou integrar (por enquanto: remover)
+
+3. **class-validator, class-transformer**
+   - Duplica funcionalidade de Zod
+   - **Ação**: Remover se não estiver em uso
+
+## 3. CÓDIGO & IMPORTS
+
+### ⚠️ Imports não utilizados:
+- Controllers: alguns imports de types/interfaces não usados
+- Routes: possíveis imports redundantes
+
+### ✅ Circular dependencies:
+- **Nenhum detectado** até agora (bom sinal)
+
+### 🔍 Imports complexos encontrados:
+```
+../../../core/user/domain/services/UserService
+../../../core/finance/domain/services/WalletService
+../../../core/betting/domain/services/BetService
+```
+→ Refatorar com path aliases
+
+## 4. SEGURANÇA
+
+### ⚠️ Potenciais riscos:
+1. **Clerk fallback em dev**
+   - `sk_test` tokens em NODE_ENV=development (ok para dev, mas documentar)
+   
+2. **Sem rate limiting** (por implementar)
+
+3. **Sem input sanitization** (usar helmet, validações Zod ok)
+
+4. **Variáveis de ambiente**
+   - .env commitado? (verificar .gitignore)
+   - CLERK_SECRET_KEY, PORT expostos?
+
+## 5. ARQUITETURA & DESIGN
+
+### ✅ Bom:
+- Separation of concerns (domain/app/infra)
+- DTOs com Zod
+- Middleware de autenticação
+
+### ⚠️ Melhorar:
+1. **BaseController muito genérico**
+   - Métodos: ok(res, data), created(), error(), badRequest(), etc.
+   - Reduzir: pode ser mais simples
+
+2. **Métodos longos em controllers**
+   - Ex: BetController.deposit() poderia extrair lógica de validação
+
+3. **Variáveis de ambiente**
+   - Sem tipagem (usar zod para .env validation)
+
+## 6. TYPESCRIPT & TIPOS
+
+### ⚠️ Problemas:
+1. Possíveis `any` types em mocks/tests
+2. Alguns `Promise<void>` quando deveria retornar tipo específico
+3. Tipo `ICreateBetDTO` com `type: BetType` mas DTOs use enum string
+
+## 7. TESTES
+
+### ✅ Presente:
+- Tests em __tests__ folders
+- jest.config.js configurado
+
+### ⚠️ Cobertura:
+- Não verificada (rodar `npm run test:coverage`)
+
+## SUMÁRIO DE AÇÕES PRIORITÁRIAS
+
+1. **Alta Prioridade:**
+   - [ ] Remover documentação desnecessária (11 .md files)
+   - [ ] Remover dependencies NestJS, TypeORM, class-validator
+   - [ ] Configurar path aliases em tsconfig.json
+   - [ ] Refatorar imports para usar aliases
+
+2. **Média Prioridade:**
+   - [ ] Renomear pasta "aplication" → "application"
+   - [ ] Revisar imports em controllers/routes
+   - [ ] Validar .env não exposto (check .gitignore)
+   - [ ] Consolidar error handling
+
+3. **Baixa Prioridade:**
+   - [ ] Reduzir tamanho de métodos em controllers
+   - [ ] Validar tipos TypeScript (tsc --strict)
+   - [ ] Rodar cobertura de testes
+
+---
+
+**Data**: 14/11/2025
+**Total de arquivos TS**: 73
+**Total de pastas**: 38

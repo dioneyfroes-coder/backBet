@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { WalletController } from '../controllers/WalletController';
-import { WalletService } from '../../../core/finance/domain/services/WalletService';
-import { WalletRepository } from '../../../core/finance/domain/repositories/WalletRepository';
+import { WalletService } from '@core/finance/domain/services/WalletService';
+import { WalletRepository } from '@core/finance/domain/repositories/WalletRepository';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { protectedRoute } from '../middleware/AuthMiddleware';
 import { UserController } from '../controllers/UserController';
-import { UserService } from '../../../core/user/domain/services/UserService';
-import { UserRepository } from '../../../core/user/domain/repositories/UserRepository';
+import { UserService } from '@core/user/domain/services/UserService';
+import { UserRepository } from '@core/user/domain/repositories/UserRepository';
 
 /**
  * Factory para criar rotas de usuário com injeção de dependências

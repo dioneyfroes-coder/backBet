@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { UpdateProfileDTO, ChangeEmailDTO, UpdateProfileDTOType, ChangeEmailDTOType } from '../dtos/UserDTOs';
-import { UserService } from '../../../core/user/domain/services/UserService';
+import { UserService } from '@core/user/domain/services/UserService';
 
 /**
  * Controller de usuários

@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { RegisterDTO, LoginDTO, RefreshTokenDTO, LogoutDTO, RegisterDTOType } from '../dtos/AuthDTOs';
-import { UserService } from '../../../core/user/domain/services/UserService';
-import { WalletService } from '../../../core/finance/domain/services/WalletService';
+import { UserService } from '@core/user/domain/services/UserService';
+import { WalletService } from '@core/finance/domain/services/WalletService';
 
 /**
  * Controller de autenticação

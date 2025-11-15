@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { DepositDTO, WithdrawDTO } from '../dtos/WalletDTOs';
-import { WalletService } from '../../../core/finance/domain/services/WalletService';
+import { WalletService } from '@core/finance/domain/services/WalletService';
 
 /**
  * Controller de carteiras

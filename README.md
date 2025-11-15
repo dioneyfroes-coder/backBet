@@ -318,12 +318,15 @@ src/
 - [ ] Alertas e monitoramento
 
 ### 🎯 Phase 7: Performance & Otimização
+- [ ] Clustering setup
 - [ ] Análise de bundles
 - [ ] Lazy loading
 - [ ] Conexão pooling
 - [ ] Queries optimization
 - [ ] Caching strategies
 - [ ] Batch processing
+- [ ] Stress testing
+- [ ] Load testing
 
 ### 📦 Phase 8: Release & Deployment
 - [ ] Release notes
