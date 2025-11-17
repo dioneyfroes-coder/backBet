@@ -1,4 +1,4 @@
-Como Rodar o BackBet - Guia Rápido
+# 🚀 Como Rodar o BackBet - Guia Rápido
 
 **Última atualização:** 14 de Novembro de 2025 ✅ Sprint 1 Phase 1 Completo
 
@@ -6,12 +6,14 @@ Como Rodar o BackBet - Guia Rápido
 
 ### 1. Instalar e Compilar
 ```bash
+cd backBet
 npm install
 npm run build
 ```
 
 ### 2. Rodar Servidor
 ```bash
+npm start
 ```
 
 Você verá:
@@ -22,6 +24,7 @@ Você verá:
 
 ### 3. Testar
 ```bash
+# Health check
 curl http://localhost:3000/health
 
 # Deve retornar:
@@ -32,12 +35,13 @@ curl http://localhost:3000/health
 
 ---
 
-Autenticação - Modo Desenvolvimento
+## 🔐 Autenticação - Modo Desenvolvimento
 
 Em desenvolvimento, o servidor **não requer** chaves reais do Clerk!
 
 ### Registrar Usuário
 ```bash
+curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -52,6 +56,7 @@ Você receberá um `id` (UUID). Copie-o!
 
 ### Autenticar (Bearer Token)
 ```bash
+# Substitua {USER_ID} pelo ID recebido acima
 curl -H "Authorization: Bearer {USER_ID}" \
   http://localhost:3000/api/auth/me
 
@@ -60,10 +65,11 @@ curl -H "Authorization: Bearer {USER_ID}" \
 
 ---
 
-Configuração
+## 🔧 Configuração
 
 ### Arquivo `.env` (Desenvolvimento)
 ```properties
+PORT=3000
 NODE_ENV=development
 CLERK_PUBLISHABLE_KEY=pk_test_Y2xlcmsuYWNjb3VudHMuZGV2
 CLERK_SECRET_KEY=sk_test_local_development_only
@@ -79,22 +85,23 @@ LOG_LEVEL=debug
 
 ---
 
-Testes
+## 🧪 Testes
 
 ```bash
+# Rodar todos os testes
 npm test
 
 # Com cobertura detalhada
 npm test -- --coverage
 
 # Resultado esperado:
-150/150 testes passando
-100% de cobertura
+# ✅ 150/150 testes passando
+# ✅ 100% de cobertura
 ```
 
 ---
 
-Estrutura do Projeto
+## 📁 Estrutura do Projeto
 
 ```
 src/
@@ -125,9 +132,9 @@ src/
 
 ---
 
-Endpoints Disponíveis
+## 📚 Endpoints Disponíveis
 
-Autenticação (Implementado)
+### ✅ Autenticação (Implementado)
 ```
 POST   /api/auth/register          # Criar conta
 POST   /api/auth/login             # Login (Clerk OAuth)
@@ -138,7 +145,7 @@ GET    /health                     # Health check
 GET    /readiness                  # Readiness check
 ```
 
-Em Desenvolvimento (Phase 2)
+### 🔄 Em Desenvolvimento (Phase 2)
 ```
 GET    /api/users/me               # Perfil do usuário
 PATCH  /api/users/me               # Atualizar perfil
@@ -152,11 +159,12 @@ GET    /api/wallets/me/history     # Histórico de transações
 
 ---
 
-Desenvolvimento
+## 📚 Desenvolvimento
 
 ### Scripts Disponíveis
 
 ```bash
+# Compilar TypeScript
 npm run build
 
 # Rodar servidor (requer build antes)
@@ -177,7 +185,7 @@ npm run lint
 
 ---
 
-Troubleshooting
+## 🐛 Troubleshooting
 
 | Problema | Solução |
 |----------|---------|
@@ -189,7 +197,7 @@ Troubleshooting
 
 ---
 
-Próximas Fases
+## 🚀 Próximas Fases
 
 ### Sprint 1 - Phase 2 (Em Desenvolvimento)
 - [ ] Controllers para User (update profile, change email, etc)
@@ -210,7 +218,7 @@ Próximas Fases
 
 ---
 
-Segurança
+## 🔐 Segurança
 
 ### Desenvolvimento
 - ✅ HTTPS não requerido
@@ -226,7 +234,7 @@ Segurança
 
 ---
 
-Métricas Atuais
+## 📊 Métricas Atuais
 
 | Métrica | Valor |
 |---------|-------|
@@ -239,7 +247,7 @@ Métricas Atuais
 
 ---
 
-Arquitetura
+## 💡 Arquitetura
 
 ### Domain-Driven Design (DDD)
 - **3 Bounded Contexts**: User, Finance, Betting
@@ -254,7 +262,7 @@ Arquitetura
 
 ---
 
-Suporte
+## 📞 Suporte
 
 Se algo não funcionar:
 
@@ -266,7 +274,7 @@ Se algo não funcionar:
 
 ---
 
-**Última revisão:** 14 de Novembro de 2025
+**Última revisão:** 14 de Novembro de 2025  
 **Status:** ✅ Pronto para uso em desenvolvimento
 
 # Executar testes
@@ -291,6 +299,7 @@ npm run format
 ### Fluxo de Desenvolvimento
 
 ```bash
+# 1. Compilar inicial
 npm run build
 
 # 2. Em outro terminal, rodar servidor
@@ -310,14 +319,16 @@ npm run build
 
 ---
 
-Testar Endpoints
+## 🔌 Testar Endpoints
 
 ### Health Check
 ```bash
+curl http://localhost:3000/health
 ```
 
 ### Registrar Usuário
 ```bash
+curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "teste@example.com",
@@ -330,12 +341,13 @@ Testar Endpoints
 
 ### Obter Perfil (com autenticação)
 ```bash
+curl -X GET http://localhost:3000/api/auth/me \
   -H "Authorization: Bearer seu_token_aqui"
 ```
 
 ---
 
-️ Estrutura do Projeto
+## 🗂️ Estrutura do Projeto
 
 ```
 BackBet/
@@ -358,10 +370,11 @@ BackBet/
 
 ---
 
-Troubleshooting
+## 🐛 Troubleshooting
 
 ### Erro: "Cannot find module"
 ```bash
+# Limpar e recompilar
 rm -rf dist/
 npm run build
 npm start
@@ -378,34 +391,37 @@ npm start
 
 ### Testes falhando
 ```bash
+# Limpar cache e rodar
 npm test -- --clearCache
 npm test
 ```
 
 ### Porta 3000 já está em uso
 ```bash
+# Mudar porta no .env
 PORT=3001
 
 # Ou matar processo
 lsof -i :3000
-kill -9
+kill -9 <PID>
 ```
 
 ---
 
-Documentação
+## 📖 Documentação
 
-- **** - Configuração de autenticação
-- **** - Documentação de endpoints
-- **** - Plano de produção
-- **** - Status atual do sprint
-- **** - Arquitetura DDD
+- **[CLERK_SETUP.md](./CLERK_SETUP.md)** - Configuração de autenticação
+- **[API_DOCS.md](./API_DOCS.md)** - Documentação de endpoints
+- **[PRODUCTION_ROADMAP.md](./PRODUCTION_ROADMAP.md)** - Plano de produção
+- **[SPRINT_1_STATUS.md](./SPRINT_1_STATUS.md)** - Status atual do sprint
+- **[src/core/ARCHITECTURE.md](./src/core/ARCHITECTURE.md)** - Arquitetura DDD
 
 ---
 
-Checklist Antes de Fazer Push
+## ✅ Checklist Antes de Fazer Push
 
 ```bash
+# 1. Compilar sem erros
 npm run build
 
 # 2. Testes passando
@@ -430,7 +446,7 @@ git push origin main
 
 ---
 
-Próximos Passos
+## 🎯 Próximos Passos
 
 1. **Completar Sprint 1 (Semana 2)**
    - Controllers de usuário
@@ -448,11 +464,11 @@ Próximos Passos
 
 ---
 
-Precisa de Ajuda?
+## 📞 Precisa de Ajuda?
 
-1. Verificar  para questões de autenticação
-2. Verificar  para endpoints
-3. Consultar  para status
+1. Verificar [CLERK_SETUP.md](./CLERK_SETUP.md) para questões de autenticação
+2. Verificar [API_DOCS.md](./API_DOCS.md) para endpoints
+3. Consultar [SPRINT_1_STATUS.md](./SPRINT_1_STATUS.md) para status
 4. Abrir issue no repositório
 
 ---

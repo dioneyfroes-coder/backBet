@@ -1,8 +1,8 @@
-DIAGNÓSTICO DE REVISÃO DE CÓDIGO
+# 📋 DIAGNÓSTICO DE REVISÃO DE CÓDIGO
 
 ## 1. ESTRUTURA & ORGANIZAÇÃO
 
-Pontos Positivos:
+### ✅ Pontos Positivos:
 - DDD bem estruturado (domain, application, infrastructure)
 - Controllers + Routes + DTOs organizados
 - Pastas por domínio (user, betting, finance, shared)
@@ -45,10 +45,10 @@ Pontos Positivos:
 - Controllers: alguns imports de types/interfaces não usados
 - Routes: possíveis imports redundantes
 
-Circular dependencies:
+### ✅ Circular dependencies:
 - **Nenhum detectado** até agora (bom sinal)
 
-Imports complexos encontrados:
+### 🔍 Imports complexos encontrados:
 ```
 ../../../core/user/domain/services/UserService
 ../../../core/finance/domain/services/WalletService
@@ -61,7 +61,7 @@ Imports complexos encontrados:
 ### ⚠️ Potenciais riscos:
 1. **Clerk fallback em dev**
    - `sk_test` tokens em NODE_ENV=development (ok para dev, mas documentar)
-
+   
 2. **Sem rate limiting** (por implementar)
 
 3. **Sem input sanitization** (usar helmet, validações Zod ok)
@@ -72,7 +72,7 @@ Imports complexos encontrados:
 
 ## 5. ARQUITETURA & DESIGN
 
-Bom:
+### ✅ Bom:
 - Separation of concerns (domain/app/infra)
 - DTOs com Zod
 - Middleware de autenticação
@@ -92,12 +92,12 @@ Bom:
 
 ### ⚠️ Problemas:
 1. Possíveis `any` types em mocks/tests
-2. Alguns `Promise` quando deveria retornar tipo específico
+2. Alguns `Promise<void>` quando deveria retornar tipo específico
 3. Tipo `ICreateBetDTO` com `type: BetType` mas DTOs use enum string
 
 ## 7. TESTES
 
-Presente:
+### ✅ Presente:
 - Tests em __tests__ folders
 - jest.config.js configurado
 

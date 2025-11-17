@@ -10,6 +10,7 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 - MongoDB Community Server instalado ([download](https://www.mongodb.com/try/download/community))
 - Ou usando Homebrew (macOS):
   ```bash
+  brew tap mongodb/brew
   brew install mongodb-community
   brew services start mongodb-community
   ```
@@ -18,19 +19,22 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 
 1. **Inicie o MongoDB:**
    ```bash
+   # macOS/Linux
    mongod --dbpath /usr/local/var/mongodb
-
+   
    # Windows
    "C:\Program Files\MongoDB\Server\6.0\bin\mongod.exe"
    ```
 
 2. **Configure as variáveis de ambiente** (`.env`):
    ```env
+   MONGODB_URI=mongodb://localhost:27017
    MONGODB_DB_NAME=backbet-dev
    ```
 
 3. **Valide a conexão:**
    ```bash
+   mongosh mongodb://localhost:27017
    ```
 
 ### 2. MongoDB Atlas (Recomendado para Produção)
@@ -61,12 +65,15 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
    - Clique em "Connect"
    - Escolha "Drivers"
    - Copie a connection string
-   - Substitua `` pela senha do usuário
+   - Substitua `<password>` pela senha do usuário
 
 5. **Configure as variáveis de ambiente** (`.env`):
    ```env
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
    MONGODB_DB_NAME=backbet-prod
    ```
+
+
 
 ## Variáveis de Ambiente
 
@@ -79,6 +86,8 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 ## Testando a Conexão
 
 ```typescript
+// src/main.ts ou durante inicialização
+import { connectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
 
 const config = getMongoDBConfig();
 await connectMongoDB(config);
@@ -90,6 +99,7 @@ console.log('✓ MongoDB conectado com sucesso');
 Os índices são criados automaticamente através dos schemas Mongoose:
 
 ```bash
+# Verificar índices criados
 mongosh
 > use backbet-dev
 > db.users.getIndexes()
@@ -102,6 +112,7 @@ mongosh
 ### Backup Local
 
 ```bash
+# Backup de um banco completo
 mongodump --db backbet-dev --out ./backup
 
 # Backup de uma collection
@@ -111,6 +122,7 @@ mongodump --db backbet-dev --collection users --out ./backup
 ### Restore Local
 
 ```bash
+# Restaurar banco completo
 mongorestore --db backbet-dev ./backup/backbet-dev
 
 # Restaurar uma collection
@@ -131,6 +143,7 @@ mongorestore --db backbet-dev --collection users ./backup/backbet-dev/users.bson
 
 **Solução:**
 ```bash
+# Verifique se MongoDB está rodando
 ps aux | grep mongod
 
 # Inicie o MongoDB
@@ -160,9 +173,9 @@ brew services start mongodb-community
 
 ## Próximos Passos
 
-1.
-2.  (se necessário)
-3.
+1. [Implementar Repositórios Mongoose](../src/infrastructure/persistence/mongoose/repositories/)
+2. [Configurar Migrations](./MIGRATIONS.md) (se necessário)
+3. [Monitoramento e Observabilidade](./MONITORING.md)
 
 ## Referências
 

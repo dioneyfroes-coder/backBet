@@ -74,10 +74,12 @@ Métodos:
 
 #### UserStatus
 ```typescript
+type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
 ```
 
 #### IUserDTO
 ```typescript
+interface IUserDTO {
   id: string;
   email: string;
   username: string;
@@ -89,6 +91,7 @@ Métodos:
 
 #### ICreateUserDTO
 ```typescript
+interface ICreateUserDTO {
   email: string;
   username: string;
   currency?: string;
@@ -97,6 +100,7 @@ Métodos:
 
 #### IUserResponseDTO
 ```typescript
+interface IUserResponseDTO {
   user: IUserDTO;
   wallet: IWalletDTO;
 }
@@ -107,6 +111,7 @@ Métodos:
 ### Registrando um Novo Usuário
 
 ```typescript
+const registerUser = new RegisterUser(userService, walletService);
 
 const result = await registerUser.execute({
   email: "user@example.com",
@@ -118,6 +123,7 @@ const result = await registerUser.execute({
 ### Suspendendo um Usuário
 
 ```typescript
+await userService.suspendUser(userId);
 ```
 
 ## Validações

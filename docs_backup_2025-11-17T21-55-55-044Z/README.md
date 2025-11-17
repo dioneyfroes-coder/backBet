@@ -2,7 +2,7 @@
 
 Uma aplicação backend moderna para gerenciamento de apostas desportivas, construída com **TypeScript**, **Domain-Driven Design (DDD)** e padrões de arquitetura limpa.
 
-Visão Geral do Projeto
+## 📋 Visão Geral do Projeto
 
 BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)** que trabalham em conjunto através de abstrações compartilhadas:
 
@@ -23,7 +23,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
         ┌─────────────────────────────┐
         │   DOMÍNIO COMPARTILHADO     │
         │ • BaseAggregateRoot         │
-        │ • IRepository            │
+        │ • IRepository<T>            │
         │ • Money (Value Object)      │
         │ • UniqueId (Value Object)   │
         └─────────────────────────────┘
@@ -31,7 +31,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 ---
 
-️ Arquitetura e Núcleos
+## 🏗️ Arquitetura e Núcleos
 
 ### 1️⃣ Núcleo de Usuários (`src/core/user/`)
 
@@ -134,7 +134,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 ---
 
-Domínio Compartilhado (`src/core/shared/`)
+### 🔄 Domínio Compartilhado (`src/core/shared/`)
 
 **Responsabilidade:** Abstrações e tipos reutilizáveis por todos os núcleos.
 
@@ -153,17 +153,17 @@ Domínio Compartilhado (`src/core/shared/`)
   - Suporta: BRL, USD, EUR
 
 #### Interfaces
-- **IRepository**: Contrato genérico para persistência
-  - `save(entity: T): Promise`
-  - `update(entity: T): Promise`
-  - `findById(id: string): Promise`
-  - `delete(id: string): Promise`
+- **IRepository<T>**: Contrato genérico para persistência
+  - `save(entity: T): Promise<void>`
+  - `update(entity: T): Promise<void>`
+  - `findById(id: string): Promise<T | null>`
+  - `delete(id: string): Promise<boolean>`
 
 #### Tipos Globais
 - `SupportedCurrency`: BRL, USD, EUR
 - `ResourceStatus`: Estados de recursos
-- `Result`: Resultado com sucesso/erro
-- `PaginatedDTO`: Resposta paginada
+- `Result<T>`: Resultado com sucesso/erro
+- `PaginatedDTO<T>`: Resposta paginada
 
 #### Testes
 - ✅ 100% cobertura (Money, UniqueId, AggregateRoot)
@@ -171,7 +171,7 @@ Domínio Compartilhado (`src/core/shared/`)
 
 ---
 
-Status Atual
+## 🚀 Status Atual
 
 | Aspecto | Status | Detalhe |
 |---------|--------|---------|
@@ -185,7 +185,7 @@ Status Atual
 
 ---
 
-Cobertura de Testes
+## 📊 Cobertura de Testes
 
 ```
 Total de Testes: 150
@@ -206,7 +206,7 @@ Por Núcleo:
 
 ---
 
-️ Configuração Técnica
+## 🛠️ Configuração Técnica
 
 ### Tecnologias
 - **TypeScript 5.9.3**: Strict mode com tipos exatos opcionais
@@ -217,6 +217,7 @@ Por Núcleo:
 ### Scripts Disponíveis
 
 ```bash
+# Desenvolvimento
 npm install          # Instalar dependências
 npm run build       # Compilar TypeScript
 npm test            # Rodar testes com cobertura
@@ -250,22 +251,22 @@ src/
 
 ---
 
-Checklist de Produção
+## ✅ Checklist de Produção
 
-Phase 1: Teste Completo (CONCLUÍDO)
+### 📋 Phase 1: Teste Completo (CONCLUÍDO)
 - [x] Testes unitários para todos os núcleos
 - [x] Mocking de dependências
 - [x] 100% cobertura de código
 - [x] Testes de integração entre núcleos
 - [x] CI/CD pipeline validado
 
-️ Phase 2: Infraestrutura (EM PROGRESSO)
+### 🏗️ Phase 2: Infraestrutura (EM PROGRESSO)
 - [ ] **API REST** - Implementar controllers e rotas
   - [ ] Autenticação JWT
   - [ ] Validação de requisições
   - [ ] Tratamento de erros global
   - [ ] Rate limiting
-
+  
 - [ ] **Banco de Dados** - Implementar persistência
   - [ ] Setup PostgreSQL/MongoDB
   - [ ] Migrations
@@ -283,14 +284,14 @@ Phase 1: Teste Completo (CONCLUÍDO)
   - [ ] Recuperação de senha
   - [ ] MFA (two-factor)
 
-Phase 3: Testes Adicionais (EM PROGRESSO)
+### 🧪 Phase 3: Testes Adicionais (EM PROGRESSO)
 - [ ] Testes de integração API
 - [ ] Testes de carga (k6/Artillery)
 - [ ] Testes de segurança
 - [ ] Testes de performance
 - [ ] Validação de CORS/CSRF
 
-Phase 4: Documentação (PARCIAL)
+### 📚 Phase 4: Documentação (PARCIAL)
 - [x] ARCHITECTURE.md - Documentação de arquitetura
 - [x] Finance_docs.md - Documentação do núcleo de finanças
 - [ ] User_docs.md - Documentação do núcleo de usuários
@@ -299,24 +300,24 @@ Phase 4: Documentação (PARCIAL)
 - [ ] DEPLOYMENT.md - Guia de deployment
 - [ ] CONTRIBUTING.md - Guia de contribuição
 
-Phase 5: Segurança & DevOps
+### 🔒 Phase 5: Segurança & DevOps
 - [ ] Validação de entradas (Joi/Yup)
 - [ ] OWASP Top 10 checks
 - [ ] Dependências auditadas (npm audit)
-
+  
 - [ ] Kubernetes manifests
 - [ ] GitHub Actions CI/CD
 - [ ] SonarQube integration
 - [ ] Secrets management (dotenv)
 
-Phase 6: Observabilidade
+### 📈 Phase 6: Observabilidade
 - [ ] Logging estruturado (Winston/Pino)
 - [ ] Tracing distribuído (OpenTelemetry)
 - [ ] Metrics (Prometheus)
 - [ ] Health checks
 - [ ] Alertas e monitoramento
 
-Phase 7: Performance & Otimização
+### 🎯 Phase 7: Performance & Otimização
 - [ ] Clustering setup
 - [ ] Análise de bundles
 - [ ] Lazy loading
@@ -327,7 +328,7 @@ Phase 7: Performance & Otimização
 - [ ] Stress testing
 - [ ] Load testing
 
-Phase 8: Release & Deployment
+### 📦 Phase 8: Release & Deployment
 - [ ] Release notes
 - [ ] Versioning (semver)
 - [ ] Tag Git
@@ -339,19 +340,20 @@ Phase 8: Release & Deployment
 
 ---
 
-Documentação Adicional
+## 📝 Documentação Adicional
 
-- **** - Padrões DDD, fluxos de integração
-- **** - Detalhes do núcleo financeiro
-- **** - Detalhes do núcleo de apostas
+- **[ARCHITECTURE.md](./src/core/ARCHITECTURE.md)** - Padrões DDD, fluxos de integração
+- **[Finance_docs.md](./src/core/finance/Finance_docs.md)** - Detalhes do núcleo financeiro
+- **[Bet_docs.md](./src/core/betting/Bet_docs.md)** - Detalhes do núcleo de apostas
 
-API Docs e Tratamento de Erros
+## 💬 API Docs e Tratamento de Erros
 
 A API possui documentação OpenAPI disponível localmente em `/api/docs` (Swagger UI) e a especificação em `/api/docs.json`.
 
 Formato de erro padrão retornado por todos os endpoints:
 
 ```json
+{
   "success": false,
   "error": {
     "code": "BAD_REQUEST",
@@ -369,7 +371,7 @@ Notas importantes:
 
 ---
 
-Próximas Ações Prioritárias
+## 🚦 Próximas Ações Prioritárias
 
 ### 1️⃣ Imediato (Esta Semana)
 ```
@@ -397,7 +399,7 @@ Próximas Ações Prioritárias
 
 ### 3️⃣ Médio Prazo (1 Mês)
 ```
-
+  
 [ ] GitHub Actions CI/CD
 [ ] Logging estruturado
 [ ] Cache Redis
@@ -415,7 +417,7 @@ Próximas Ações Prioritárias
 
 ---
 
-Contribuindo
+## 🤝 Contribuindo
 
 ### Padrões de Código
 - **TypeScript Strict Mode**: Todos os tipos devem ser explícitos
@@ -425,6 +427,7 @@ Contribuindo
 
 ### Fluxo de Desenvolvimento
 ```bash
+# 1. Criar branch
 git checkout -b feature/sua-feature
 
 # 2. Fazer alterações
@@ -442,7 +445,7 @@ git push origin feature/sua-feature
 
 ---
 
-Suporte e Contato
+## 📞 Suporte e Contato
 
 Para dúvidas ou sugestões sobre a arquitetura:
 - Revisar **ARCHITECTURE.md** para padrões
@@ -451,6 +454,6 @@ Para dúvidas ou sugestões sobre a arquitetura:
 
 ---
 
-**Versão Atual:** 0.1.0 (Pre-Alpha)
-**Última Atualização:** 14 de Novembro de 2025
+**Versão Atual:** 0.1.0 (Pre-Alpha)  
+**Última Atualização:** 14 de Novembro de 2025  
 **Status:** 🟡 Em Desenvolvimento para Produção

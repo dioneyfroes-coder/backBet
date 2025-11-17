@@ -1,4 +1,4 @@
-Documentação de Endpoints - BackBet API
+# 📚 Documentação de Endpoints - BackBet API
 
 ## Base URL
 
@@ -14,6 +14,7 @@ Status geral da aplicação
 
 **Resposta (200):**
 ```json
+{
   "status": "healthy",
   "timestamp": "2025-11-14T10:30:00.000Z",
   "uptime": 3600.5
@@ -25,6 +26,7 @@ Verificar se aplicação está pronta para receber requisições
 
 **Resposta (200):**
 ```json
+{
   "ready": true
 }
 ```
@@ -38,6 +40,7 @@ Registra novo usuário
 
 **Request:**
 ```json
+{
   "email": "usuario@example.com",
   "password": "senhaForte123!",
   "username": "usuario_123",
@@ -48,6 +51,7 @@ Registra novo usuário
 
 **Success (201):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Usuário registrado com sucesso",
@@ -64,6 +68,7 @@ Registra novo usuário
 
 **Errors:**
 ```json
+{
   "success": false,
   "error": {
     "code": "CONFLICT",
@@ -81,6 +86,7 @@ Autentica usuário (via Clerk OAuth)
 
 **Response:**
 ```json
+{
   "success": false,
   "error": {
     "code": "AUTH_METHOD_CLERK",
@@ -96,11 +102,12 @@ Retorna dados do usuário autenticado
 
 **Headers:**
 ```
-Authorization: Bearer
+Authorization: Bearer <clerk_token>
 ```
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -125,11 +132,12 @@ Faz logout
 
 **Headers:**
 ```
-Authorization: Bearer
+Authorization: Bearer <clerk_token>
 ```
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Logout realizado com sucesso"
@@ -144,12 +152,14 @@ Renova access token (Clerk)
 
 **Request:**
 ```json
+{
   "refreshToken": "refresh_token_aqui"
 }
 ```
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Refresh via Clerk OAuth necessário"
@@ -166,7 +176,7 @@ Perfil do usuário autenticado
 
 **Headers:**
 ```
-Authorization: Bearer
+Authorization: Bearer <token>
 ```
 
 ### `PATCH /users/me`
@@ -185,6 +195,7 @@ Saldo da carteira do usuário
 **Exemplo de histórico de transações (GET /wallets/history):**
 
 ```json
+{
   "success": true,
   "data": {
     "transactions": [
@@ -207,6 +218,7 @@ Depositar fundos
 
 **Request:**
 ```json
+{
   "amount": 100.5,
   "currency": "BRL",
   "description": "Depósito via cartão"
@@ -215,6 +227,7 @@ Depositar fundos
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Depósito realizado com sucesso",
@@ -236,6 +249,7 @@ Sacar fundos
 
 **Request:**
 ```json
+{
   "amount": 50.0,
   "currency": "BRL",
   "description": "Saque para conta bancária"
@@ -244,6 +258,7 @@ Sacar fundos
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Saque realizado com sucesso",
@@ -285,6 +300,7 @@ Listar apostas do usuário
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "bets": [
@@ -311,6 +327,7 @@ Detalhes da aposta
 
 **Success (200):**
 ```json
+{
   "success": true,
   "data": {
     "bet": {
@@ -335,6 +352,7 @@ Colocar aposta
 
 **Request:**
 ```json
+{
   "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "marketId": "market-123",
   "oddId": "odd-456",
@@ -346,6 +364,7 @@ Colocar aposta
 
 **Success (201):**
 ```json
+{
   "success": true,
   "data": {
     "bet": {
@@ -375,6 +394,7 @@ Cancelar aposta
 ### Padrão de Erro
 
 ```json
+{
   "success": false,
   "error": {
     "code": "ERROR_CODE",
@@ -426,6 +446,7 @@ X-RateLimit-Reset: 1731489000
 
 **Erro 429 (Too Many Requests):**
 ```json
+{
   "success": false,
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
@@ -444,7 +465,7 @@ Todos os endpoints protegidos requerem:
 
 **Header:**
 ```
-Authorization: Bearer
+Authorization: Bearer <token>
 ```
 
 **Tokens suportados:**
@@ -457,6 +478,7 @@ Authorization: Bearer
 
 ### Registrar usuário
 ```bash
+curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -469,12 +491,14 @@ Authorization: Bearer
 
 ### Obter perfil
 ```bash
-  -H "Authorization: Bearer "
+curl -X GET http://localhost:3000/api/auth/me \
+  -H "Authorization: Bearer <token>"
 ```
 
 ### Fazer logout
 ```bash
-  -H "Authorization: Bearer "
+curl -X POST http://localhost:3000/api/auth/logout \
+  -H "Authorization: Bearer <token>"
 ```
 
 ---
@@ -482,7 +506,7 @@ Authorization: Bearer
 ## Exemplos com Postman
 
 1. Importar collection:
-   - File → Import → [API_COLLECTION.json]
+   - File → Import → [API_COLLECTION.json](#)
 
 2. Configurar ambiente:
    - Token: {{ clerk_token }}

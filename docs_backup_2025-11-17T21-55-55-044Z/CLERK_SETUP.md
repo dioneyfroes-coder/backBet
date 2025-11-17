@@ -1,4 +1,4 @@
-Integração Clerk - BackBet Sprint 1
+# 🔐 Integração Clerk - BackBet Sprint 1
 
 ## Visão Geral
 
@@ -42,6 +42,7 @@ No dashboard do Clerk:
 Criar arquivo `.env.local`:
 
 ```env
+CLERK_API_KEY=pk_live_xxxxx
 CLERK_SECRET_KEY=sk_live_xxxxx
 CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
 ```
@@ -49,6 +50,7 @@ CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
 Ou usar `.env` diretamente (não commitar):
 
 ```bash
+cp .env.example .env
 # Editar .env com as keys reais
 ```
 
@@ -80,7 +82,7 @@ Ou usar `.env` diretamente (não commitar):
 ```
 Cliente
   │
-  ├─ Header: Authorization: Bearer
+  ├─ Header: Authorization: Bearer <token_clerk>
   │
   ▼
 Express Server
@@ -108,6 +110,7 @@ Registra novo usuário no BackBet
 
 **Requisição:**
 ```json
+{
   "email": "usuario@example.com",
   "password": "senhaForte123!",
   "username": "usuario_123",
@@ -118,6 +121,7 @@ Registra novo usuário no BackBet
 
 **Resposta (201):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Usuário registrado com sucesso",
@@ -148,6 +152,7 @@ Autentica usuário (via Clerk OAuth no cliente)
 
 **Resposta:**
 ```json
+{
   "success": false,
   "error": {
     "code": "AUTH_METHOD_CLERK",
@@ -163,11 +168,12 @@ Retorna dados do usuário autenticado
 
 **Headers:**
 ```
-Authorization: Bearer
+Authorization: Bearer <clerk_token>
 ```
 
 **Resposta (200):**
 ```json
+{
   "success": true,
   "data": {
     "id": "uuid-xxx",
@@ -192,11 +198,12 @@ Faz logout (gerenciado pelo Clerk no cliente)
 
 **Headers:**
 ```
-Authorization: Bearer
+Authorization: Bearer <clerk_token>
 ```
 
 **Resposta (200):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Logout realizado com sucesso"
@@ -211,6 +218,7 @@ Authorization: Bearer
 ### Setup do Clerk SDK
 
 ```bash
+npm install @clerk/nextjs  # Para Next.js
 # ou
 npm install @clerk/react   # Para React puro
 ```
@@ -218,6 +226,7 @@ npm install @clerk/react   # Para React puro
 ### Com Next.js
 
 ```typescript
+// app/layout.tsx
 import { ClerkProvider } from '@clerk/nextjs'
 
 export default function RootLayout({
@@ -226,11 +235,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-
-
-        {children}
-
-
+    <ClerkProvider>
+      <html>
+        <body>{children}</body>
+      </html>
+    </ClerkProvider>
   )
 }
 ```
@@ -238,22 +247,23 @@ export default function RootLayout({
 ### Proteger Rotas
 
 ```typescript
+// app/dashboard/page.tsx
 import { useAuth } from '@clerk/nextjs'
 
 export default function Dashboard() {
   const { userId, sessionId, isLoaded, isSignedIn } = useAuth()
 
-  if (!isLoaded) return Loading...
+  if (!isLoaded) return <div>Loading...</div>
 
   if (!isSignedIn) {
-    return Not signed in
+    return <div>Not signed in</div>
   }
 
   return (
-
-      Dashboard
-      User ID: {userId}
-
+    <div>
+      <h1>Dashboard</h1>
+      <p>User ID: {userId}</p>
+    </div>
   )
 }
 ```
@@ -261,6 +271,7 @@ export default function Dashboard() {
 ### Fazer Requisições Autenticadas
 
 ```typescript
+// hooks/useApi.ts
 import { useAuth } from '@clerk/nextjs'
 
 export function useApi() {
@@ -268,7 +279,7 @@ export function useApi() {
 
   return async (endpoint: string, options: RequestInit = {}) => {
     const token = await getToken()
-
+    
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
       ...options,
       headers: {
@@ -286,7 +297,7 @@ export function useApi() {
 
 ## Segurança
 
-O Clerk Fornece
+### ✅ O Clerk Fornece
 
 - Validação de tokens JWT
 - Rate limiting automático
@@ -294,7 +305,7 @@ O Clerk Fornece
 - Encriptação de dados
 - Conformidade com GDPR/CCPA
 
-BackBet Implementa
+### ✅ BackBet Implementa
 
 - Rate limiting por endpoint sensível (5 req/min para login)
 - Validação de inputs com Zod

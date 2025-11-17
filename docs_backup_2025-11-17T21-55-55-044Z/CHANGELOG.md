@@ -1,4 +1,4 @@
-Changelog - 14 de Novembro de 2025
+# 📋 Changelog - 14 de Novembro de 2025
 
 ## Sprint 1 Phase 1 - Conclusão ✅
 
@@ -15,7 +15,8 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/ApiServer.ts`
 - **Mudança**: Implementado detecção de modo desenvolvimento
   ```typescript
-    process.env.NODE_ENV === 'development' &&
+  const isDevModeWithMockKeys = 
+    process.env.NODE_ENV === 'development' && 
     process.env.CLERK_SECRET_KEY?.includes('sk_test');
   ```
 - **Problema**: Clerk era usado mesmo com chaves inválidas
@@ -26,8 +27,9 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/ApiServer.ts` e `src/server.ts`
 - **Mudança**: Adicionado suporte a prefixos nas rotas
   ```typescript
+  // Antes
   this.app.use('/api', router);
-
+  
   // Depois
   public registerRoutes(router: Router, prefix: string = ''): void {
     this.app.use(`/api${prefix}`, router);
@@ -41,6 +43,7 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/middleware/AuthMiddleware.ts`
 - **Mudança**: Adicionado suporte a Bearer token em desenvolvimento
   ```typescript
+  if (!userId && process.env.NODE_ENV === 'development') {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       userId = authHeader.substring(7);
@@ -54,6 +57,7 @@ Changelog - 14 de Novembro de 2025
 ### Arquivos Modificados
 
 ```diff
+src/server.ts
 + import 'dotenv/config';
 
 src/infrastructure/api/ApiServer.ts
@@ -66,8 +70,8 @@ src/infrastructure/api/ApiServer.ts
 + }
 
 - if (process.env.NODE_ENV !== 'development' || ...) {
-+ const isDevModeWithMockKeys =
-+   process.env.NODE_ENV === 'development' &&
++ const isDevModeWithMockKeys = 
++   process.env.NODE_ENV === 'development' && 
 +   process.env.CLERK_SECRET_KEY?.includes('sk_test');
 + if (isDevModeWithMockKeys) {
 ```
@@ -82,18 +86,19 @@ src/infrastructure/api/ApiServer.ts
 ### Endpoints Testados Manualmente
 
 ```bash
+# ✅ Health check
 curl http://localhost:3000/health
 → {"status":"healthy",...}
 
-Registrar usuário
+# ✅ Registrar usuário
 POST /api/auth/register
 → 201 Created
 
-Obter dados autenticado
+# ✅ Obter dados autenticado
 GET /api/auth/me (com Bearer token)
 → 200 OK com dados do usuário
 
-Logout
+# ✅ Logout
 POST /api/auth/logout (com Bearer token)
 → 200 OK
 ```
@@ -106,7 +111,7 @@ POST /api/auth/logout (com Bearer token)
 
 ---
 
-O que Funciona Agora
+## 🎯 O que Funciona Agora
 
 | Item | Status |
 |------|--------|
@@ -120,7 +125,7 @@ O que Funciona Agora
 
 ---
 
-Próximas Tarefas
+## 🚀 Próximas Tarefas
 
 ### Phase 2 - User & Finance Controllers (Estimado: 2-3h)
 - [ ] `GET /api/users/me` - Obter perfil completo
@@ -139,9 +144,10 @@ Próximas Tarefas
 
 ---
 
-Como Reproduzir o Fluxo de Testes
+## 🔍 Como Reproduzir o Fluxo de Testes
 
 ```bash
+# 1. Compilar
 npm run build
 
 # 2. Iniciar servidor
@@ -158,7 +164,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 # 5. Copiar ID da resposta e usar como Bearer token
 
 # 6. Testar autenticação
-curl -H "Authorization: Bearer " http://localhost:3000/api/auth/me
+curl -H "Authorization: Bearer <USER_ID>" http://localhost:3000/api/auth/me
 
 # 7. Parar servidor
 pkill -f "node dist/server.js"
@@ -166,7 +172,7 @@ pkill -f "node dist/server.js"
 
 ---
 
-Resumo de Métricas
+## 📊 Resumo de Métricas
 
 ### Antes das Correções
 - ❌ Servidor não iniciava
@@ -184,9 +190,10 @@ Resumo de Métricas
 
 ---
 
-Variáveis de Ambiente (Final)
+## 💾 Variáveis de Ambiente (Final)
 
 ```properties
+PORT=3000
 NODE_ENV=development
 CLERK_PUBLISHABLE_KEY=pk_test_Y2xlcmsuYWNjb3VudHMuZGV2
 CLERK_SECRET_KEY=sk_test_local_development_only
@@ -200,7 +207,7 @@ Para produção, usar valores reais do Clerk Dashboard.
 
 ---
 
-Lições Aprendidas
+## 🎓 Lições Aprendidas
 
 1. **Dotenv Import**: Deve estar no topo do entry point
 2. **Conditional Middleware**: Permite dev/prod sem duplicação
@@ -210,6 +217,6 @@ Lições Aprendidas
 
 ---
 
-**Data**: 14 de Novembro de 2025
-**Autor**: Development Team
+**Data**: 14 de Novembro de 2025  
+**Autor**: Development Team  
 **Status**: ✅ Phase 1 Complete

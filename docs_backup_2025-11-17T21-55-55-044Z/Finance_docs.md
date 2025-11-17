@@ -35,10 +35,10 @@ Os tipos vivem em `src/core/finance/types/wallet.types.ts`.
 
 - `IWalletRepository` (em `src/core/finance/domain/repositories/IWalletRepository.ts`)
 	- Responsabilidades:
-		- `findByUserId(userId: string): Promise`
-		- `save(wallet: Wallet): Promise`
-		- `update(wallet: Wallet): Promise`
-		- `delete(userId: string): Promise`
+		- `findByUserId(userId: string): Promise<Wallet | null>`
+		- `save(wallet: Wallet): Promise<Wallet>`
+		- `update(wallet: Wallet): Promise<Wallet>`
+		- `delete(userId: string): Promise<void>`
 
 Implementações concretas (DB, in-memory, Redis) devem implementar esta interface.
 
@@ -46,9 +46,9 @@ Implementações concretas (DB, in-memory, Redis) devem implementar esta interfa
 
 - `WalletService` (em `src/core/finance/domain/services/WalletService.ts`)
 	- Métodos:
-		- `createWallet(input: ICreateWalletDTO): Promise` - cria carteira para usuário (valida existência e moeda)
-		- `deposit(userId: string, amount: number): Promise` - realiza depósito (valida carteira e valor)
-		- `withdraw(userId: string, amount: number): Promise` - realiza saque (valida saldo suficiente)
+		- `createWallet(input: ICreateWalletDTO): Promise<Wallet>` - cria carteira para usuário (valida existência e moeda)
+		- `deposit(userId: string, amount: number): Promise<Wallet>` - realiza depósito (valida carteira e valor)
+		- `withdraw(userId: string, amount: number): Promise<Wallet>` - realiza saque (valida saldo suficiente)
 
 O serviço é intencionalmente pequeno e delega persistência para o repositório.
 

@@ -21,14 +21,19 @@ Persistence Layer (MongoDB)
 Implementa `IUserRepository` para persistência de usuários.
 
 **Métodos:**
-- `save(user: User): Promise` - Criar ou atualizar usuário
-- `findById(id: string): Promise` - Buscar por ID
-- `findByEmail(email: string): Promise` - Buscar por email
-- `update(user: User): Promise` - Atualizar usuário existente
+- `save(user: User): Promise<void>` - Criar ou atualizar usuário
+- `findById(id: string): Promise<User | null>` - Buscar por ID
+- `findByEmail(email: string): Promise<User | null>` - Buscar por email
+- `update(user: User): Promise<void>` - Atualizar usuário existente
 
 **Exemplo:**
 
 ```typescript
+import { MongooseUserRepository } from '@/infrastructure/persistence/mongoose/repositories';
+import { User } from '@/core/user/domain/entities/User';
+import { Email } from '@/core/user/domain/value-objects/Email';
+
+const userRepository = new MongooseUserRepository();
 
 // Criar usuário
 const user = new User({
@@ -50,15 +55,19 @@ const foundUser = await userRepository.findById('user-id-123');
 Implementa `IWalletRepository` para persistência de carteiras e transações.
 
 **Métodos:**
-- `save(wallet: Wallet): Promise` - Criar carteira
-- `findByUserId(userId: string): Promise` - Buscar carteira de usuário
-- `update(wallet: Wallet): Promise` - Atualizar saldo
-- `delete(userId: string): Promise` - Deletar carteira
-- `getHistory(userId: string, limit?: number, offset?: number): Promise` - Histórico de transações
+- `save(wallet: Wallet): Promise<Wallet>` - Criar carteira
+- `findByUserId(userId: string): Promise<Wallet | null>` - Buscar carteira de usuário
+- `update(wallet: Wallet): Promise<Wallet>` - Atualizar saldo
+- `delete(userId: string): Promise<void>` - Deletar carteira
+- `getHistory(userId: string, limit?: number, offset?: number): Promise<{...}>` - Histórico de transações
 
 **Exemplo:**
 
 ```typescript
+import { MongooseWalletRepository } from '@/infrastructure/persistence/mongoose/repositories';
+import { Wallet } from '@/core/finance/domain/entities/Wallet';
+
+const walletRepository = new MongooseWalletRepository();
 
 // Criar carteira
 const wallet = new Wallet('user-id-123', 'BRL');
@@ -79,19 +88,22 @@ console.log(`Primeiras 10: ${transactions.length}`);
 Implementa `IBetRepository` para persistência de apostas.
 
 **Métodos:**
-- `create(bet: Bet): Promise` - Criar aposta
-- `update(bet: Bet): Promise` - Atualizar aposta
-- `findById(id: string): Promise` - Buscar por ID
-- `findByUserId(userId: string): Promise` - Apostas do usuário
-- `findByEventId(eventId: string): Promise` - Apostas do evento
-- `findByStatus(status: BetStatus): Promise` - Apostas por status
-- `findAll(filter?: {...}): Promise` - Listar com filtros
-- `exists(id: string): Promise` - Verificar existência
-- `delete(id: string): Promise` - Deletar aposta
+- `create(bet: Bet): Promise<void>` - Criar aposta
+- `update(bet: Bet): Promise<void>` - Atualizar aposta
+- `findById(id: string): Promise<Bet | null>` - Buscar por ID
+- `findByUserId(userId: string): Promise<Bet[]>` - Apostas do usuário
+- `findByEventId(eventId: string): Promise<Bet[]>` - Apostas do evento
+- `findByStatus(status: BetStatus): Promise<Bet[]>` - Apostas por status
+- `findAll(filter?: {...}): Promise<Bet[]>` - Listar com filtros
+- `exists(id: string): Promise<boolean>` - Verificar existência
+- `delete(id: string): Promise<boolean>` - Deletar aposta
 
 **Exemplo:**
 
 ```typescript
+import { MongooseBetRepository } from '@/infrastructure/persistence/mongoose/repositories';
+
+const betRepository = new MongooseBetRepository();
 
 // Buscar apostas pendentes
 const pendingBets = await betRepository.findByStatus('PENDING');
@@ -111,7 +123,19 @@ const filteredBets = await betRepository.findAll({
 Se usar um padrão de DI, configure os repositórios da seguinte forma:
 
 ```typescript
+// src/infrastructure/config/container.ts
+import { Container } from 'awilix';
+import { MongooseUserRepository } from '@/infrastructure/persistence/mongoose/repositories';
+import { MongooseWalletRepository } from '@/infrastructure/persistence/mongoose/repositories';
+import { MongooseBetRepository } from '@/infrastructure/persistence/mongoose/repositories';
 
+export function configureContainer(container: Container) {
+  // Registrar repositórios
+  container.register({
+    userRepository: container.asClass(MongooseUserRepository).singleton(),
+    walletRepository: container.asClass(MongooseWalletRepository).singleton(),
+    betRepository: container.asClass(MongooseBetRepository).singleton(),
+  });
 }
 ```
 
@@ -120,19 +144,43 @@ Se usar um padrão de DI, configure os repositórios da seguinte forma:
 Crie uma factory que escolha entre em-memória e Mongoose baseado em variável de ambiente:
 
 ```typescript
+// src/infrastructure/persistence/factory.ts
+import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
+import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
+import { InMemoryUserRepository } from './in-memory/InMemoryUserRepository';
+import { InMemoryWalletRepository } from './in-memory/InMemoryWalletRepository';
+import { InMemoryBetRepository } from './in-memory/InMemoryBetRepository';
+import { MongooseUserRepository } from './mongoose/repositories/MongooseUserRepository';
+import { MongooseWalletRepository } from './mongoose/repositories/MongooseWalletRepository';
+import { MongooseBetRepository } from './mongoose/repositories/MongooseBetRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
+export function createUserRepository(): IUserRepository {
+  return USE_MONGOOSE 
+    ? new MongooseUserRepository()
+    : new InMemoryUserRepository();
 }
 
+export function createWalletRepository(): IWalletRepository {
+  return USE_MONGOOSE
+    ? new MongooseWalletRepository()
+    : new InMemoryWalletRepository();
 }
 
+export function createBetRepository(): IBetRepository {
+  return USE_MONGOOSE
+    ? new MongooseBetRepository()
+    : new InMemoryBetRepository();
 }
 ```
 
 Use na aplicação:
 
 ```typescript
+// src/app.ts
+import { createUserRepository, createWalletRepository, createBetRepository } from '@/infrastructure/persistence/factory';
 
 const userRepository = createUserRepository();
 const walletRepository = createWalletRepository();
@@ -148,6 +196,7 @@ Os seguintes esquemas estão disponíveis:
 ### User Schema
 
 ```typescript
+{
   _id: ObjectId,
   email: string (unique),
   username: string (unique),
@@ -166,6 +215,7 @@ Os seguintes esquemas estão disponíveis:
 ### Wallet Schema
 
 ```typescript
+{
   _id: ObjectId,
   userId: string (unique, indexed),
   balance: number (min: 0),
@@ -192,6 +242,7 @@ Os seguintes esquemas estão disponíveis:
 ### Bet Schema
 
 ```typescript
+{
   _id: ObjectId,
   userId: string (indexed),
   eventId: string (indexed),
@@ -221,6 +272,7 @@ Os seguintes esquemas estão disponíveis:
 Todos os repositórios lançam `AppError` com códigos padronizados:
 
 ```typescript
+try {
   const user = await userRepository.findById('invalid-id');
   if (!user) {
     // Não encontrado - retorna null, não lança erro
@@ -242,6 +294,7 @@ Todos os repositórios lançam `AppError` com códigos padronizados:
 Garanta que os índices estão criados:
 
 ```bash
+mongosh
 > use backbet-dev
 > db.users.getIndexes()
 > db.wallets.getIndexes()
@@ -253,11 +306,12 @@ Garanta que os índices estão criados:
 Para listas grandes, use pagination:
 
 ```typescript
+// Implementar após adicionar campo 'page' e 'pageSize' aos métodos
 const page = 1;
 const pageSize = 20;
 const skip = (page - 1) * pageSize;
 
-const bets = await betRepository.findAll({
+const bets = await betRepository.findAll({ 
   userId: 'user-id-123',
   status: 'PENDING'
 });
@@ -269,6 +323,7 @@ const bets = await betRepository.findAll({
 Todas as queries usam `.lean()` para melhor performance em leitura:
 
 ```typescript
+// lean() retorna objetos planos (28% mais rápido)
 // Sem modificar a query de escrita
 ```
 
@@ -277,6 +332,7 @@ Todas as queries usam `.lean()` para melhor performance em leitura:
 Para operações multi-documento:
 
 ```typescript
+// TODO: Implementar session para transações ACID
 // await session.startTransaction();
 // try {
 //   await userRepository.save(user);
@@ -312,4 +368,4 @@ A conexão foi fechada. Verifique se `disconnectMongoDB()` foi chamado antes do 
 
 - [Mongoose Documentation](https://mongoosejs.com/)
 - [MongoDB Best Practices](https://docs.mongodb.com/manual/administration/production-checklist/)
--
+- [BackBet Architecture](../../../docs/ARCHITECTURE.md)

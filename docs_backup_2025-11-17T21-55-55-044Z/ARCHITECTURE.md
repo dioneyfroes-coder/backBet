@@ -72,7 +72,29 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `Market` - entidade dentro do agregado Event
 
 **Value Objects:**
-- `Odds` - cotação de uma aposta (>1 e ` - contrato genérico para CRUD
+- `Odds` - cotação de uma aposta (>1 e <=1000)
+- `BetAmount` (em shared como `Money`) - valor da aposta
+
+**Serviços:**
+- `BetService` - orquestra colocação, cancelamento, resolução
+
+**Repositórios:**
+- `IBetRepository` - contrato de apostas
+- `IEventRepository` - contrato de eventos
+
+**Integração com outros cores:**
+- Consulta `WalletService` ao colocar aposta (withdraw)
+- Consulta `WalletService` ao resolver aposta (deposit se ganhou)
+- Valida status do `User` antes de permitir apostas
+
+---
+
+## Shared Domain (`src/core/shared/`)
+
+O **Shared Domain** contém abstrações e padrões reutilizáveis por todos os cores:
+
+### Repositórios Base
+- `IRepository<T, ID>` - contrato genérico para CRUD
 
 ### Entidades Base
 - `AggregateRoot` - classe abstrata com id, createdAt, updatedAt, version
@@ -85,8 +107,8 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `SupportedCurrency` - 'BRL' | 'USD' | 'EUR'
 - `ResourceStatus` - status genérico de recursos
 - `DomainError` - estrutura de erros
-- `Result` - padrão Result para retorno de operações
-- `PaginatedDTO` - resposta paginada padrão
+- `Result<T>` - padrão Result para retorno de operações
+- `PaginatedDTO<T>` - resposta paginada padrão
 - `FilterDTO` - filtros genéricos
 
 ---
@@ -99,7 +121,7 @@ Todos compartilham abstrações comuns no **Shared Domain**.
    ├─ Valida email e username
    ├─ Cria User
    └─ Cria Wallet (BRL por padrão ou currency especificada)
-
+   
 2. Ambos persistem em seus repositórios respectivos
 3. Eventos: UserCreated, WalletCreated (para auditoria futura)
 ```
@@ -115,7 +137,7 @@ Todos compartilham abstrações comuns no **Shared Domain**.
    │  └─ Reduz balance (ou move para lockedBalance)
    ├─ Cria Bet com status PENDING
    └─ Persiste Bet
-
+   
 2. Eventos: BetPlaced, FundsWithdrawn (para auditoria futura)
 ```
 
@@ -129,7 +151,7 @@ Todos compartilham abstrações comuns no **Shared Domain**.
    │  └─ WalletService.deposit(userId, potentialReturn)
    │     └─ Aumenta balance
    └─ Persiste resultado
-
+   
 2. Eventos: BetResolved, FundsDeposited (para auditoria futura)
 ```
 
