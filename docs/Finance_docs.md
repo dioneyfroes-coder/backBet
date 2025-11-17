@@ -27,7 +27,7 @@ O core financeiro é responsável por tudo que envolve saldo do usuário: criaç
 	- Forma serializável da `Wallet` para persistência / redes.
 
 - `ICreateWalletDTO`
-	- Payload para criar uma carteira: `{ userId: string; currency: string }`.
+	- Payload para criar uma carteira: ``.
 
 Os tipos vivem em `src/core/finance/types/wallet.types.ts`.
 
@@ -67,7 +67,7 @@ O serviço é intencionalmente pequeno e delega persistência para o repositóri
 
 ## Exemplo de uso (Fluxo simplificado)
 
-1. Usuário solicita `createWallet({ userId, currency })` → `WalletService` valida e persiste via `IWalletRepository`.
+1. Usuário solicita `createWallet()` → `WalletService` valida e persiste via `IWalletRepository`.
 2. Usuário pede `deposit(userId, amount)` → `WalletService` carrega carteira, chama `deposit()` e `update()`.
 3. Ao colocar uma aposta, `BetService` chama `walletService.withdraw(userId, stake)` para reservar o valor.
 4. Ao resolver a aposta, `BetService` chama `walletService.deposit(userId, payout)` caso o usuário ganhe.

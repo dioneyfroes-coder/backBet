@@ -10,33 +10,18 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 - MongoDB Community Server instalado ([download](https://www.mongodb.com/try/download/community))
 - Ou usando Homebrew (macOS):
   ```bash
-  brew install mongodb-community
-  brew services start mongodb-community
-  ```
 
-#### Configuração
 
 1. **Inicie o MongoDB:**
    ```bash
-   mongod --dbpath /usr/local/var/mongodb
-
-   # Windows
-   "C:\Program Files\MongoDB\Server\6.0\bin\mongod.exe"
-   ```
 
 2. **Configure as variáveis de ambiente** (`.env`):
    ```env
-   MONGODB_DB_NAME=backbet-dev
-   ```
 
-3. **Valide a conexão:**
+3.
    ```bash
-   ```
 
-### 2. MongoDB Atlas (Recomendado para Produção)
-
-#### Pré-requisitos
-- Conta MongoDB Atlas ([signup](https://www.mongodb.com/cloud/atlas/register))
+-
 
 #### Configuração
 
@@ -65,12 +50,8 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 
 5. **Configure as variáveis de ambiente** (`.env`):
    ```env
-   MONGODB_DB_NAME=backbet-prod
-   ```
 
-## Variáveis de Ambiente
-
-| Variável | Descrição | Exemplo |
+|
 |----------|-----------|---------|
 | `MONGODB_URI` | Connection string do MongoDB | `mongodb://localhost:27017` |
 | `MONGODB_DB_NAME` | Nome do banco de dados | `backbet-dev` |
@@ -80,7 +61,7 @@ Este guia descreve como configurar o MongoDB para o projeto BackBet.
 
 ```typescript
 
-const config = getMongoDBConfig();
+const
 await connectMongoDB(config);
 console.log('✓ MongoDB conectado com sucesso');
 ```
@@ -102,7 +83,7 @@ mongosh
 ### Backup Local
 
 ```bash
-mongodump --db backbet-dev --out ./backup
+mongodump
 
 # Backup de uma collection
 mongodump --db backbet-dev --collection users --out ./backup
@@ -111,7 +92,7 @@ mongodump --db backbet-dev --collection users --out ./backup
 ### Restore Local
 
 ```bash
-mongorestore --db backbet-dev ./backup/backbet-dev
+mongorestore
 
 # Restaurar uma collection
 mongorestore --db backbet-dev --collection users ./backup/backbet-dev/users.bson
@@ -131,7 +112,7 @@ mongorestore --db backbet-dev --collection users ./backup/backbet-dev/users.bson
 
 **Solução:**
 ```bash
-ps aux | grep mongod
+ps
 
 # Inicie o MongoDB
 mongod --dbpath /usr/local/var/mongodb

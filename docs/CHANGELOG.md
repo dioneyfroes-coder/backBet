@@ -15,10 +15,8 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/ApiServer.ts`
 - **Mudança**: Implementado detecção de modo desenvolvimento
   ```typescript
-    process.env.NODE_ENV === 'development' &&
-    process.env.CLERK_SECRET_KEY?.includes('sk_test');
-  ```
-- **Problema**: Clerk era usado mesmo com chaves inválidas
+
+-
 - **Solução**: Se em desenvolvimento com mock keys, usar middleware alternativo
 - **Resultado**: ✅ Desenvolvimento possível sem chaves Clerk reais
 
@@ -26,11 +24,7 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/ApiServer.ts` e `src/server.ts`
 - **Mudança**: Adicionado suporte a prefixos nas rotas
   ```typescript
-  this.app.use('/api', router);
 
-  // Depois
-  public registerRoutes(router: Router, prefix: string = ''): void {
-    this.app.use(`/api${prefix}`, router);
   }
   ```
 - **Problema**: Rotas não estavam acessíveis em `/api/auth/*`
@@ -41,10 +35,7 @@ Changelog - 14 de Novembro de 2025
 - **Arquivo**: `src/infrastructure/api/middleware/AuthMiddleware.ts`
 - **Mudança**: Adicionado suporte a Bearer token em desenvolvimento
   ```typescript
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      userId = authHeader.substring(7);
-    }
+
   }
   ```
 - **Problema**: Sem autenticação real, endpoints protegidos não funcionavam
@@ -54,14 +45,14 @@ Changelog - 14 de Novembro de 2025
 ### Arquivos Modificados
 
 ```diff
-+ import 'dotenv/config';
++
 
 src/infrastructure/api/ApiServer.ts
 - public registerRoutes(router: express.Router): void {
 -   this.app.use('/api', router);
 - }
 + public registerRoutes(router: express.Router, prefix: string = ''): void {
-+   const fullPath = `/api${prefix}`;
++   const fullPath = `/api$`;
 +   this.app.use(fullPath, router);
 + }
 
@@ -82,8 +73,8 @@ src/infrastructure/api/ApiServer.ts
 ### Endpoints Testados Manualmente
 
 ```bash
-curl http://localhost:3000/health
-→ {"status":"healthy",...}
+curl
+→
 
 Registrar usuário
 POST /api/auth/register
@@ -142,7 +133,7 @@ Próximas Tarefas
 Como Reproduzir o Fluxo de Testes
 
 ```bash
-npm run build
+npm
 
 # 2. Iniciar servidor
 npm start &
@@ -153,7 +144,7 @@ curl http://localhost:3000/health
 # 4. Registrar
 curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@ex.com","firstName":"T","lastName":"U","username":"tu","password":"Pass123!"}'
+  -d ''
 
 # 5. Copiar ID da resposta e usar como Bearer token
 
