@@ -78,7 +78,10 @@ Métodos:
 
 #### IUserDTO
 ```typescript
-
+  id: string;
+  email: string;
+  username: string;
+  status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -86,13 +89,16 @@ Métodos:
 
 #### ICreateUserDTO
 ```typescript
-
+  email: string;
+  username: string;
+  currency?: string;
 }
 ```
 
 #### IUserResponseDTO
 ```typescript
-
+  user: IUserDTO;
+  wallet: IWalletDTO;
 }
 ```
 
@@ -102,7 +108,7 @@ Métodos:
 
 ```typescript
 
-const
+const result = await registerUser.execute({
   email: "user@example.com",
   username: "user123",
   currency: "BRL"

@@ -49,7 +49,7 @@ CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
 Ou usar `.env` diretamente (não commitar):
 
 ```bash
-
+# Editar .env com as keys reais
 ```
 
 ---
@@ -108,14 +108,20 @@ Registra novo usuário no BackBet
 
 **Requisição:**
 ```json
-
+  "email": "usuario@example.com",
+  "password": "senhaForte123!",
+  "username": "usuario_123",
+  "firstName": "João",
   "lastName": "Silva"
 }
 ```
 
 **Resposta (201):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Usuário registrado com sucesso",
+    "user": {
       "id": "uuid-xxx",
       "email": "usuario@example.com",
       "username": "usuario_123",
@@ -142,7 +148,10 @@ Autentica usuário (via Clerk OAuth no cliente)
 
 **Resposta:**
 ```json
-
+  "success": false,
+  "error": {
+    "code": "AUTH_METHOD_CLERK",
+    "message": "Login deve ser feito via Clerk OAuth. Use o SDK de front-end."
   }
 }
 ```
@@ -159,7 +168,10 @@ Authorization: Bearer
 
 **Resposta (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "id": "uuid-xxx",
+    "email": "usuario@example.com",
     "username": "usuario_123",
     "firstName": "João",
     "lastName": "Silva",
@@ -185,7 +197,10 @@ Authorization: Bearer
 
 **Resposta (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Logout realizado com sucesso"
+  }
 }
 ```
 
@@ -196,14 +211,14 @@ Authorization: Bearer
 ### Setup do Clerk SDK
 
 ```bash
-
-npm
+# ou
+npm install @clerk/react   # Para React puro
 ```
 
 ### Com Next.js
 
 ```typescript
-import
+import { ClerkProvider } from '@clerk/nextjs'
 
 export default function RootLayout({
   children,
@@ -212,7 +227,9 @@ export default function RootLayout({
 }) {
   return (
 
+
         {children}
+
 
   )
 }
@@ -221,7 +238,7 @@ export default function RootLayout({
 ### Proteger Rotas
 
 ```typescript
-import
+import { useAuth } from '@clerk/nextjs'
 
 export default function Dashboard() {
   const { userId, sessionId, isLoaded, isSignedIn } = useAuth()
@@ -244,7 +261,7 @@ export default function Dashboard() {
 ### Fazer Requisições Autenticadas
 
 ```typescript
-import
+import { useAuth } from '@clerk/nextjs'
 
 export function useApi() {
   const { getToken } = useAuth()

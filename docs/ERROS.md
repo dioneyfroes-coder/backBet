@@ -5,7 +5,10 @@ Esta página descreve os erros padronizados usados pela API BackBet. A aplicaç�
 Formato padrão de resposta de erro
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "Descrição legível do erro",
     "details": { "campo": "mensagem de validação" }
   },
   "meta": { "timestamp": "2025-11-15T12:00:00.000Z" }
@@ -36,7 +39,10 @@ Exemplos
 - Validação falhou (400 / `VALIDATION_ERROR`)
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Dados inválidos",
     "details": { "email": "Formato inválido", "username": "Obrigatório" }
   },
   "meta": { "timestamp": "2025-11-15T12:01:00.000Z" }
@@ -46,7 +52,10 @@ Exemplos
 - Conflito (409 / `CONFLICT`)
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Email já cadastrado"
   },
   "meta": { "timestamp": "2025-11-15T12:02:00.000Z" }
 }
@@ -55,7 +64,10 @@ Exemplos
 - Rate limit (429 / `RATE_LIMIT_EXCEEDED`)
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Limite de requisições atingido",
     "details": { "retryAfter": 60 }
   }
 }

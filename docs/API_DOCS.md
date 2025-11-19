@@ -14,7 +14,9 @@ Status geral da aplicação
 
 **Resposta (200):**
 ```json
-
+  "status": "healthy",
+  "timestamp": "2025-11-14T10:30:00.000Z",
+  "uptime": 3600.5
 }
 ```
 
@@ -23,7 +25,7 @@ Verificar se aplicação está pronta para receber requisições
 
 **Resposta (200):**
 ```json
-
+  "ready": true
 }
 ```
 
@@ -36,14 +38,20 @@ Registra novo usuário
 
 **Request:**
 ```json
-
+  "email": "usuario@example.com",
+  "password": "senhaForte123!",
+  "username": "usuario_123",
+  "firstName": "João",
   "lastName": "Silva"
 }
 ```
 
 **Success (201):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Usuário registrado com sucesso",
+    "user": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "usuario@example.com",
       "username": "usuario_123",
@@ -56,7 +64,10 @@ Registra novo usuário
 
 **Errors:**
 ```json
-
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "Email já cadastrado"
   }
 }
 ```
@@ -70,7 +81,10 @@ Autentica usuário (via Clerk OAuth)
 
 **Response:**
 ```json
-
+  "success": false,
+  "error": {
+    "code": "AUTH_METHOD_CLERK",
+    "message": "Login deve ser feito via Clerk OAuth"
   }
 }
 ```
@@ -87,7 +101,10 @@ Authorization: Bearer
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "email": "usuario@example.com",
     "username": "usuario_123",
     "firstName": "João",
     "lastName": "Silva",
@@ -113,7 +130,10 @@ Authorization: Bearer
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Logout realizado com sucesso"
+  }
 }
 ```
 
@@ -124,13 +144,16 @@ Renova access token (Clerk)
 
 **Request:**
 ```json
-
+  "refreshToken": "refresh_token_aqui"
 }
 ```
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Refresh via Clerk OAuth necessário"
+  }
 }
 ```
 
@@ -162,7 +185,10 @@ Saldo da carteira do usuário
 **Exemplo de histórico de transações (GET /wallets/history):**
 
 ```json
-
+  "success": true,
+  "data": {
+    "transactions": [
+      {
         "id": "a1b2c3d4-...",
         "type": "DEPOSIT",
         "amount": 100.0,
@@ -181,13 +207,18 @@ Depositar fundos
 
 **Request:**
 ```json
-
+  "amount": 100.5,
+  "currency": "BRL",
+  "description": "Depósito via cartão"
 }
 ```
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Depósito realizado com sucesso",
+    "transaction": {
       "id": "a1b2c3d4-...",
       "type": "DEPOSIT",
       "amount": 100.5,
@@ -205,13 +236,18 @@ Sacar fundos
 
 **Request:**
 ```json
-
+  "amount": 50.0,
+  "currency": "BRL",
+  "description": "Saque para conta bancária"
 }
 ```
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "message": "Saque realizado com sucesso",
+    "transaction": {
       "id": "d4c3b2a1-...",
       "type": "WITHDRAW",
       "amount": 50.0,
@@ -249,7 +285,10 @@ Listar apostas do usuário
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "bets": [
+      {
         "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
         "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
         "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -272,7 +311,10 @@ Detalhes da aposta
 
 **Success (200):**
 ```json
-
+  "success": true,
+  "data": {
+    "bet": {
+      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
       "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
       "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       "marketId": "market-123",
@@ -293,7 +335,10 @@ Colocar aposta
 
 **Request:**
 ```json
-
+  "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "marketId": "market-123",
+  "oddId": "odd-456",
+  "amount": 50.0,
   "type": "SINGLE",
   "currency": "BRL"
 }
@@ -301,7 +346,10 @@ Colocar aposta
 
 **Success (201):**
 ```json
-
+  "success": true,
+  "data": {
+    "bet": {
+      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
       "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
       "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       "marketId": "market-123",
@@ -327,7 +375,10 @@ Cancelar aposta
 ### Padrão de Erro
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Descrição do erro",
     "details": {
       "field": "Detalhes específicos"
     }
@@ -375,7 +426,10 @@ X-RateLimit-Reset: 1731489000
 
 **Erro 429 (Too Many Requests):**
 ```json
-
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Limite de requisições atingido",
     "details": { "retryAfter": 60 }
   },
   "meta": { "timestamp": "2025-11-14T10:30:00.000Z" }
@@ -403,7 +457,10 @@ Authorization: Bearer
 
 ### Registrar usuário
 ```bash
-
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "Password123!",
     "username": "testuser",
     "firstName": "Test",
     "lastName": "User"
@@ -412,12 +469,12 @@ Authorization: Bearer
 
 ### Obter perfil
 ```bash
-
+  -H "Authorization: Bearer "
 ```
 
 ### Fazer logout
 ```bash
-
+  -H "Authorization: Bearer "
 ```
 
 ---
@@ -428,8 +485,8 @@ Authorization: Bearer
    - File → Import → [API_COLLECTION.json]
 
 2. Configurar ambiente:
-   - Token: {}
-   - Base URL: {}
+   - Token: {{ clerk_token }}
+   - Base URL: {{ api_url }}
 
 3. Executar requests com auth automática
 

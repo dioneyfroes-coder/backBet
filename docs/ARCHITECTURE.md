@@ -72,7 +72,14 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `Market` - entidade dentro do agregado Event
 
 **Value Objects:**
-- `Odds` - cotação de uma aposta
+- `Odds` - cotação de uma aposta (>1 e ` - contrato genérico para CRUD
+
+### Entidades Base
+- `AggregateRoot` - classe abstrata com id, createdAt, updatedAt, version
+
+### Value Objects Comuns
+- `UniqueId` - gerador e validador de UUIDs
+- `Money` - operações monetárias (add, subtract, multiply, compare)
 
 ### Tipos Compartilhados
 - `SupportedCurrency` - 'BRL' | 'USD' | 'EUR'

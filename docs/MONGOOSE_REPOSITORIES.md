@@ -30,7 +30,7 @@ Implementa `IUserRepository` para persistência de usuários.
 
 ```typescript
 
-//
+// Criar usuário
 const user = new User({
   email: new Email('user@example.com'),
   username: 'john_doe',
@@ -60,7 +60,7 @@ Implementa `IWalletRepository` para persistência de carteiras e transações.
 
 ```typescript
 
-//
+// Criar carteira
 const wallet = new Wallet('user-id-123', 'BRL');
 wallet.deposit(1000);
 await walletRepository.save(wallet);
@@ -85,7 +85,7 @@ Implementa `IBetRepository` para persistência de apostas.
 - `findByUserId(userId: string): Promise` - Apostas do usuário
 - `findByEventId(eventId: string): Promise` - Apostas do evento
 - `findByStatus(status: BetStatus): Promise` - Apostas por status
-- `findAll(filter?: ): Promise` - Listar com filtros
+- `findAll(filter?: {...}): Promise` - Listar com filtros
 - `exists(id: string): Promise` - Verificar existência
 - `delete(id: string): Promise` - Deletar aposta
 
@@ -93,7 +93,7 @@ Implementa `IBetRepository` para persistência de apostas.
 
 ```typescript
 
-//
+// Buscar apostas pendentes
 const pendingBets = await betRepository.findByStatus('PENDING');
 
 // Buscar apostas de um usuário
@@ -121,7 +121,7 @@ Crie uma factory que escolha entre em-memória e Mongoose baseado em variável d
 
 ```typescript
 
-const
+const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
 }
 
@@ -134,7 +134,7 @@ Use na aplicação:
 
 ```typescript
 
-const
+const userRepository = createUserRepository();
 const walletRepository = createWalletRepository();
 const betRepository = createBetRepository();
 
@@ -148,7 +148,10 @@ Os seguintes esquemas estão disponíveis:
 ### User Schema
 
 ```typescript
-
+  _id: ObjectId,
+  email: string (unique),
+  username: string (unique),
+  firstName?: string,
   lastName?: string,
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED',
   createdAt: Date,
@@ -163,7 +166,10 @@ Os seguintes esquemas estão disponíveis:
 ### Wallet Schema
 
 ```typescript
-
+  _id: ObjectId,
+  userId: string (unique, indexed),
+  balance: number (min: 0),
+  lockedBalance: number (min: 0),
   currency: 'BRL' | 'USD' | 'EUR',
   transactions: [
     {
@@ -186,7 +192,10 @@ Os seguintes esquemas estão disponíveis:
 ### Bet Schema
 
 ```typescript
-
+  _id: ObjectId,
+  userId: string (indexed),
+  eventId: string (indexed),
+  marketId: string,
   oddId: string,
   amount: number (min: 0.01),
   odds: number (min: 1.0),
@@ -212,7 +221,10 @@ Os seguintes esquemas estão disponíveis:
 Todos os repositórios lançam `AppError` com códigos padronizados:
 
 ```typescript
-
+  const user = await userRepository.findById('invalid-id');
+  if (!user) {
+    // Não encontrado - retorna null, não lança erro
+  }
 } catch (error) {
   if (error instanceof AppError) {
     console.error(`[${error.code}] ${error.message}`);
@@ -230,7 +242,7 @@ Todos os repositórios lançam `AppError` com códigos padronizados:
 Garanta que os índices estão criados:
 
 ```bash
->
+> use backbet-dev
 > db.users.getIndexes()
 > db.wallets.getIndexes()
 > db.bets.getIndexes()
@@ -241,7 +253,7 @@ Garanta que os índices estão criados:
 Para listas grandes, use pagination:
 
 ```typescript
-const
+const page = 1;
 const pageSize = 20;
 const skip = (page - 1) * pageSize;
 
@@ -257,7 +269,7 @@ const bets = await betRepository.findAll({
 Todas as queries usam `.lean()` para melhor performance em leitura:
 
 ```typescript
-//
+// Sem modificar a query de escrita
 ```
 
 ### 4. Transações (Futuro)
@@ -265,7 +277,7 @@ Todas as queries usam `.lean()` para melhor performance em leitura:
 Para operações multi-documento:
 
 ```typescript
-//
+// await session.startTransaction();
 // try {
 //   await userRepository.save(user);
 //   await walletRepository.save(wallet);

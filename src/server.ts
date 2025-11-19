@@ -1,3 +1,5 @@
+// src/server.ts
+
 import 'dotenv/config';
 import { createApiServer } from './infrastructure/api/ApiServer';
 import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from './infrastructure/persistence/mongoose/config';

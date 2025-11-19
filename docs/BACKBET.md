@@ -217,7 +217,7 @@ Por Núcleo:
 ### Scripts Disponíveis
 
 ```bash
-npm
+npm install          # Instalar dependências
 npm run build       # Compilar TypeScript
 npm test            # Rodar testes com cobertura
 npm run lint        # Verificar linting
@@ -352,7 +352,10 @@ A API possui documentação OpenAPI disponível localmente em `/api/docs` (Swagg
 Formato de erro padrão retornado por todos os endpoints:
 
 ```json
-
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "Descrição legível do erro",
     "details": { "campo": "mensagem de validação" }
   },
   "meta": { "timestamp": "2025-11-15T12:00:00.000Z" }
@@ -422,7 +425,7 @@ Contribuindo
 
 ### Fluxo de Desenvolvimento
 ```bash
-git
+git checkout -b feature/sua-feature
 
 # 2. Fazer alterações
 npm run lint    # Verificar estilo

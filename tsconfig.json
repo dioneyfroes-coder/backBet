@@ -1,55 +1,29 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    // File Layout
-    "outDir": "./dist",
-    "baseUrl": ".",
+    "rootDir": "src",
+    "outDir": "dist",
+
+    "baseUrl": "./src",
     "paths": {
-      "@/*": ["src/*"],
-      "@core/*": ["src/core/*"],
-      "@core/user": ["src/core/user"],
-      "@core/betting": ["src/core/betting"],
-      "@core/finance": ["src/core/finance"],
-      "@core/shared": ["src/core/shared"],
-      "@infrastructure/*": ["src/infrastructure/*"],
-      "@shared/*": ["src/shared/*"]
+      "@/*": ["*"],
+      "@core/*": ["core/*"],
+      "@infrastructure/*": ["infrastructure/*"],
+      "@shared/*": ["shared/*"]
     },
 
-    // Environment Settings
-    "module": "commonjs",
-    "target": "es2020",
-    "esModuleInterop": true,
-    "moduleResolution": "node",
-    "types": ["node", "jest"],
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "target": "ES2020",
 
-    // Other Outputs
+    "esModuleInterop": true,
+    "strict": true,
+    "isolatedModules": false,
+    "skipLibCheck": true,
+
     "sourceMap": true,
     "declaration": true,
-    "declarationMap": true,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-
-    // Recommended Options
-    "strict": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": false,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+    "declarationMap": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }

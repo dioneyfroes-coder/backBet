@@ -6,7 +6,7 @@ Como Rodar o BackBet - Guia Rápido
 
 ### 1. Instalar e Compilar
 ```bash
-npm
+npm install
 npm run build
 ```
 
@@ -22,7 +22,7 @@ Você verá:
 
 ### 3. Testar
 ```bash
-curl
+curl http://localhost:3000/health
 
 # Deve retornar:
 {"status":"healthy","timestamp":"...","uptime":2.345}
@@ -38,7 +38,10 @@ Em desenvolvimento, o servidor **não requer** chaves reais do Clerk!
 
 ### Registrar Usuário
 ```bash
-
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "firstName": "Test",
     "lastName": "User",
     "username": "testuser",
     "password": "SecurePass123!"
@@ -49,7 +52,7 @@ Você receberá um `id` (UUID). Copie-o!
 
 ### Autenticar (Bearer Token)
 ```bash
-curl
+curl -H "Authorization: Bearer {USER_ID}" \
   http://localhost:3000/api/auth/me
 
 # Deve retornar os dados do usuário
@@ -79,7 +82,7 @@ LOG_LEVEL=debug
 Testes
 
 ```bash
-npm
+npm test
 
 # Com cobertura detalhada
 npm test -- --coverage
@@ -154,7 +157,7 @@ Desenvolvimento
 ### Scripts Disponíveis
 
 ```bash
-npm
+npm run build
 
 # Rodar servidor (requer build antes)
 npm start
@@ -288,7 +291,7 @@ npm run format
 ### Fluxo de Desenvolvimento
 
 ```bash
-npm
+npm run build
 
 # 2. Em outro terminal, rodar servidor
 npm start
@@ -315,7 +318,10 @@ Testar Endpoints
 
 ### Registrar Usuário
 ```bash
-
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "teste@example.com",
+    "password": "Senha123!",
     "username": "usuario_teste",
     "firstName": "João",
     "lastName": "Silva"
@@ -324,7 +330,7 @@ Testar Endpoints
 
 ### Obter Perfil (com autenticação)
 ```bash
-
+  -H "Authorization: Bearer seu_token_aqui"
 ```
 
 ---
@@ -356,7 +362,7 @@ Troubleshooting
 
 ### Erro: "Cannot find module"
 ```bash
-rm
+rm -rf dist/
 npm run build
 npm start
 ```
@@ -372,7 +378,7 @@ npm start
 
 ### Testes falhando
 ```bash
-npm
+npm test -- --clearCache
 npm test
 ```
 
@@ -400,7 +406,7 @@ Documentação
 Checklist Antes de Fazer Push
 
 ```bash
-npm
+npm run build
 
 # 2. Testes passando
 npm test
