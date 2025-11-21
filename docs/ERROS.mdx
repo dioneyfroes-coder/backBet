@@ -1,3 +1,9 @@
+---
+title: Erros da API
+description: Referência dos códigos e formato de erros (AppError) da BackBet.
+slug: /docs/erros
+---
+
 # ERROS (AppError) — BackBet
 
 Esta página descreve os erros padronizados usados pela API BackBet. A aplicação lança erros estruturados usando a classe `AppError` com os campos `code`, `message`, `statusCode` e (`details` opcional).
@@ -5,6 +11,7 @@ Esta página descreve os erros padronizados usados pela API BackBet. A aplicaç�
 Formato padrão de resposta de erro
 
 ```json
+{
   "success": false,
   "error": {
     "code": "BAD_REQUEST",

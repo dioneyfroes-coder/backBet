@@ -93,7 +93,7 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `Market` - entidade dentro do agregado Event
 
 **Value Objects:**
-- `Odds` - cotação de uma aposta (>1 e <=1000)
+- `Odds` - cotação de uma aposta (maior que 1 e menor ou igual a 1000)
 - `BetAmount` - valor da aposta com validações
 
 **Serviços:**
@@ -146,7 +146,7 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 
 ### Factory Pattern (`src/infrastructure/persistence/factory.ts`)
 
-A aplicação utiliza o **Factory Pattern** para permitir troca transparente entre implementações de repositórios:
+ A aplicação utiliza o **Factory Pattern** para permitir troca transparente entre implementações de repositórios:
 
 ```typescript
 // Variável de ambiente controla qual implementação usar
@@ -185,6 +185,7 @@ export async function createUserRepository(): Promise<IUserRepository> {
 - `config.ts` - helpers connectMongoDB(), disconnectMongoDB(), getMongoDBConfig()
 - Conexão estabelecida em `src/server.ts` na inicialização
 - Graceful shutdown com handlers SIGINT/SIGTERM
+
 
 **Variáveis de Ambiente:**
 ```env
