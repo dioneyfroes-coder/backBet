@@ -1,8 +1,13 @@
+title: "BackBet Overview"
+description: "Visão geral da plataforma e seus núcleos de domínio."
+slug: "/docs/backbet/overview"
+---
+
 # BackBet - Plataforma de Apostas Desportivas
 
 Uma aplicação backend moderna para gerenciamento de apostas desportivas, construída com **TypeScript**, **Domain-Driven Design (DDD)** e padrões de arquitetura limpa.
 
-## 📋 Visão Geral do Projeto
+Visão Geral do Projeto
 
 BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)** que trabalham em conjunto através de abstrações compartilhadas:
 
@@ -23,7 +28,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
         ┌─────────────────────────────┐
         │   DOMÍNIO COMPARTILHADO     │
         │ • BaseAggregateRoot         │
-        │ • IRepository<T>            │
+        │ • IRepository            │
         │ • Money (Value Object)      │
         │ • UniqueId (Value Object)   │
         └─────────────────────────────┘
@@ -31,7 +36,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 ---
 
-## 🏗️ Arquitetura e Núcleos
+️ Arquitetura e Núcleos
 
 ### 1️⃣ Núcleo de Usuários (`src/core/user/`)
 
@@ -43,28 +48,8 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 #### Value Objects
 - **Email**: Validação RFC-compliant com suporte a caracteres especiais e domínios
 
-#### Serviços
-- **UserService**: Orquestra operações: `registerUser()`, `activateUser()`, `suspendUser()`, `updateProfile()`, `changeEmail()`
-
-#### Casos de Uso
-- **RegisterUser**: Cria novo usuário e sua carteira inicial no núcleo de finanças
-
-#### Testes
-- ✅ 100% cobertura (User, Email, UserService, RegisterUser)
-- 25+ testes implementados
-
----
-
-### 2️⃣ Núcleo de Finanças (`src/core/finance/`)
-
-**Responsabilidade:** Gerenciamento de carteiras, depósitos, saques e saldos.
-
-#### Entidades
-- **Wallet**: Agregado raiz com:
-  - `balance`: Saldo disponível
-  - `lockedBalance`: Saldo bloqueado em apostas
-  - `currency`: Moeda (BRL/USD/EUR)
-  - Métodos: `deposit()`, `withdraw()`, `lock()`, `unlock()`
+```text
+-------------------------------------------------------------
 
 #### Value Objects
 - **Currency**: Validação de moedas suportadas (BRL, USD, EUR)
@@ -83,8 +68,8 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 #### Repositórios
 - **IWalletRepository**: Interface de persistência
-- **MongooseWalletRepository**: Implementação MongoDB/Mongoose
-- **WalletRepository**: Implementação em memória (fallback)
+- **WalletRepository**: Implementação em memória
+```
 
 #### Testes
 - ✅ 100% cobertura (Wallet, Currency, WalletService)
@@ -128,15 +113,14 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 #### Repositórios
 - **IBetRepository / IEventRepository**: Interfaces de persistência
-- **MongooseBetRepository**: Implementação MongoDB/Mongoose
-- **BetRepository / EventRepository**: Implementações em memória (fallback)
+- **BetRepository / EventRepository**: Implementações em memória
 
 #### Testes
-- 🟡 ~20% cobertura (estrutura pronta, testes em expansão)
+- 🟡 Parcialmente implementado (estrutura pronta, testes em progress)
 
 ---
 
-### 🔄 Domínio Compartilhado (`src/core/shared/`)
+Domínio Compartilhado (`src/core/shared/`)
 
 **Responsabilidade:** Abstrações e tipos reutilizáveis por todos os núcleos.
 
@@ -155,17 +139,17 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
   - Suporta: BRL, USD, EUR
 
 #### Interfaces
-- **IRepository<T>**: Contrato genérico para persistência
-  - `save(entity: T): Promise<void>`
-  - `update(entity: T): Promise<void>`
-  - `findById(id: string): Promise<T | null>`
-  - `delete(id: string): Promise<boolean>`
+- **IRepository**: Contrato genérico para persistência
+  - `save(entity: T): Promise`
+  - `update(entity: T): Promise`
+  - `findById(id: string): Promise`
+  - `delete(id: string): Promise`
 
 #### Tipos Globais
 - `SupportedCurrency`: BRL, USD, EUR
 - `ResourceStatus`: Estados de recursos
-- `Result<T>`: Resultado com sucesso/erro
-- `PaginatedDTO<T>`: Resposta paginada
+- `Result`: Resultado com sucesso/erro
+- `PaginatedDTO`: Resposta paginada
 
 #### Testes
 - ✅ 100% cobertura (Money, UniqueId, AggregateRoot)
@@ -173,195 +157,152 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 
 ---
 
-## 🚀 Status Atual
+Status Atual
 
 | Aspecto | Status | Detalhe |
 |---------|--------|---------|
 | **Núcleo Usuário** | ✅ Completo | 100% cobertura, pronto para produção |
 | **Núcleo Finanças** | ✅ Completo | 100% cobertura, pronto para produção |
-| **Núcleo Apostas** | 🟡 Parcial | ~20% cobertura, testes em expansão |
+| **Núcleo Apostas** | 🟡 Estrutura Pronta | Testes em implementação |
 | **Domínio Compartilhado** | ✅ Completo | 100% cobertura, abstrações sólidas |
-| **Persistência MongoDB** | ✅ Implementado | Mongoose + Factory Pattern |
 | **Build TypeScript** | ✅ Sucesso | Zero erros de compilação |
-| **Testes Totais** | ✅ 159 passando | 14 suites, 66.37% coverage geral |
-| **Lint / Format** | ✅ Limpo | Zero warnings críticos |
-| **CI/CD** | ✅ GitHub Actions | Build/Test/Lint automatizados |
+| **Testes Totais** | ✅ 150 passando | 100% coverage em 12 suites |
+| **Lint / Format** | ✅ Limpo | Zero warnings |
 
 ---
 
-## 📊 Cobertura de Testes
+Cobertura de Testes
 
 ```
-Total de Testes: 159
-Suites: 14
+Total de Testes: 150
+Suites: 12
 
-Cobertura Geral: 66.37%
-  • Statements: 66.37%
-  • Branches: 47.56%
-  • Functions: 61.85%
-  • Lines: 68.6%
+Cobertura:
+  • Statements: 100%
+  • Branches: 100%
+  • Functions: 100%
+  • Lines: 100%
 
 Por Núcleo:
-  • Usuário: 25+ testes (100% coverage)
-  • Finanças: 60+ testes (100% coverage)
-  • Apostas: 10+ testes (~20% coverage)
-  • Compartilhado: 50+ testes (100% coverage)
-  • Infraestrutura: 51-85% coverage (controllers, middleware)
+  • Usuário: 25 testes (100%)
+  • Finanças: 60 testes (100%)
+  • Apostas: 10 testes (50%)
+  • Compartilhado: 51 testes (100%)
 ```
 
 ---
 
-## 🛠️ Configuração Técnica
+️ Configuração Técnica
 
 ### Tecnologias
 - **TypeScript 5.9.3**: Strict mode com tipos exatos opcionais
-- **Node.js 18+**: Runtime LTS
-- **Express 5.1.0**: Framework web
-- **MongoDB 6.3.0**: Banco de dados NoSQL
-- **Mongoose 8.0.3**: ODM (Object Document Mapper)
-- **Jest 29.7.0**: Framework de testes com ts-jest
-- **Clerk Express 1.7.49**: Autenticação e autorização
-- **Zod 4.1.12**: Validação de schemas
-- **Swagger/OpenAPI**: Documentação automática de API
+- **Jest 30.2.0**: Framework de testes com ts-jest
+- **Node.js 18+**: Runtime
 - **ESLint (Flat Config)**: Linting com regras TypeScript
 
 ### Scripts Disponíveis
 
 ```bash
-# Desenvolvimento
 npm install          # Instalar dependências
-npm run dev         # Servidor em modo watch (tsx watch)
 npm run build       # Compilar TypeScript
 npm test            # Rodar testes com cobertura
 npm run lint        # Verificar linting
-npm run format      # Formatar código com Prettier
 
-# Produção
-npm start           # Rodar aplicação compilada
-npm run build       # Compila em CommonJS (Output: dist/)
+# Build para produção
+npm run build       # Compila em CommonJS
+                    # Output: dist/ (ES2020)
 ```
-
-### Persistência - Factory Pattern
-
-A aplicação suporta **dois modos de persistência** via variável de ambiente:
-
-```bash
-# MongoDB/Mongoose (Produção)
-USE_MONGOOSE_PERSISTENCE=true
-
-# In-Memory (Desenvolvimento/Testes)
-USE_MONGOOSE_PERSISTENCE=false
-```
-
-**Implementação:**
-- `src/infrastructure/persistence/factory.ts`: Factory que retorna repositórios Mongoose ou in-memory
-- `src/infrastructure/persistence/mongoose/`: Schemas e repositórios MongoDB
-  - `config.ts`: Helpers de conexão (connectMongoDB, disconnectMongoDB)
-  - `schemas/`: UserSchema, WalletSchema, BetSchema
-  - `repositories/`: MongooseUserRepository, MongooseWalletRepository, MongooseBetRepository
-- `src/server.ts`: Conecta MongoDB na inicialização se USE_MONGOOSE_PERSISTENCE=true
 
 ### Estrutura de Arquivos
 
 ```
 src/
-├── app.ts                 # Aplicação Express
-├── server.ts              # Entry point com MongoDB connection
-├── core/                  # Núcleos de domínio (DDD)
+├── app.ts                 # Entrada da aplicação
+├── core/                  # Núcleos de domínio
 │   ├── user/             # Núcleo de usuários
 │   ├── finance/          # Núcleo de finanças
 │   ├── betting/          # Núcleo de apostas
-│   └── shared/           # Domínio compartilhado
+│   ├── shared/           # Domínio compartilhado
+│   └── ARCHITECTURE.md   # Documentação de arquitetura
 ├── infrastructure/        # Implementações de infraestrutura
 │   ├── api/             # Rotas e controllers
-│   ├── auth/            # Autenticação Clerk
+│   ├── auth/            # Autenticação
 │   ├── config/          # Configurações
-│   ├── database/        # In-memory repositories
-│   └── persistence/     # MongoDB/Mongoose + Factory
-│       ├── factory.ts
-│       └── mongoose/
-│           ├── config.ts
-│           ├── schemas/
-│           └── repositories/
+│   └── database/        # Acesso a dados
 └── shared/              # Configurações globais
     ├── config/
     └── types/
-
-docs/                     # Documentação
-├── ARCHITECTURE.mdx      # Arquitetura DDD
-├── API_DOCS.mdx         # Endpoints da API
-├── MONGODB_SETUP.mdx    # Setup MongoDB
-├── MONGOOSE_REPOSITORIES.mdx
-├── ERROS.mdx            # Códigos de erro
-└── ...
 ```
 
 ---
 
-## ✅ Checklist de Produção
+Checklist de Produção
 
-### 📋 Phase 1: Core Domain (CONCLUÍDO)
+Phase 1: Teste Completo (CONCLUÍDO)
 - [x] Testes unitários para todos os núcleos
 - [x] Mocking de dependências
-- [x] 100% cobertura User/Finance cores
+- [x] 100% cobertura de código
 - [x] Testes de integração entre núcleos
-- [x] CI/CD pipeline GitHub Actions
+- [x] CI/CD pipeline validado
 
-### 🗄️ Phase 2: Persistência (CONCLUÍDO)
-- [x] MongoDB + Mongoose integração
-- [x] Schemas Mongoose (User, Wallet, Bet)
-- [x] Repositórios Mongoose
-- [x] Factory Pattern (Mongoose/In-Memory)
-- [x] Connection pooling e graceful shutdown
-- [x] Testes de integração com MongoDB
+️ Phase 2: Infraestrutura (EM PROGRESSO)
+- [ ] **API REST** - Implementar controllers e rotas
+  - [ ] Autenticação JWT
+  - [ ] Validação de requisições
+  - [ ] Tratamento de erros global
+  - [ ] Rate limiting
 
-### 🏗️ Phase 3: API REST (EM PROGRESSO)
-- [x] Controllers e rotas básicas
-- [ ] Autenticação Clerk (servidor-side validation)
-- [x] Validação Zod em requests
-- [x] Tratamento de erros global (AppError)
-- [ ] Rate limiting middleware
-- [x] Documentação Swagger/OpenAPI
+- [ ] **Banco de Dados** - Implementar persistência
+  - [ ] Setup PostgreSQL/MongoDB
+  - [ ] Migrations
+  - [ ] Seeders de dados
+  - [ ] Índices e otimizações
 
-### 🧪 Phase 4: Testes Adicionais (PARCIAL)
-- [x] Testes unitários (159 passando)
-- [x] Testes de integração API (Supertest)
+- [ ] **Cache** - Implementar camada de cache
+  - [ ] Redis setup
+  - [ ] Estratégia de invalidação
+  - [ ] Métricas de hit/miss
+
+- [ ] **Autenticação** - Implementar segurança
+  - [ ] JWT tokens
+  - [ ] Refresh tokens
+  - [ ] Recuperação de senha
+  - [ ] MFA (two-factor)
+
+Phase 3: Testes Adicionais (EM PROGRESSO)
+- [ ] Testes de integração API
 - [ ] Testes de carga (k6/Artillery)
-- [ ] Testes de segurança (OWASP)
-- [ ] Testes end-to-end
+- [ ] Testes de segurança
+- [ ] Testes de performance
+- [ ] Validação de CORS/CSRF
 
-### 📚 Phase 5: Documentação (CONCLUÍDO)
-- [x] README.mdx - Overview do projeto
-- [x] ARCHITECTURE.mdx - Arquitetura DDD
-- [x] Finance_docs.mdx - Núcleo de finanças
-- [x] User_docs.mdx - Núcleo de usuários
-- [x] Bet_docs.mdx - Núcleo de apostas
-- [x] MONGODB_SETUP.mdx - Setup MongoDB
-- [x] MONGOOSE_REPOSITORIES.mdx - Repositórios
-- [x] ERROS.mdx - Códigos de erro (80 mapeados)
-- [x] API_DOCS.mdx - Documentação de endpoints
+Phase 4: Documentação (PARCIAL)
+- [x] ARCHITECTURE.md - Documentação de arquitetura
+- [x] Finance_docs.md - Documentação do núcleo de finanças
+- [ ] User_docs.md - Documentação do núcleo de usuários
+- [ ] Betting_docs.md - Documentação do núcleo de apostas
 - [ ] API_docs.md - Documentação das rotas
 - [ ] DEPLOYMENT.md - Guia de deployment
 - [ ] CONTRIBUTING.md - Guia de contribuição
 
-### 🔒 Phase 5: Segurança & DevOps
+Phase 5: Segurança & DevOps
 - [ ] Validação de entradas (Joi/Yup)
 - [ ] OWASP Top 10 checks
 - [ ] Dependências auditadas (npm audit)
-  
+
 - [ ] Kubernetes manifests
 - [ ] GitHub Actions CI/CD
 - [ ] SonarQube integration
 - [ ] Secrets management (dotenv)
 
-### 📈 Phase 6: Observabilidade
+Phase 6: Observabilidade
 - [ ] Logging estruturado (Winston/Pino)
 - [ ] Tracing distribuído (OpenTelemetry)
 - [ ] Metrics (Prometheus)
 - [ ] Health checks
 - [ ] Alertas e monitoramento
 
-### 🎯 Phase 7: Performance & Otimização
+Phase 7: Performance & Otimização
 - [ ] Clustering setup
 - [ ] Análise de bundles
 - [ ] Lazy loading
@@ -372,7 +313,7 @@ docs/                     # Documentação
 - [ ] Stress testing
 - [ ] Load testing
 
-### 📦 Phase 8: Release & Deployment
+Phase 8: Release & Deployment
 - [ ] Release notes
 - [ ] Versioning (semver)
 - [ ] Tag Git
@@ -384,20 +325,19 @@ docs/                     # Documentação
 
 ---
 
-## 📝 Documentação Adicional
+Documentação Adicional
 
-- **[ARCHITECTURE.md](./src/core/ARCHITECTURE.md)** - Padrões DDD, fluxos de integração
-- **[Finance_docs.md](./src/core/finance/Finance_docs.md)** - Detalhes do núcleo financeiro
-- **[Bet_docs.md](./src/core/betting/Bet_docs.md)** - Detalhes do núcleo de apostas
+- **** - Padrões DDD, fluxos de integração
+- **** - Detalhes do núcleo financeiro
+- **** - Detalhes do núcleo de apostas
 
-## 💬 API Docs e Tratamento de Erros
+API Docs e Tratamento de Erros
 
 A API possui documentação OpenAPI disponível localmente em `/api/docs` (Swagger UI) e a especificação em `/api/docs.json`.
 
 Formato de erro padrão retornado por todos os endpoints:
 
 ```json
-{
   "success": false,
   "error": {
     "code": "BAD_REQUEST",
@@ -415,7 +355,7 @@ Notas importantes:
 
 ---
 
-## 🚦 Próximas Ações Prioritárias
+Próximas Ações Prioritárias
 
 ### 1️⃣ Imediato (Esta Semana)
 ```
@@ -443,7 +383,7 @@ Notas importantes:
 
 ### 3️⃣ Médio Prazo (1 Mês)
 ```
-  
+
 [ ] GitHub Actions CI/CD
 [ ] Logging estruturado
 [ ] Cache Redis
@@ -461,7 +401,7 @@ Notas importantes:
 
 ---
 
-## 🤝 Contribuindo
+Contribuindo
 
 ### Padrões de Código
 - **TypeScript Strict Mode**: Todos os tipos devem ser explícitos
@@ -471,7 +411,6 @@ Notas importantes:
 
 ### Fluxo de Desenvolvimento
 ```bash
-# 1. Criar branch
 git checkout -b feature/sua-feature
 
 # 2. Fazer alterações
@@ -489,7 +428,7 @@ git push origin feature/sua-feature
 
 ---
 
-## 📞 Suporte e Contato
+Suporte e Contato
 
 Para dúvidas ou sugestões sobre a arquitetura:
 - Revisar **ARCHITECTURE.md** para padrões
@@ -498,6 +437,6 @@ Para dúvidas ou sugestões sobre a arquitetura:
 
 ---
 
-**Versão Atual:** 0.1.0 (Pre-Alpha)  
-**Última Atualização:** 14 de Novembro de 2025  
+**Versão Atual:** 0.1.0 (Pre-Alpha)
+**Última Atualização:** 14 de Novembro de 2025
 **Status:** 🟡 Em Desenvolvimento para Produção
