@@ -33,17 +33,19 @@ Fase 3:          Microsserviço de autenticação dedicado
 No dashboard do Clerk:
 1. Ir em **Developers** → **API Keys**
 2. Copiar as seguintes keys:
-   - **CLERK_PUBLISHABLE_KEY** (público, pode exposr)
-   - **CLERK_SECRET_KEY** (secreto, guardar seguro)
-   - **CLERK_API_KEY** (para server-side)
+  - `CLERK_PUBLISHABLE_KEY` (público, pode exposr)
+  - `CLERK_SECRET_KEY` (secreto, guardar seguro)
+  - `CLERK_API_KEY` (para server-side)
 
 ### 3. Configurar No Backend
 
 Criar arquivo `.env.local`:
 
 ```env
+```text
 CLERK_SECRET_KEY=sk_live_xxxxx
 CLERK_PUBLISHABLE_KEY=pk_live_xxxxx
+```
 ```
 
 Ou usar `.env` diretamente (não commitar):
