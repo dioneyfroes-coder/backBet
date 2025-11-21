@@ -27,6 +27,16 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 **Repositórios:**
 - `IUserRepository` - contrato de persistência
 
+**Implementações de Persistência:**
+- `MongooseUserRepository` - implementação MongoDB/Mongoose com:
+  - Índices únicos em email e username
+  - Validação de status (ACTIVE, SUSPENDED, PENDING_VERIFICATION)
+  - Métodos: save, findById, findByEmail, update
+- `UserRepository` - implementação in-memory (fallback para testes)
+
+**Factory de Repositórios:**
+- `createUserRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
+
 **Integração com outros cores:**
 - Cria `Wallet` automaticamente ao registrar novo usuário
 - Consulta carteira ao processar operações financeiras
@@ -52,6 +62,17 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 **Repositórios:**
 - `IWalletRepository` - contrato de persistência
 
+**Implementações de Persistência:**
+- `MongooseWalletRepository` - implementação MongoDB/Mongoose com:
+  - Índice único em userId
+  - Subdocumento de transactions com histórico completo
+  - Métodos: save, findByUserId, update, getHistory, delete
+  - Validação de currency (BRL, USD, EUR)
+- `WalletRepository` - implementação in-memory (fallback para testes)
+
+**Factory de Repositórios:**
+- `createWalletRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
+
 **Integração com outros cores:**
 - Consultado por `BetService` ao colocar apostas
 - Consultado por `BetService` ao resolver apostas
@@ -72,7 +93,37 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `Market` - entidade dentro do agregado Event
 
 **Value Objects:**
-- `Odds` - cotação de uma aposta (>1 e ` - contrato genérico para CRUD
+- `Odds` - cotação de uma aposta (>1 e <=1000)
+- `BetAmount` - valor da aposta com validações
+
+**Serviços:**
+- `BetService` - orquestra operação de apostas
+
+**Repositórios:**
+- `IBetRepository` / `IEventRepository` - contratos de persistência
+
+**Implementações de Persistência:**
+- `MongooseBetRepository` - implementação MongoDB/Mongoose com:
+  - Índices em userId, eventId, status para queries otimizadas
+  - Subdocumento de resolution (result, resolvedAt, resolvedBy)
+  - Métodos: create, update, findById, findByUserId, findByEvent, delete
+  - Validação de status (PENDING, WON, LOST, CANCELED)
+- `BetRepository` / `EventRepository` - implementações in-memory (fallback para testes)
+
+**Factory de Repositórios:**
+- `createBetRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
+- `createEventRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
+
+**Integração com outros cores:**
+- Valida User no User Core
+- Gerencia fundos via Finance Core
+
+---
+
+## 4. Shared Domain (`src/core/shared/`)
+
+**Repositórios:**
+- `IRepository<T>` - contrato genérico para CRUD
 
 ### Entidades Base
 - `AggregateRoot` - classe abstrata com id, createdAt, updatedAt, version
@@ -88,6 +139,60 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 - `Result` - padrão Result para retorno de operações
 - `PaginatedDTO` - resposta paginada padrão
 - `FilterDTO` - filtros genéricos
+
+---
+
+## Infraestrutura de Persistência
+
+### Factory Pattern (`src/infrastructure/persistence/factory.ts`)
+
+A aplicação utiliza o **Factory Pattern** para permitir troca transparente entre implementações de repositórios:
+
+```typescript
+// Variável de ambiente controla qual implementação usar
+USE_MONGOOSE_PERSISTENCE=true  // MongoDB/Mongoose
+USE_MONGOOSE_PERSISTENCE=false // In-Memory
+
+// Factory seleciona automaticamente
+export async function createUserRepository(): Promise<IUserRepository> {
+  if (process.env.USE_MONGOOSE_PERSISTENCE === 'true') {
+    const { MongooseUserRepository } = await import('./mongoose/repositories/MongooseUserRepository');
+    return new MongooseUserRepository();
+  }
+  return new UserRepository(); // fallback in-memory
+}
+```
+
+**Vantagens:**
+- Zero mudança no código de domínio ao trocar persistência
+- Testes podem usar in-memory para velocidade
+- Produção usa MongoDB para durabilidade
+- Futuras implementações (Redis, PostgreSQL) podem ser adicionadas facilmente
+
+### MongoDB/Mongoose (`src/infrastructure/persistence/mongoose/`)
+
+**Schemas:**
+- `UserSchema.ts` - User com índices únicos em email/username
+- `WalletSchema.ts` - Wallet com índice único em userId e subdocumento transactions
+- `BetSchema.ts` - Bet com índices compostos (userId+status, eventId+status)
+
+**Repositories:**
+- `MongooseUserRepository` - implementa IUserRepository
+- `MongooseWalletRepository` - implementa IWalletRepository
+- `MongooseBetRepository` - implementa IBetRepository
+
+**Configuration:**
+- `config.ts` - helpers connectMongoDB(), disconnectMongoDB(), getMongoDBConfig()
+- Conexão estabelecida em `src/server.ts` na inicialização
+- Graceful shutdown com handlers SIGINT/SIGTERM
+
+**Variáveis de Ambiente:**
+```env
+USE_MONGOOSE_PERSISTENCE=true
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB_NAME=backbet-dev
+NODE_ENV=development
+```
 
 ---
 
@@ -146,57 +251,78 @@ Todos compartilham abstrações comuns no **Shared Domain**.
 ### 2. Repository Pattern
 - Interfaces genéricas para abstrair persistência
 - Mockáveis para testes
-- Facilita troca de backend (em-memória → DB → Redis)
+- Facilita troca de backend via Factory Pattern
 
-### 3. Service Layer
+### 3. Factory Pattern
+- `createUserRepository()`, `createWalletRepository()`, `createBetRepository()`
+- Seleção automática de implementação via variável de ambiente
+- Zero impacto no código de domínio
+
+### 4. Service Layer
 - Orquestra operações de negócio
 - Coordena entre repositórios
 - Centraliza validações
 
-### 4. Value Objects
+### 5. Value Objects
 - Imutáveis
 - Com validações
 - Reutilizáveis entre cores
 
-### 5. Dependency Injection (preparado para)
+### 6. Dependency Injection (via Factory)
 - Cores não são acoplados (usado via interfaces)
 - Fácil de testar com mocks
-- Pronto para integração com NestJS/Spring
+- Async factories para suportar imports dinâmicos
 
 ---
 
-## Próximos Passos
+## Status Atual da Implementação
 
-1. **Implementar Adaptadores de Persistência**
-   - TypeORM/Prisma para PostgreSQL
-   - Redis para cache
-   - Implementar `IRepository`, `IBetRepository`, `IWalletRepository`, `IUserRepository`
+### ✅ Completamente Implementado
+- [x] Domain Models (User, Wallet, Bet, Event)
+- [x] Value Objects (Email, Currency, Money, UniqueId, Odds)
+- [x] Service Layer (UserService, WalletService, BetService)
+- [x] Repository Interfaces (IUserRepository, IWalletRepository, IBetRepository)
+- [x] In-Memory Repositories (para desenvolvimento e testes)
+- [x] MongoDB/Mongoose Schemas (UserSchema, WalletSchema, BetSchema)
+- [x] MongoDB/Mongoose Repositories (MongooseUserRepository, etc.)
+- [x] Factory Pattern (createUserRepository, etc.)
+- [x] Connection Management (connectMongoDB, disconnectMongoDB)
+- [x] Graceful Shutdown Handlers (SIGINT/SIGTERM)
+- [x] Testes Unitários (159 testes, 66.37% coverage geral)
+- [x] GitHub Actions CI/CD (build, test, lint)
+- [x] API REST com Express 5.1.0
+- [x] Validação com Zod
+- [x] Documentação Swagger/OpenAPI
 
-2. **Adicionar Eventos de Domínio**
+### 🟡 Em Progresso
+- [ ] Expansão de testes do Betting Core (~20% → 100%)
+- [ ] Autenticação Clerk (validação server-side)
+- [ ] Rate limiting middleware
+- [ ] Cache layer (Redis)
+
+### 📋 Próximos Passos
+
+1. **Eventos de Domínio**
    - `UserCreated`, `WalletCreated`
    - `BetPlaced`, `BetResolved`
    - `FundsDeposited`, `FundsWithdrawn`
    - Event Bus para propagação
 
-3. **Camada de Aplicação (Application Layer)**
-   - Use Cases / Commands
-   - DTOs de entrada/saída
-   - Mapeamento de domínio ↔ API
-
-4. **Camada de API (Infrastructure)**
-   - Controllers REST
-   - GraphQL (opcional)
-   - WebSocket para updates em tempo real
-
-5. **Testes de Integração**
+2. **Testes de Integração E2E**
    - Teste fluxos completos (user → betting → finance)
    - Teste transações e rollback
    - Teste eventos de domínio
 
-6. **Auditoria e Compliance**
+3. **Auditoria e Compliance**
    - Event Sourcing (registrar todas as operações)
    - Logs estruturados
    - Rastreamento de transações
+
+4. **Performance e Escalabilidade**
+   - Cache Redis para queries frequentes
+   - Connection pooling MongoDB otimizado
+   - Rate limiting por usuário
+   - Paginação em todas as listagens
 
 ---
 

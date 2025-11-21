@@ -1,26 +1,80 @@
 Como Rodar o BackBet - Guia Rápido
 
-**Última atualização:** 14 de Novembro de 2025 ✅ Sprint 1 Phase 1 Completo
+**Última atualização:** Janeiro 2025 ✅ MongoDB + Mongoose Implementado
 
 ## ⚡ Quickstart (30 segundos)
 
-### 1. Instalar e Compilar
+### 1. Instalar Dependências
 ```bash
 npm install
-npm run build
 ```
 
-### 2. Rodar Servidor
+### 2. Configurar MongoDB
+
+**Opção A: MongoDB Local**
 ```bash
+# macOS (Homebrew)
+brew install mongodb-community
+brew services start mongodb-community
+
+# Linux (systemd)
+sudo systemctl start mongod
+
+# Windows
+# Baixar de https://www.mongodb.com/try/download/community
+```
+
+**Opção B: MongoDB Atlas (Cloud - Grátis)**
+1. Criar conta em https://www.mongodb.com/cloud/atlas/register
+2. Criar cluster M0 (free tier)
+3. Obter connection string
+
+### 3. Configurar Variáveis de Ambiente
+
+Criar arquivo `.env` na raiz:
+
+```env
+# MongoDB
+USE_MONGOOSE_PERSISTENCE=true
+MONGODB_URI=mongodb://localhost:27017
+MONGODB_DB_NAME=backbet-dev
+
+# Ambiente
+NODE_ENV=development
+
+# Clerk (opcional em dev)
+CLERK_PUBLISHABLE_KEY=pk_test_seu_publishable_key
+CLERK_SECRET_KEY=sk_test_seu_secret_key
+
+# Servidor
+PORT=3000
+CORS_ORIGIN=http://localhost:3000,http://localhost:3001,http://localhost:5173
+LOG_LEVEL=debug
+```
+
+**Para usar in-memory (sem MongoDB):**
+```env
+USE_MONGOOSE_PERSISTENCE=false
+```
+
+### 4. Rodar Servidor
+```bash
+# Desenvolvimento (watch mode)
+npm run dev
+
+# Produção
+npm run build
+npm start
 ```
 
 Você verá:
 ```
+✓ MongoDB conectado com sucesso
 🚀 BackBet API rodando em http://localhost:3000
 📚 Swagger: http://localhost:3000/api/docs
 ```
 
-### 3. Testar
+### 5. Testar
 ```bash
 curl http://localhost:3000/health
 
@@ -28,7 +82,7 @@ curl http://localhost:3000/health
 {"status":"healthy","timestamp":"...","uptime":2.345}
 ```
 
-✅ **Pronto!** Servidor funcionando em desenvolvimento
+✅ **Pronto!** Servidor funcionando com MongoDB
 
 ---
 
@@ -79,18 +133,41 @@ LOG_LEVEL=debug
 
 ---
 
-Testes
+## 🧪 Testes
 
 ```bash
+# Rodar todos os testes
 npm test
 
 # Com cobertura detalhada
 npm test -- --coverage
 
+# Rodar apenas testes de um núcleo
+npm test -- user
+npm test -- finance
+npm test -- betting
+
 # Resultado esperado:
-150/150 testes passando
-100% de cobertura
+# Testes: 159 passando (14 suites)
+# Cobertura:
+#   - Overall: 66.37%
+#   - User Core: 100%
+#   - Finance Core: 100%
+#   - Betting Core: ~20%
+#   - Infrastructure: 51-85%
 ```
+
+---
+
+## 📊 Cobertura Atual
+
+| Módulo | Testes | Coverage |
+|--------|--------|----------|
+| User Core | 25+ | ✅ 100% |
+| Finance Core | 60+ | ✅ 100% |
+| Betting Core | 10+ | 🟡 ~20% |
+| Shared/Infrastructure | 60+ | 🟡 51-85% |
+| **Total** | **159** | **66.37%** |
 
 ---
 
