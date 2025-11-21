@@ -1,7 +1,6 @@
----
-title: BackBet Overview
-description: Visão geral da plataforma e seus núcleos de domínio.
-slug: /docs/backbet/overview
+title: "BackBet Overview"
+description: "Visão geral da plataforma e seus núcleos de domínio."
+slug: "/docs/backbet/overview"
 ---
 
 # BackBet - Plataforma de Apostas Desportivas
@@ -49,28 +48,8 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 #### Value Objects
 - **Email**: Validação RFC-compliant com suporte a caracteres especiais e domínios
 
-#### Serviços
-- **UserService**: Orquestra operações: `registerUser()`, `activateUser()`, `suspendUser()`, `updateProfile()`, `changeEmail()`
-
-#### Casos de Uso
-- **RegisterUser**: Cria novo usuário e sua carteira inicial no núcleo de finanças
-
-#### Testes
-- ✅ 100% cobertura (User, Email, UserService, RegisterUser)
-- 25+ testes implementados
-
----
-
-### 2️⃣ Núcleo de Finanças (`src/core/finance/`)
-
-**Responsabilidade:** Gerenciamento de carteiras, depósitos, saques e saldos.
-
-#### Entidades
-- **Wallet**: Agregado raiz com:
-  - `balance`: Saldo disponível
-  - `lockedBalance`: Saldo bloqueado em apostas
-  - `currency`: Moeda (BRL/USD/EUR)
-  - Métodos: `deposit()`, `withdraw()`, `lock()`, `unlock()`
+```text
+-------------------------------------------------------------
 
 #### Value Objects
 - **Currency**: Validação de moedas suportadas (BRL, USD, EUR)
@@ -90,6 +69,7 @@ BackBet é estruturada em torno de **3 Núcleos de Domínio (Bounded Contexts)**
 #### Repositórios
 - **IWalletRepository**: Interface de persistência
 - **WalletRepository**: Implementação em memória
+```
 
 #### Testes
 - ✅ 100% cobertura (Wallet, Currency, WalletService)
