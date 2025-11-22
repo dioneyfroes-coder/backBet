@@ -9,6 +9,11 @@ import { AppError } from '@/shared/errors/AppError';
 import { appConfig } from '@/shared/config/appConfig';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
+import {
+  metricsRegistry,
+  httpRequestCounter,
+  httpRequestLatency,
+} from '@/infrastructure/observability/metrics';
 
 export class ApiServer {
   private app: Express;
@@ -91,6 +96,9 @@ export class ApiServer {
     // Logging
     this.app.use(this.loggingMiddleware);
 
+    // Métricas Prometheus
+    this.app.use(this.metricsMiddleware);
+
     // Swagger UI - documentação OpenAPI
     // Serve a interface interativa em /api/docs e o JSON em /api/docs.json
     try {
@@ -101,6 +109,28 @@ export class ApiServer {
       console.warn('Swagger UI não pôde ser montado:', err);
     }
   }
+
+  private metricsMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+    if (req.path === '/metrics') {
+      return next();
+    }
+
+    const start = process.hrtime();
+    res.on('finish', () => {
+      const route = (req.route && (req.route as any).path) || req.path || req.originalUrl;
+      const labels = {
+        method: req.method,
+        route,
+        status: res.statusCode.toString(),
+      };
+      httpRequestCounter.inc(labels);
+      const duration = process.hrtime(start);
+      const elapsedMs = duration[0] * 1000 + duration[1] / 1e6;
+      httpRequestLatency.observe(labels, elapsedMs);
+    });
+
+    next();
+  };
 
   private requestIdMiddleware = (req: Request, res: Response, next: NextFunction): void => {
     const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -160,6 +190,18 @@ export class ApiServer {
         },
         timestamp: new Date().toISOString(),
       });
+    });
+  }
+
+  public registerMetricsEndpoint(): void {
+    this.app.get('/metrics', async (_req: Request, res: Response) => {
+      try {
+        res.setHeader('Content-Type', metricsRegistry.contentType);
+        res.send(await metricsRegistry.metrics());
+      } catch (error) {
+        console.error('Erro ao expor métricas Prometheus', error);
+        res.status(500).send('Erro ao gerar métricas');
+      }
     });
   }
 

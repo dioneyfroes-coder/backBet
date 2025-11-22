@@ -39,6 +39,7 @@ async function main() {
 
     // Registrar health checks
     apiServer.registerHealthCheck();
+    apiServer.registerMetricsEndpoint();
 
     // Registrar rotas via roteador agregado
     const apiRouter = await createApiRouter();

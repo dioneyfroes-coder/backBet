@@ -1,0 +1,114 @@
+---
+title: "Observabilidade"
+description: "Como instrumentar e consumir métricas do BackBet"
+slug: "/docs/backbet/observability"
+---
+
+# Observabilidade e Métricas
+
+## Panorama
+A aplicação expõe métricas nativas (via `prom-client`) e métricas customizadas em dois pontos principais:
+
+- `/metrics`: endpoint que retorna todas as métricas registradas pelo `prom-client`, pronto para ser lido pelo Prometheus.
+- `/health/cache`: detalhe rápido sobre o estado do cache Redis (habilitado/desabilitado e contadores de hits/misses/escritas/erros).
+
+O middleware `metricsMiddleware` (registrado antes das rotas) contabiliza cada requisição para alimentar um contador e um histograma, enquanto o cron interno em `infrastructure/observability/metrics.ts` atualiza 4 gauges com os valores retornados por `RedisClient.getMetrics()` a cada 3 segundos.
+
+## Métricas expostas
+### Métricas padrão
+Ao instanciar o `Registry`, também é chamada `collectDefaultMetrics({ prefix: 'backbet_', register: registry })`. Isso significa que há métricas como:
+
+- `backbet_process_cpu_user_seconds_total`
+- `backbet_nodejs_heap_used_bytes`
+- `backbet_process_resident_memory_bytes`
+
+Essas métricas são úteis para acompanhar o consumo de recursos do processo Node.
+
+### Métricas HTTP
+Dados registrados pelo middleware:
+
+- `backbet_http_requests_total{method,route,status}` — contador incrementado a cada resposta.
+- `backbet_http_request_duration_ms_bucket`, `_sum`, `_count` — histograma usado para calcular percentis de latência.
+
+**Sugestões de consultas PromQL**
+```
+rate(backbet_http_requests_total[1m])
+histogram_quantile(0.95, sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le))
+```
+
+### Métricas de cache
+Atualizadas pelo `updateCacheMetrics()` (executado a cada 3 segundos). Os gauges são:
+
+- `backbet_cache_hits_total`
+- `backbet_cache_misses_total`
+- `backbet_cache_writes_total`
+- `backbet_cache_errors_total`
+
+Esses valores acompanham o `RedisClient.getMetrics()` e continuarão 0 quando `CACHE_ENABLED=false`.
+
+## Endpoint `/metrics`
+
+A rota `/metrics` faz o streaming do conteúdo de `metricsRegistry`. O usual é configurá-la como alvo de scrape do Prometheus:
+
+```yaml
+scrape_configs:
+  - job_name: backbet
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['localhost:3000']
+```
+
+Se a aplicação estiver atrás de um proxy (NGINX, traefik etc.), garanta que o caminho seja repassado exatamente e que as métricas não fiquem protegidas por autenticação (ou configure um bearer token/vhost dedicado para o Prometheus).
+
+## Endpoint `/health/cache`
+
+Fornece um payload rápido com o estado do cache:
+
+```json
+{
+  "cache": {
+    "enabled": true,
+    "metrics": {
+      "hits": 120,
+      "misses": 34,
+      "writes": 75,
+      "errors": 0
+    }
+  },
+  "timestamp": "..."
+}
+```
+
+Use esse endpoint para alertas simples (por exemplo, reduzir o cache quando `enabled` for `false`) ou para dashboards de status.
+
+## Configuração ambiental relevante
+
+| Variável | Descrição |
+|----------|-----------|
+| `CACHE_ENABLED` | Habilita o Redis (default `true`). O valor padrão em testes é `false` para evitar dependência externa. |
+| `CACHE_USER_BALANCE_TTL_SECONDS`, `CACHE_WALLET_HISTORY_TTL_SECONDS`, `CACHE_ODDS_TTL_SECONDS` | TTLs específicos usados pelos `cacheHooks`. |
+| `REDIS_URL` | Conexão com o Redis usado pelo `RedisClient`. |
+
+Ao desligar o cache (`CACHE_ENABLED=false`), as métricas continuam presentes, mas as gauges retornam 0, deixando o painel “em branco” até que o cache seja reativado.
+
+## Dashboards recomendados
+
+1. **Overview geral**
+   - `rate(backbet_http_requests_total[5m])` (gráfico de taxa de requisições)
+   - `histogram_quantile(0.5, ...)`, `histogram_quantile(0.95, ...)` para latências por rota
+   - `backbet_process_cpu_user_seconds_total` (line chart)
+   - `backbet_nodejs_heap_used_bytes`
+
+2. **Cache Redis**
+   - `backbet_cache_hits_total`, `backbet_cache_misses_total`, `backbet_cache_writes_total`, `backbet_cache_errors_total` (gauge/heatmap)
+   - Taxa de acertos/misses: `rate(backbet_cache_hits_total[5m]) / rate(backbet_cache_misses_total[5m])`
+
+3. **Alertas rápidos**
+   - Alertar se `backbet_cache_errors_total` aumentar rapidamente ou se `backbet_http_request_duration_ms_bucket` mostrar picos.
+   - Sinalizar quando `/health/cache` retorna `enabled: false` para guiar a investigação de disponibilidade do Redis.
+
+## Próximos passos sugeridos
+
+- Integrar com Grafana (explore panels para as métricas acima) e vincular dashboards a alertas (e.g. PagerDuty ou Slack).
+- Registrar métricas customizadas adicionais conforme novos recursos (deposit, bet, etc.).
+- Adicionar tracing distribuído (OpenTelemetry) e correlacionar `TRACEPARENT` com `X-Request-ID`.
