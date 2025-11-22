@@ -35,4 +35,27 @@ export const appConfig = {
 			'Você excedeu o limite de requisições. Aguarde alguns instantes antes de tentar novamente.',
 		enabled: parseBoolean(process.env.RATE_LIMIT_ENABLED, true),
 	},
+	authRateLimit: {
+		register: {
+			windowMs: parsePositiveInt(process.env.AUTH_REGISTER_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(process.env.AUTH_REGISTER_RATE_LIMIT_MAX, 10),
+			message:
+				process.env.AUTH_REGISTER_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de registro. Tente novamente em alguns segundos.',
+		},
+		login: {
+			windowMs: parsePositiveInt(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(process.env.AUTH_LOGIN_RATE_LIMIT_MAX, 15),
+			message:
+				process.env.AUTH_LOGIN_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de login. Aguarde alguns segundos antes de tentar novamente.',
+		},
+		refresh: {
+			windowMs: parsePositiveInt(process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(process.env.AUTH_REFRESH_RATE_LIMIT_MAX, 30),
+			message:
+				process.env.AUTH_REFRESH_RATE_LIMIT_MESSAGE ||
+				'Você excedeu o limite de refresh tokens. Tente novamente em breve.',
+		},
+	},
 };

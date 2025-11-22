@@ -9,6 +9,8 @@ import { createUserRepository, createWalletRepository } from '@/infrastructure/p
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { ClerkService } from '@/shared/services/ClerkService';
+import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
+import { appConfig } from '@/shared/config/appConfig';
 
 export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
@@ -18,6 +20,20 @@ export type AuthRoutesDeps = {
 
 export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Router> {
   const router = Router();
+  const registerLimiter = createRouteRateLimiter({
+    ...appConfig.authRateLimit.register,
+    keyPrefix: 'auth-register',
+  });
+
+  const loginLimiter = createRouteRateLimiter({
+    ...appConfig.authRateLimit.login,
+    keyPrefix: 'auth-login',
+  });
+
+  const refreshLimiter = createRouteRateLimiter({
+    ...appConfig.authRateLimit.refresh,
+    keyPrefix: 'auth-refresh',
+  });
 
   // Instanciar repositórios via factory
   const userRepository = deps.userRepository ?? (await createUserRepository());
@@ -41,13 +57,13 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
    * POST /auth/register
    * Registra novo usuário
    */
-  router.post('/register', asyncHandler((req: Request, res: Response) => authController.register(req, res)));
+  router.post('/register', registerLimiter, asyncHandler((req: Request, res: Response) => authController.register(req, res)));
 
   /**
    * POST /auth/login
    * Autentica usuário (via Clerk OAuth)
    */
-  router.post('/login', asyncHandler((req: Request, res: Response) => authController.login(req, res)));
+  router.post('/login', loginLimiter, asyncHandler((req: Request, res: Response) => authController.login(req, res)));
 
   /**
    * GET /auth/me
@@ -59,7 +75,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
    * POST /auth/refresh
    * Renova access token
    */
-  router.post('/refresh', asyncHandler((req: Request, res: Response) => authController.refreshToken(req, res)));
+  router.post('/refresh', refreshLimiter, asyncHandler((req: Request, res: Response) => authController.refreshToken(req, res)));
 
   /**
    * POST /auth/logout

@@ -252,6 +252,7 @@ Phase 1: Teste Completo (CONCLUÍDO)
   - [ ] Validação de requisições
   - [ ] Tratamento de erros global
   - [ ] Rate limiting (variáveis `RATE_LIMIT_*` definidas no `.env` leem-se via `shared/config/appConfig`, mantemos limites altos enquanto estamos em dev)
+  - [ ] Endpoints `/auth/register`, `/auth/login` e `/auth/refresh` agora possuem limitadores específicos que usam `AUTH_REGISTER_RATE_LIMIT_*`, `AUTH_LOGIN_RATE_LIMIT_*` e `AUTH_REFRESH_RATE_LIMIT_*` para evitar abusos
   - [ ] `createApiRouter` já compõe `/auth`, `/users`, `/wallets`, `/bets` e `/finance` usando repositórios compartilhados e o novo `ClerkService` quando há uma `CLERK_API_KEY` válida
 
 - [ ] **Banco de Dados** - Implementar persistência
