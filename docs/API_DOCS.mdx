@@ -6,6 +6,8 @@ slug: "/docs/api"
 
 # Documentação de Endpoints - BackBet API
 
+> **Nota de implementação:** o servidor centraliza `/auth`, `/users`, `/wallets`, `/bets` e `/finance` via `createApiRouter`, compartilhando instâncias de repositórios e o `ClerkService` (quando uma `CLERK_API_KEY` válida é configurada). O `ClerkService` enriquece `/auth/me` com dados reais e tenta sincronizar cadastros novos, mas permanece desligado se só houver chaves de teste (`sk_test`).
+
 ## Base URL
 
 ```
@@ -40,6 +42,8 @@ Verificar se aplicação está pronta para receber requisições
 ---
 
 ## Autenticação (`/auth`)
+
+> **Proteção:** `/auth/register`, `/auth/login` e `/auth/refresh` são protegidos pelo `routeRateLimiter` compartilhado. Os limites são configuráveis via variáveis de ambiente `AUTH_REGISTER_RATE_LIMIT_WINDOW_MS`, `AUTH_REGISTER_RATE_LIMIT_MAX`, `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`, `AUTH_LOGIN_RATE_LIMIT_MAX`, `AUTH_REFRESH_RATE_LIMIT_WINDOW_MS` e `AUTH_REFRESH_RATE_LIMIT_MAX`; o middleware retorna `429` usando o mesmo formato de erro padrão se o limite for excedido.
 
 ### `POST /auth/register`
 Registra novo usuário
@@ -167,6 +171,8 @@ Renova access token (Clerk)
 
 ---
 
+> **Protegido:** as rotas de `/users`, `/wallets`, `/finance` e `/bets` utilizam o middleware `protectedRoute`, que exige o cabeçalho `Authorization: Bearer <token>` validado pelo Clerk.
+
 ## Usuários (`/users`) - Em Desenvolvimento
 
 ### `GET /users/me`
@@ -270,6 +276,108 @@ Sacar fundos
 
 ### `GET /wallets/history`
 Histórico de transações
+
+---
+
+## Finanças (`/finance`)
+
+> **Propósito:** permite que usuários adquiram pacotes de crédito e façam/acompanhem solicitações de saque. O `FinanceController` usa os DTOs definidos em `FinanceDTOs` e todas as rotas exigem autenticação via `protectedRoute`.
+
+### `GET /finance/packages`
+Lista os pacotes de crédito ativos.
+
+**Success (200):**
+```json
+  "success": true,
+  "data": [
+    {
+      "id": "cp-001",
+      "code": "STARTER",
+      "label": "Pacote Starter",
+      "baseAmount": 100,
+      "bonusAmount": 10,
+      "totalCredits": 110,
+      "currency": "BRL",
+      "price": 100.0,
+      "description": "Bônus de boas-vindas",
+      "isActive": true,
+      "createdAt": "2025-11-14T10:00:00.000Z",
+      "updatedAt": "2025-11-14T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /finance/packages/:packageId/purchase`
+Compra um pacote específico e atualiza a carteira do usuário.
+
+**Success (201):**
+```json
+  "success": true,
+  "data": {
+    "message": "Pacote de créditos adquirido com sucesso",
+    "wallet": { "balance": 210.5, "currency": "BRL" },
+    "creditPackage": {
+      "id": "cp-001",
+      "code": "STARTER",
+      "label": "Pacote Starter",
+      "baseAmount": 100,
+      "bonusAmount": 10,
+      "totalCredits": 110,
+      "currency": "BRL",
+      "price": 100.0,
+      "description": "Bônus de boas-vindas",
+      "isActive": true,
+      "createdAt": "2025-11-14T10:00:00.000Z",
+      "updatedAt": "2025-11-14T10:00:00.000Z"
+    }
+  }
+}
+```
+
+### `POST /finance/withdrawal-requests`
+Cria uma solicitação de saque para o usuário autenticado.
+
+**Request:**
+```json
+  "amount": 150.0,
+  "currency": "BRL",
+  "notes": "Saque para conta bancária"
+}
+```
+
+**Success (201):**
+```json
+  "success": true,
+  "data": {
+    "message": "Solicitação de saque criada com sucesso",
+    "withdrawalRequest": {
+      "id": "wr-123",
+      "userId": "user-abc",
+      "amount": 150.0,
+      "currency": "BRL",
+      "status": "PENDING",
+      "requestedAt": "2025-11-14T14:00:00.000Z",
+      "processedAt": null,
+      "notes": "Saque para conta bancária",
+      "approvalLogs": []
+    }
+  }
+}
+```
+
+### `GET /finance/withdrawal-requests`
+Retorna todas as solicitações do usuário (status e logs de aprovação seguem o DTO `WithdrawalRequestResponseDTO`).
+
+### `PATCH /finance/withdrawal-requests/:requestId`
+Atualiza o status de uma solicitação existente (`APPROVED` ou `REJECTED`) e permite notas opcionais.
+
+**Request:**
+```json
+  "action": "APPROVED",
+  "notes": "Aprovado após revisão"
+}
+```
 
 ---
 

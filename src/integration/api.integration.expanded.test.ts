@@ -23,9 +23,11 @@ import { GetEventBetsUseCase } from '../core/betting/aplication/use-cases/GetEve
 import { asyncHandler } from '../infrastructure/api/middleware/asyncHandler';
 import { protectedRoute } from '../infrastructure/api/middleware/AuthMiddleware';
 import { ClerkService } from '@/shared/services/ClerkService';
+import { JwtService } from '@/shared/services/JwtService';
 
 describe('API expanded integration tests (isolated)', () => {
   let app: express.Express;
+  const PASSWORD = 'Password123!';
 
   beforeEach(() => {
     process.env.NODE_ENV = 'development';
@@ -55,13 +57,15 @@ describe('API expanded integration tests (isolated)', () => {
     const getEventBetsUC = new GetEventBetsUseCase(betService);
 
     const clerkService = new ClerkService();
-    const authController = new AuthController(registerUserUseCase, userService, clerkService);
+    const jwtService = new JwtService();
+    const authController = new AuthController(registerUserUseCase, userService, clerkService, jwtService);
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
     const router = Router();
 
     router.post('/auth/register', asyncHandler((req, res) => authController.register(req, res)));
+    router.post('/auth/login', asyncHandler((req, res) => authController.login(req, res)));
     router.get('/auth/me', protectedRoute, asyncHandler((req, res) => authController.me(req as any, res)));
 
     router.post('/wallets/deposit', protectedRoute, asyncHandler((req, res) => walletController.deposit(req as any, res)));
@@ -77,6 +81,28 @@ describe('API expanded integration tests (isolated)', () => {
 
     app = server.getExpressApp();
   });
+
+  const makeRegisterPayload = (email: string, username: string) => ({
+    email,
+    password: PASSWORD,
+    username,
+    firstName: 'Int',
+    lastName: 'Test',
+  });
+
+  const registerAndLogin = async (label: string) => {
+    const payload = makeRegisterPayload(`${label}@example.com`, `${label}_user`);
+    const registerRes = await request(app).post('/api/auth/register').send(payload);
+    expect(registerRes.status).toBe(201);
+
+    const loginRes = await request(app).post('/api/auth/login').send({
+      email: payload.email,
+      password: payload.password,
+    });
+    expect(loginRes.status).toBe(200);
+    expect(loginRes.body.data).toBeDefined();
+    return loginRes.body.data;
+  };
 
   afterEach(() => {
     // nothing to teardown currently because in-memory repos are GC'd
@@ -117,19 +143,12 @@ describe('API expanded integration tests (isolated)', () => {
 
   test('deposit validation error returns 400 VALIDATION_ERROR', async () => {
     // register user
-    const r = await request(app).post('/api/auth/register').send({
-      email: 'val@example.com',
-      password: 'Password123!',
-      username: 'val_user',
-      firstName: 'Val',
-      lastName: 'User',
-    });
-    const userId = r.body.data.user.id;
+    const loginData = await registerAndLogin('val');
 
     // Missing amount
     const res = await request(app)
       .post('/api/wallets/deposit')
-      .set('Authorization', `Bearer ${userId}`)
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ currency: 'BRL' });
 
     expect(res.status).toBe(400);
@@ -140,19 +159,12 @@ describe('API expanded integration tests (isolated)', () => {
   });
 
   test('withdraw with insufficient funds returns 400 BAD_REQUEST and message', async () => {
-    const r = await request(app).post('/api/auth/register').send({
-      email: 'insuff@example.com',
-      password: 'Password123!',
-      username: 'insuff_user',
-      firstName: 'Insuff',
-      lastName: 'User',
-    });
-    const userId = r.body.data.user.id;
+    const loginData = await registerAndLogin('insuff');
 
     // Ensure wallet exists but no deposit
     const res = await request(app)
       .post('/api/wallets/withdraw')
-      .set('Authorization', `Bearer ${userId}`)
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 500.0, currency: 'BRL', description: 'Attempt overdraw' });
 
     expect(res.status).toBe(400);
@@ -162,29 +174,22 @@ describe('API expanded integration tests (isolated)', () => {
   });
 
   test('wallet history returns correct transaction count and total', async () => {
-    const r = await request(app).post('/api/auth/register').send({
-      email: 'hist@example.com',
-      password: 'Password123!',
-      username: 'hist_user',
-      firstName: 'Hist',
-      lastName: 'User',
-    });
-    const userId = r.body.data.user.id;
+    const loginData = await registerAndLogin('hist');
 
     // two deposits
     await request(app)
       .post('/api/wallets/deposit')
-      .set('Authorization', `Bearer ${userId}`)
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 10, currency: 'BRL', description: 'd1' });
 
     await request(app)
       .post('/api/wallets/deposit')
-      .set('Authorization', `Bearer ${userId}`)
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 20, currency: 'BRL', description: 'd2' });
 
     const res = await request(app)
       .get('/api/wallets/history')
-      .set('Authorization', `Bearer ${userId}`)
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
       .query({ limit: 10, offset: 0 });
 
   expect(res.status).toBe(200);

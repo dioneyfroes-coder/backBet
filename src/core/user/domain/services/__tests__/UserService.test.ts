@@ -7,12 +7,13 @@ import { UserStatus } from '../../../types/user.types';
 describe('UserService', () => {
   let userService: UserService;
   let mockUserRepository: jest.Mocked<IUserRepository>;
-  let mockCreateUserInput: { email: string; username: string };
+  let mockCreateUserInput: { email: string; username: string; password: string };
 
   beforeEach(() => {
     mockCreateUserInput = {
       email: 'test@example.com',
       username: 'testuser',
+      password: 'Password123!',
     };
 
     mockUserRepository = {
@@ -44,6 +45,7 @@ describe('UserService', () => {
         'existing-id',
         new Email(mockCreateUserInput.email),
         'existingUser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -100,6 +102,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'oldusername',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -124,6 +127,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'oldusername',
+        'hashed-password',
         'SUSPENDED' as UserStatus,
         new Date(),
         new Date(),
@@ -146,6 +150,7 @@ describe('UserService', () => {
         userId,
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -171,6 +176,7 @@ describe('UserService', () => {
         userId,
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -179,6 +185,7 @@ describe('UserService', () => {
         'other-id',
         new Email(newEmail),
         'otheruser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -197,6 +204,7 @@ describe('UserService', () => {
         userId,
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'SUSPENDED' as UserStatus,
         new Date(),
         new Date(),
@@ -216,6 +224,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -244,6 +253,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'SUSPENDED' as UserStatus,
         new Date(),
         new Date(),
@@ -263,6 +273,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'PENDING_VERIFICATION' as UserStatus,
         new Date(),
         new Date(),
@@ -291,6 +302,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -309,6 +321,7 @@ describe('UserService', () => {
         userId,
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),
@@ -337,6 +350,7 @@ describe('UserService', () => {
         'test-id',
         new Email(email),
         'testuser',
+        'hashed-password',
         'ACTIVE' as UserStatus,
         new Date(),
         new Date(),

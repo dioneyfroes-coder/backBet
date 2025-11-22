@@ -9,6 +9,7 @@ import { createUserRepository, createWalletRepository } from '@/infrastructure/p
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { ClerkService } from '@/shared/services/ClerkService';
+import { JwtService } from '@/shared/services/JwtService';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { appConfig } from '@/shared/config/appConfig';
 
@@ -16,6 +17,7 @@ export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
   walletRepository?: IWalletRepository;
   clerkService?: ClerkService;
+  jwtService?: JwtService;
 };
 
 export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Router> {
@@ -42,6 +44,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   // Instanciar serviços
   const userService = new UserService(userRepository as any);
   const walletService = new WalletService(walletRepository as any);
+  const jwtService = deps.jwtService ?? new JwtService();
 
   // Use-cases
   const registerUserUseCase = new RegisterUser(userService, walletService);
@@ -50,7 +53,8 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   const authController = new AuthController(
     registerUserUseCase,
     userService,
-    deps.clerkService ?? new ClerkService()
+    deps.clerkService ?? new ClerkService(),
+    jwtService
   );
 
   /**

@@ -1,4 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { JwtService } from '@/shared/services/JwtService';
+
+console.log('AuthMiddleware module loaded');
 
 export interface AuthenticatedRequest extends Request {
   auth?: {
@@ -14,23 +17,32 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-/**
- * Middleware que garante autenticação válida
- * Se não houver token ou for inválido, retorna 401
- * 
- * Em desenvolvimento, aceita qualquer header Authorization com userId
- */
+const jwtService = new JwtService();
+
+const looksLikeJwt = (token: string): boolean => token.split('.').length === 3;
+
 export const protectedRoute = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // Tentar obter do Clerk (produção)
     let userId = req.auth?.userId;
+    const authHeader = req.headers.authorization;
 
-    // Fallback para desenvolvimento: tentar extrair do header
+    if (!userId && authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      console.log('protectedRoute token parts', token.split('.').length);
+      if (looksLikeJwt(token)) {
+        const decoded = jwtService.verifyAccessToken(token);
+        console.log('protectedRoute decoded userId', decoded.userId);
+        userId = decoded.userId;
+        req.auth = {
+          userId,
+          sessionId: decoded.sessionId,
+        };
+      }
+    }
+
     if (!userId && process.env.NODE_ENV === 'development') {
-      const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
-        // Em desenvolvimento, o token pode ser simplesmente o userId
-        userId = authHeader.substring(7);
+        userId = authHeader.substring(7).trim();
         if (!req.auth) {
           req.auth = {
             userId,
@@ -62,13 +74,8 @@ export const protectedRoute = async (req: AuthenticatedRequest, res: Response, n
   }
 };
 
-/**
- * Middleware opcional de autenticação
- * Se existir token, valida, mas não bloqueia se não existir
- */
 export const optionalAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // Clerk já popula req.auth se houver token
     next();
   } catch (error) {
     next();

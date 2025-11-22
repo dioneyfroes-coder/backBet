@@ -14,6 +14,7 @@ export interface IUserDTO {
 export interface ICreateUserDTO {
   email: string;
   username: string;
+  password: string;
   currency?: string;
 }
 

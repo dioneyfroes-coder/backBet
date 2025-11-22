@@ -63,16 +63,18 @@ export class ApiServer {
       process.env.CLERK_SECRET_KEY?.includes('sk_test');
 
     if (isDevModeWithMockKeys) {
-      // Em desenvolvimento com valores mock, pular Clerk
+      // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
       this.app.use((req: Request, res: Response, next: NextFunction) => {
-        // Se tiver Authorization header, extrai userId
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
-          const userId = authHeader.substring(7);
-          (req as any).auth = {
-            userId,
-            sessionId: 'dev-session',
-          };
+          const token = authHeader.substring(7).trim();
+          const looksLikeJwt = token.split('.').length === 3;
+          if (!looksLikeJwt) {
+            (req as any).auth = {
+              userId: token,
+              sessionId: 'dev-session',
+            };
+          }
         }
         next();
       });

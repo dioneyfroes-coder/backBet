@@ -1,10 +1,14 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
-import { RegisterDTO, LoginDTO, RefreshTokenDTO, LogoutDTO, RegisterDTOType } from '../dtos/AuthDTOs';
+import { RegisterDTO, LoginDTO, RefreshTokenDTO } from '../dtos/AuthDTOs';
 import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { UserService } from '@core/user/domain/services/UserService';
+import { User } from '@core/user/domain/entities/User';
 import { ClerkService } from '@/shared/services/ClerkService';
+import { JwtService } from '@/shared/services/JwtService';
+import type { User as ClerkUser } from '@clerk/clerk-sdk-node';
+import { randomUUID } from 'crypto';
 
 /**
  * Controller de autenticação
@@ -14,7 +18,8 @@ export class AuthController extends BaseController {
   constructor(
     private registerUserUseCase: RegisterUser,
     private userService: UserService,
-    private clerkService: ClerkService
+    private clerkService: ClerkService,
+    private jwtService: JwtService
   ) {
     super();
   }
@@ -63,6 +68,7 @@ export class AuthController extends BaseController {
     const result = await this.registerUserUseCase.execute({
       email: payload.email,
       username: payload.username,
+      password: payload.password,
       currency: 'BRL',
     });
 
@@ -133,12 +139,22 @@ export class AuthController extends BaseController {
       return this.unauthorized(res, 'Email ou senha inválidos');
     }
 
-    // Validar senha (integrar com Clerk depois)
-    // Por enquanto, retornar erro informando que precisa usar OAuth
-    return this.internalError(
-      res,
-      'Login deve ser feito via Clerk OAuth. Use o SDK de front-end.'
-    );
+    const isPasswordValid = await this.userService.comparePassword(user, payload.password);
+    if (!isPasswordValid) {
+      return this.unauthorized(res, 'Email ou senha inválidos');
+    }
+
+    const sessionId = randomUUID();
+    const accessToken = this.jwtService.signAccessToken(user.id, sessionId);
+    const refreshToken = this.jwtService.signRefreshToken(user.id, sessionId);
+
+    const clerkUser = await this.clerkService.getUser(user.id);
+
+    return this.ok(res, {
+      accessToken,
+      refreshToken,
+      user: this.buildUserProfile(user, clerkUser),
+    });
   }
 
   /**
@@ -170,10 +186,25 @@ export class AuthController extends BaseController {
    */
   async refreshToken(req: Request, res: Response): Promise<Response> {
     const payload = this.validateSchema(RefreshTokenDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Refresh token inválido');
+    }
+    const decoded = this.jwtService.verifyRefreshToken(payload.refreshToken);
 
-    // Implementar refresh token com Clerk
+    const user = await this.userService.findById(decoded.userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    const sessionId = decoded.sessionId || randomUUID();
+    const accessToken = this.jwtService.signAccessToken(user.id, sessionId);
+    const refreshToken = this.jwtService.signRefreshToken(user.id, sessionId);
+    const clerkUser = await this.clerkService.getUser(user.id);
+
     return this.ok(res, {
-      message: 'Refresh via Clerk OAuth necessário',
+      accessToken,
+      refreshToken,
+      user: this.buildUserProfile(user, clerkUser),
     });
   }
 
@@ -220,20 +251,7 @@ export class AuthController extends BaseController {
     }
 
     const clerkUser = await this.clerkService.getUser(userId);
-
-    const defaultNames = user.username.split('.');
-    const defaultFirstName = defaultNames[0] ?? '';
-    const defaultLastName = defaultNames[1] ?? '';
-
-    return this.ok(res, {
-      id: user.id,
-      email: user.email.value,
-      username: clerkUser?.username ?? user.username,
-      firstName: clerkUser?.firstName ?? defaultFirstName,
-      lastName: clerkUser?.lastName ?? defaultLastName,
-      status: user.status,
-      createdAt: user.createdAt,
-    });
+    return this.ok(res, this.buildUserProfile(user, clerkUser));
   }
 
   /**
@@ -264,5 +282,20 @@ export class AuthController extends BaseController {
     return this.ok(res, {
       message: 'Logout realizado com sucesso',
     });
+  }
+
+  private buildUserProfile(user: User, clerkUser: ClerkUser | null) {
+    const defaultNames = user.username.split('.');
+    const defaultFirstName = defaultNames[0] ?? '';
+    const defaultLastName = defaultNames[1] ?? '';
+    return {
+      id: user.id,
+      email: user.email.value,
+      username: clerkUser?.username ?? user.username,
+      firstName: clerkUser?.firstName ?? defaultFirstName,
+      lastName: clerkUser?.lastName ?? defaultLastName,
+      status: user.status,
+      createdAt: user.createdAt,
+    };
   }
 }

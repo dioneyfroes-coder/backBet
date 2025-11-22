@@ -21,6 +21,7 @@ describe('UserService', () => {
     const validInput = {
       email: 'test@example.com',
       username: 'testuser',
+      password: 'Password123!',
     };
 
     it('deve criar um novo usuário com sucesso', async () => {
@@ -42,6 +43,7 @@ describe('UserService', () => {
           '1',
           new Email('test@example.com'),
           'existinguser',
+          'hashed-password',
           'ACTIVE',
           new Date(),
           new Date(),
@@ -60,6 +62,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE',
         new Date(),
         new Date(),
@@ -84,6 +87,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'SUSPENDED',
         new Date(),
         new Date(),
@@ -100,6 +104,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'PENDING_VERIFICATION',
         new Date(),
         new Date(),
@@ -124,6 +129,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE',
         new Date(),
         new Date(),
@@ -140,6 +146,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'oldusername',
+        'hashed-password',
         'ACTIVE',
         new Date(),
         new Date(),
@@ -166,6 +173,7 @@ describe('UserService', () => {
         '1',
         new Email('test@example.com'),
         'testuser',
+        'hashed-password',
         'SUSPENDED',
         new Date(),
         new Date(),
@@ -184,6 +192,7 @@ describe('UserService', () => {
         '1',
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE',
         new Date(),
         new Date(),
@@ -211,6 +220,7 @@ describe('UserService', () => {
         '1',
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'SUSPENDED',
         new Date(),
         new Date(),
@@ -227,13 +237,14 @@ describe('UserService', () => {
         '1',
         new Email('old@example.com'),
         'testuser',
+        'hashed-password',
         'ACTIVE',
         new Date(),
         new Date(),
       );
       mockUserRepository.findById.mockResolvedValue(user);
       mockUserRepository.findByEmail.mockResolvedValue(
-        new User('2', new Email('new@example.com'), 'otheruser', 'ACTIVE', new Date(), new Date()),
+        new User('2', new Email('new@example.com'), 'otheruser', 'hashed-password', 'ACTIVE', new Date(), new Date()),
       );
 
       await expect(userService.changeEmail('1', 'new@example.com')).rejects.toThrow(

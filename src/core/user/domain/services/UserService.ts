@@ -3,6 +3,8 @@ import { IUserRepository } from '../repositories/IUserRepository';
 import { Email } from '../value-objects/Email';
 import { ICreateUserDTO } from '../../types/user.types';
 import { AppError } from '@/shared/errors/AppError';
+import { userConfig } from '../../config/user-config';
+import bcrypt from 'bcryptjs';
 
 export class UserService {
   constructor(private userRepository: IUserRepository) {}
@@ -13,10 +15,17 @@ export class UserService {
       throw new AppError('CONFLICT', 'Email already exists', 409);
     }
 
+    if (!input.password || input.password.length < userConfig.minPasswordLength) {
+      throw new AppError('BAD_REQUEST', `Senha deve ter pelo menos ${userConfig.minPasswordLength} caracteres`, 400);
+    }
+
+    const passwordHash = await bcrypt.hash(input.password, 12);
+
     const user = new User(
       crypto.randomUUID(),
       new Email(input.email),
       input.username,
+      passwordHash,
       'PENDING_VERIFICATION',
       new Date(),
       new Date(),
@@ -71,5 +80,9 @@ export class UserService {
 
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepository.findByEmail(email);
+  }
+
+  async comparePassword(user: User, password: string): Promise<boolean> {
+    return bcrypt.compare(password, user.passwordHash);
   }
 }

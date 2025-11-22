@@ -13,6 +13,7 @@ import {
   createWithdrawalRequestRepository,
 } from '@/infrastructure/persistence/factory';
 import { ClerkService } from '@/shared/services/ClerkService';
+import { JwtService } from '@/shared/services/JwtService';
 
 export type ApiRoutesDeps = {
   auth?: AuthRoutesDeps;
@@ -25,6 +26,7 @@ export type ApiRoutesDeps = {
 export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router> {
   const router = Router();
   const clerkService = new ClerkService();
+  const jwtService = new JwtService();
 
   const userRepository = deps.auth?.userRepository || deps.user?.userRepository || (await createUserRepository());
   const walletRepository =
@@ -38,6 +40,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
     userRepository,
     walletRepository,
     clerkService,
+    jwtService,
     ...(deps.auth || {}),
   }));
   router.use('/users', await createUserRoutes({

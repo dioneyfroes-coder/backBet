@@ -58,4 +58,10 @@ export const appConfig = {
 				'Você excedeu o limite de refresh tokens. Tente novamente em breve.',
 		},
 	},
+	jwt: {
+		secret: process.env.JWT_SECRET || 'backbet-secret',
+		issuer: process.env.JWT_ISSUER || 'backbet',
+		accessTokenExpiration: process.env.JWT_EXPIRATION || '15m',
+		refreshTokenExpiration: process.env.JWT_REFRESH_EXPIRATION || '7d',
+	},
 };

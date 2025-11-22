@@ -23,6 +23,7 @@ describe('RegisterUser Use Case', () => {
     const input = {
       email: 'test@example.com',
       username: 'testuser',
+      password: 'Password123!',
       currency: 'BRL',
     };
 
@@ -30,6 +31,7 @@ describe('RegisterUser Use Case', () => {
       'test-id',
       new Email(input.email),
       input.username,
+      'hashed-password',
       'PENDING_VERIFICATION',
       new Date(),
       new Date(),
@@ -55,12 +57,14 @@ describe('RegisterUser Use Case', () => {
     const input = {
       email: 'test@example.com',
       username: 'testuser',
+      password: 'Password123!',
     };
 
     const mockUser = new User(
       'test-id',
       new Email(input.email),
       input.username,
+      'hashed-password',
       'PENDING_VERIFICATION',
       new Date(),
       new Date(),
@@ -87,6 +91,7 @@ describe('RegisterUser Use Case', () => {
       registerUser.execute({
         email: 'test@example.com',
         username: 'testuser',
+        password: 'Password123!',
       }),
     ).rejects.toThrow(error);
 
@@ -98,6 +103,7 @@ describe('RegisterUser Use Case', () => {
       'test-id',
       new Email('test@example.com'),
       'testuser',
+      'hashed-password',
       'PENDING_VERIFICATION',
       new Date(),
       new Date(),
@@ -111,6 +117,7 @@ describe('RegisterUser Use Case', () => {
       registerUser.execute({
         email: 'test@example.com',
         username: 'testuser',
+        password: 'Password123!',
       }),
     ).rejects.toThrow(error);
   });

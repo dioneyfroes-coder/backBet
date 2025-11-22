@@ -12,6 +12,7 @@ export class MongooseUserRepository implements IUserRepository {
         email: user.email.toString(),
         username: user.username,
         status: user.status,
+        passwordHash: user.passwordHash,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       };
@@ -100,6 +101,7 @@ export class MongooseUserRepository implements IUserRepository {
       data._id!.toString(),
       new Email(data.email),
       data.username,
+      data.passwordHash,
       data.status,
       data.createdAt,
       data.updatedAt

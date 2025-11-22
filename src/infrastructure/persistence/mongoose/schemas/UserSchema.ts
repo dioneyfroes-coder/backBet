@@ -4,6 +4,7 @@ export interface IUserDocument extends Document {
   _id: mongoose.Types.ObjectId;
   email: string;
   username: string;
+  passwordHash: string;
   firstName?: string;
   lastName?: string;
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED';
@@ -26,6 +27,10 @@ export const userSchema = new Schema<IUserDocument>(
       unique: true,
       minlength: 3,
       maxlength: 50,
+    },
+    passwordHash: {
+      type: String,
+      required: true,
     },
     firstName: {
       type: String,
