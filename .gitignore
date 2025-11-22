@@ -41,8 +41,3 @@ lerna-debug.log*
 
 # Build files
 /build
-
-# Dependencies lock files
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
