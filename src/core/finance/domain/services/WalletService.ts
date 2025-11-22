@@ -20,10 +20,7 @@ export class WalletService {
   }
 
   async deposit(userId: string, amount: number): Promise<Wallet> {
-    const wallet = await this.walletRepository.findByUserId(userId);
-    if (!wallet) {
-      throw new AppError('NOT_FOUND', 'Wallet not found', 404);
-    }
+    const wallet = await this.ensureWalletExists(userId);
     wallet.deposit(amount);
     await this.walletRepository.update(wallet);
     return wallet;
@@ -38,12 +35,38 @@ export class WalletService {
   }
 
   async withdraw(userId: string, amount: number): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId);
+    wallet.withdraw(amount);
+    await this.walletRepository.update(wallet);
+    return wallet;
+  }
+
+  async lock(userId: string, amount: number): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId);
+    wallet.lock(amount);
+    await this.walletRepository.update(wallet);
+    return wallet;
+  }
+
+  async unlock(userId: string, amount: number): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId);
+    wallet.unlock(amount);
+    await this.walletRepository.update(wallet);
+    return wallet;
+  }
+
+  async withdrawLocked(userId: string, amount: number): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId);
+    wallet.withdrawLocked(amount);
+    await this.walletRepository.update(wallet);
+    return wallet;
+  }
+
+  private async ensureWalletExists(userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new AppError('NOT_FOUND', 'Wallet not found', 404);
     }
-    wallet.withdraw(amount);
-    await this.walletRepository.update(wallet);
     return wallet;
   }
 }

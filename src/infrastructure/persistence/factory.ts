@@ -35,3 +35,21 @@ export async function createEventRepository() {
   const { EventRepository } = await import('@/core/betting/domain/repositories/EventRepository');
   return new EventRepository();
 }
+
+export async function createCreditPackageRepository() {
+  if (USE_MONGOOSE) {
+    const { MongooseCreditPackageRepository } = await import('./mongoose/repositories/MongooseCreditPackageRepository');
+    return new MongooseCreditPackageRepository();
+  }
+  const { CreditPackageRepository } = await import('@/core/finance/domain/repositories/CreditPackageRepository');
+  return new CreditPackageRepository();
+}
+
+export async function createWithdrawalRequestRepository() {
+  if (USE_MONGOOSE) {
+    const { MongooseWithdrawalRequestRepository } = await import('./mongoose/repositories/MongooseWithdrawalRequestRepository');
+    return new MongooseWithdrawalRequestRepository();
+  }
+  const { WithdrawalRequestRepository } = await import('@/core/finance/domain/repositories/WithdrawalRequestRepository');
+  return new WithdrawalRequestRepository();
+}

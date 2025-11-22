@@ -81,6 +81,16 @@ export class Wallet {
     this._balance += amount;
   }
 
+  withdrawLocked(amount: number): void {
+    if (amount <= 0) {
+      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    }
+    if (this._lockedBalance < amount) {
+      throw new AppError('BAD_REQUEST', 'Insufficient locked funds', 400);
+    }
+    this._lockedBalance -= amount;
+  }
+
   toDTO(): IWalletDTO {
     return {
       userId: this._userId,

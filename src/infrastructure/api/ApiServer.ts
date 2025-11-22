@@ -2,8 +2,11 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import { clerkMiddleware, requireAuth } from '@clerk/express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from '../config/swagger';
+import { AppError } from '@/shared/errors/AppError';
+import { appConfig } from '@/shared/config/appConfig';
 
 export class ApiServer {
   private app: Express;
@@ -26,6 +29,29 @@ export class ApiServer {
         credentials: true,
       })
     );
+
+    // Rate limiting (alto para ambiente de desenvolvimento)
+    if (appConfig.rateLimit.enabled) {
+      this.app.use(
+        rateLimit({
+          windowMs: appConfig.rateLimit.windowMs,
+          limit: appConfig.rateLimit.max,
+          standardHeaders: true,
+          legacyHeaders: false,
+          message: appConfig.rateLimit.message,
+          handler: (req: Request, _res, next: NextFunction) => {
+            next(
+              new AppError('RATE_LIMIT_EXCEEDED', appConfig.rateLimit.message, 429, {
+                limit: appConfig.rateLimit.max,
+                windowMs: appConfig.rateLimit.windowMs,
+                path: req.path,
+                method: req.method,
+              }),
+            );
+          },
+        }),
+      );
+    }
 
     // Body parsing
     this.app.use(express.json({ limit: '10mb' }));

@@ -71,6 +71,43 @@ O serviço é intencionalmente pequeno e delega persistência para o repositóri
 - O `BetService` (domínio de apostas) consome o `IWalletService` para debitar reservas quando uma aposta é colocada e creditar ganhos na resolução.
 - Contratos claros (`IWalletService`, `IWalletRepository`) permitem testar e mockar o comportamento nas camadas superiores.
 
+## Sistema de créditos e pacotes
+
+- A `Wallet` representa créditos (pontos digitais) que imitam dinheiro real dentro do universo BackBet. Cada unidade de `balance` equivale a um ponto que pode ser usado para apostar.
+- Os clientes adquirem esses créditos em duas modalidades:
+	- **Compra individual:** chama `WalletService.deposit(userId, amount)` e registra uma transação `deposit` com o valor comprado.
+	- **Pacotes de créditos:** definem `amount`, `bonus` e `label` (ex.: "Pacote Bronze"). O sistema ainda utiliza `deposit`, mas registra metadados extras para saber se o valor veio de um pacote, facilitando contabilidade e promoções futuras.
+- É recomendado criar um modelo adicional (`CreditPackage`, `PurchaseOrder` ou domínio similar) que represente preço, bônus e limites de validade; essa entidade vive em `src/core/finance/domain` ou em um subdomínio específico de vendas.
+
+## Fluxo de apostas com pontos
+
+- Antes de aceitar uma aposta, o `BetService` chama `wallet.lock(stake)` para mover os pontos do `balance` para o `lockedBalance`, garantindo que o valor não possa ser usado em outra aposta enquanto estiver ativa.
+- Resolução da aposta:
+	- Se perdida ou cancelada: `wallet.unlock(amount)` retorna os pontos reservados para o `balance`.
+	- Se vencedora: `wallet.deposit(payout)` credita o prêmio diretamente no `balance`, podendo incluir retornos maiores do que o valor bloqueado.
+- Essas operações são orquestradas pelo `WalletService` para garantir que cada mutação passe pelos mesmos gateways de validação e persistência.
+
+## Saques e solicitações administrativas
+
+- O saque é feito mediante uma **solicitação de saque** (ex.: `WithdrawalRequest`) criada pelo usuário com `requestedAmount`. Essa entidade registra `userId`, `amount`, `status` (`pending`, `approved`, `rejected`), `createdAt` e dados bancários.
+- Somente após análise manual e aprovação da administração, o sistema executa `wallet.withdraw(amount)` para refletir a saída real de créditos. Esse saque gera uma transação do tipo `withdraw` no histórico.
+- Separar o pedido de saque da alteração do saldo evita que chamadas automáticas ao `withdraw` sejam executadas antes da confirmação da transferência financeira real.
+- A área financeira pode guardar evidências (comprovantes) e alimentar relatórios de compliance usando o mesmo histórico de transações do `Wallet`.
+
+## Seed de pacotes de crédito
+
+- Há um script de seed (`npm run seed:credit-packages`) que popula o catálogo inicial de pacotes, garantindo que o sistema tenha pacotes padrão quando conectado a Mongo ou a um repositório em memória.
+- O script (`src/scripts/seedCreditPackages.ts`) utiliza o `createCreditPackageRepository` para aplicar um `upsert` e registrar as datas de criação/atualização sem gerar duplicatas por código.
+- Use esse recurso sempre que iniciar uma nova instância ou quiser repor rapidamente os pacotes promocionais básicos (Bronze, Prata, Ouro e VIP).
+
+## APIs e painel administrativo
+
+- Lista de pacotes: `GET /api/finance/packages` retorna os pacotes ativos com `totalCredits`, `price` e metadados.
+- Compra de pacote: `POST /api/finance/packages/:packageId/purchase` chama `PurchaseCreditPackage` e credita o valor total (`base + bônus`). O endpoint devolve a carteira atualizada e os dados do pacote adquirido.
+- Solicitação de saque: `POST /api/finance/withdrawal-requests` cria um `WithdrawalRequest` pendente e bloqueia os créditos necessários. Use esse endpoint em conjunto com formulários administrativos para solicitar análise humana.
+- Histórico de solicitações: `GET /api/finance/withdrawal-requests` e `PATCH /api/finance/withdrawal-requests/:requestId` expõem o status para o usuário e permitem que um admin aprove ou rejeite a operação.
+- A aprovação chama `withdrawLocked` para deduzir os créditos bloqueados após a transferência real; a rejeição chama `unlock` e retorna os pontos ao saldo.
+
 ## Exemplo de uso (Fluxo simplificado)
 
 1. Usuário solicita `createWallet({ userId, currency })` → `WalletService` valida e persiste via `IWalletRepository`.

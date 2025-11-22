@@ -174,6 +174,18 @@ export async function createUserRepository(): Promise<IUserRepository> {
 - Produção usa MongoDB para durabilidade
 - Futuras implementações (Redis, PostgreSQL) podem ser adicionadas facilmente
 
+## Configuração e Variáveis de Ambiente
+
+A aplicação carrega as configurações no arranque via `shared/config/env.ts`, expondo `dotenv` e reduzindo ruído quando não há arquivo `.env`. O objeto `appConfig` expõe:
+
+- `appConfig.env`: `NODE_ENV` (default `development`).
+- `appConfig.server.port`: porta HTTP (default `3000`).
+- `appConfig.rateLimit`: parâmetros do rate limiter:
+   - `windowMs`, `max`, `message` e `enabled` são lidos de `RATE_LIMIT_*` (consultar o `.env.example`).
+   - Os valores padrão são altos (5000 requisições/10 min) para não bloquear o desenvolvimento, mas você pode reduzir para staging/produção.
+
+Todos os middlewares usam `appConfig`, garantindo um único ponto de controle para `helmet`, `cors`, `rateLimit`, autenticação e possibilidades futuras (logging, observabilidade). A documentação e os checklists agora mencionam explicitamente as variáveis `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` e `RATE_LIMIT_MESSAGE`.
+
 ### MongoDB/Mongoose (`src/infrastructure/persistence/mongoose/`)
 
 **Schemas:**
