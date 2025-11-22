@@ -251,7 +251,8 @@ Phase 1: Teste Completo (CONCLUÍDO)
   - [ ] Autenticação JWT
   - [ ] Validação de requisições
   - [ ] Tratamento de erros global
-  - [ ] Rate limiting
+  - [ ] Rate limiting (variáveis `RATE_LIMIT_*` definidas no `.env` leem-se via `shared/config/appConfig`, mantemos limites altos enquanto estamos em dev)
+  - [ ] `createApiRouter` já compõe `/auth`, `/users`, `/wallets`, `/bets` e `/finance` usando repositórios compartilhados e o novo `ClerkService` quando há uma `CLERK_API_KEY` válida
 
 - [ ] **Banco de Dados** - Implementar persistência
   - [ ] Setup PostgreSQL/MongoDB
@@ -361,10 +362,12 @@ Próximas Ações Prioritárias
 ### 1️⃣ Imediato (Esta Semana)
 ```
 [ ] Implementar API REST controllers
-    ├─ AuthController (login, registro)
-    ├─ UserController (perfil, atualização)
-    ├─ WalletController (saldo, depósito, saque)
-    └─ BetController (listar, criar, resolver)
+  ├─ AuthController (login, registro)
+  ├─ UserController (perfil, atualização)
+  ├─ WalletController (saldo, depósito, saque)
+  └─ BetController (listar, criar, resolver)
+
+[ ] Atualizar documentação da API (OpenAPI + docs/API_DOCS.mdx) para refletir o roteador compartilhado e o `ClerkService`
 
 [ ] Setup do banco de dados
     ├─ PostgreSQL connection

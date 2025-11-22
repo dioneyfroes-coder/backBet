@@ -1,7 +1,8 @@
 // src/server.ts
 
-import 'dotenv/config';
+import { appConfig } from '@/shared/config/appConfig';
 import { createApiServer } from './infrastructure/api/ApiServer';
+import { createApiRouter } from './infrastructure/api/routes';
 import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from './infrastructure/persistence/mongoose/config';
 // route creators are loaded dynamically (may be async factories)
 
@@ -11,7 +12,7 @@ import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from './infrastru
 async function main() {
   try {
     // Obter port da variável de ambiente
-    const port = parseInt(process.env.PORT || '3000', 10);
+    const port = appConfig.server.port;
 
     // Se estiver usando persistência Mongoose, conectar ao MongoDB antes de iniciar
     if (process.env.USE_MONGOOSE_PERSISTENCE === 'true') {
@@ -39,18 +40,9 @@ async function main() {
     // Registrar health checks
     apiServer.registerHealthCheck();
 
-    // Registrar rotas (rotas agora podem ser assíncronas pois usam factories)
-  const authRoutes = await import('./infrastructure/api/routes/authRoutes').then(m => m.createAuthRoutes());
-  apiServer.registerRoutes(authRoutes, '/auth');
-
-  const userRoutes = await import('./infrastructure/api/routes/userRoutes').then(m => m.createUserRoutes());
-  apiServer.registerRoutes(userRoutes, '/users');
-
-  const walletRoutes = await import('./infrastructure/api/routes/walletRoutes').then(m => m.createWalletRoutes());
-  apiServer.registerRoutes(walletRoutes, '/wallets');
-
-  const betRoutes = await import('./infrastructure/api/routes/betRoutes').then(m => m.createBetRoutes());
-  apiServer.registerRoutes(betRoutes, '/bets');
+    // Registrar rotas via roteador agregado
+    const apiRouter = await createApiRouter();
+    apiServer.registerRoutes(apiRouter);
 
     // TODO: Registrar outras rotas
     // const betRoutes = createBetRoutes();

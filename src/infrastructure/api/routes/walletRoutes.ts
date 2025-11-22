@@ -8,15 +8,19 @@ import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
+import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
  */
-export async function createWalletRoutes(): Promise<Router> {
+export type WalletRoutesDeps = {
+  walletRepository?: IWalletRepository;
+};
+
+export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  // Injeção de dependências via factory
-  const walletRepository = await createWalletRepository();
+  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository as any);
 
   // Use-cases

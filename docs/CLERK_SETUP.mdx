@@ -103,6 +103,12 @@ Express Server
   │  └─ Usa userId para buscar dados do usuário
   │
   └─ Response com dados
+
+### Integração no Backend
+
+O servidor BackBet agora mantém um `ClerkService` em `src/shared/services` que encapsula `@clerk/clerk-sdk-node`. Ao detectar uma chave secreta real (`CLERK_API_KEY` ou `CLERK_SECRET_KEY` sem o prefixo `sk_test`), ele instancia o cliente e sincroniza usuários registrados (via `/api/auth/register`) com o Clerk, além de enriquecer `/api/auth/me` com o nome real retornado pelo Clerk.
+
+Quando o backend roda apenas com chaves de teste (`sk_test`), o `ClerkService` permanece inoperante para evitar 401s; a API continua funcionando e as rotas de teste usam os repositórios em memória. O roteador principal `createApiRouter` já compõe `/auth`, `/users`, `/wallets`, `/bets` e `/finance`, permitindo que o `ClerkService` seja compartilhado em toda a stack sem re-instanciá-lo em cada test.
 ```
 
 ---

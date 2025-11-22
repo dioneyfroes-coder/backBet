@@ -6,13 +6,22 @@ import { protectedRoute } from '../middleware/AuthMiddleware';
 import { UserService } from '../../../core/user/domain/services/UserService';
 import { WalletService } from '../../../core/finance/domain/services/WalletService';
 import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
+import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
+import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { ClerkService } from '@/shared/services/ClerkService';
 
-export async function createAuthRoutes(): Promise<Router> {
+export type AuthRoutesDeps = {
+  userRepository?: IUserRepository;
+  walletRepository?: IWalletRepository;
+  clerkService?: ClerkService;
+};
+
+export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
   // Instanciar repositórios via factory
-  const userRepository = await createUserRepository();
-  const walletRepository = await createWalletRepository();
+  const userRepository = deps.userRepository ?? (await createUserRepository());
+  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
 
   // Instanciar serviços
   const userService = new UserService(userRepository as any);
@@ -22,7 +31,11 @@ export async function createAuthRoutes(): Promise<Router> {
   const registerUserUseCase = new RegisterUser(userService, walletService);
 
   // Instanciar controller
-  const authController = new AuthController(registerUserUseCase, userService);
+  const authController = new AuthController(
+    registerUserUseCase,
+    userService,
+    deps.clerkService ?? new ClerkService()
+  );
 
   /**
    * POST /auth/register

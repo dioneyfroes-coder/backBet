@@ -7,15 +7,19 @@ import { createUserRepository } from '@/infrastructure/persistence/factory';
 import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile';
 import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
 import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
+import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
 
 /**
  * Factory para criar rotas de usuário com injeção de dependências
  */
-export async function createUserRoutes(): Promise<Router> {
+export type UserRoutesDeps = {
+  userRepository?: IUserRepository;
+};
+
+export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  // Injeção de dependências (factory seleciona Mongoose ou em-memória)
-  const userRepository = await createUserRepository();
+  const userRepository = deps.userRepository ?? (await createUserRepository());
   const userService = new UserService(userRepository as any);
 
   // Use-cases

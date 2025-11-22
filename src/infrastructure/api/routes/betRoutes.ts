@@ -9,13 +9,22 @@ import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseC
 import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
 import { GetUserBetsUseCase } from '@core/betting/aplication/use-cases/GetUserBetsUseCase';
 import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEventUseCase';
+import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
+import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
+import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 
-export async function createBetRoutes(): Promise<Router> {
+export type BetRoutesDeps = {
+  betRepository?: IBetRepository;
+  eventRepository?: IEventRepository;
+  walletRepository?: IWalletRepository;
+};
+
+export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const betRepository = await createBetRepository();
-  const eventRepository = await createEventRepository();
-  const walletRepository = await createWalletRepository();
+  const betRepository = deps.betRepository ?? (await createBetRepository());
+  const eventRepository = deps.eventRepository ?? (await createEventRepository());
+  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository as any);
 
   const betService = new BetService(betRepository as any, eventRepository as any, walletService);

@@ -22,6 +22,7 @@ import { GetUserBetsUseCase } from '../core/betting/aplication/use-cases/GetUser
 import { GetEventBetsUseCase } from '../core/betting/aplication/use-cases/GetEventUseCase';
 import { asyncHandler } from '../infrastructure/api/middleware/asyncHandler';
 import { protectedRoute } from '../infrastructure/api/middleware/AuthMiddleware';
+import { ClerkService } from '@/shared/services/ClerkService';
 
 describe('API expanded integration tests (isolated)', () => {
   let app: express.Express;
@@ -53,7 +54,8 @@ describe('API expanded integration tests (isolated)', () => {
     const getUserBetsUC = new GetUserBetsUseCase(betService);
     const getEventBetsUC = new GetEventBetsUseCase(betService);
 
-    const authController = new AuthController(registerUserUseCase, userService);
+    const clerkService = new ClerkService();
+    const authController = new AuthController(registerUserUseCase, userService, clerkService);
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 

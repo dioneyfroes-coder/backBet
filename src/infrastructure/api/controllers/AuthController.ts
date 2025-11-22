@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { RegisterDTO, LoginDTO, RefreshTokenDTO, LogoutDTO, RegisterDTOType } from '../dtos/AuthDTOs';
 import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { UserService } from '@core/user/domain/services/UserService';
+import { ClerkService } from '@/shared/services/ClerkService';
 
 /**
  * Controller de autenticação
@@ -12,7 +13,8 @@ import { UserService } from '@core/user/domain/services/UserService';
 export class AuthController extends BaseController {
   constructor(
     private registerUserUseCase: RegisterUser,
-    private userService: UserService
+    private userService: UserService,
+    private clerkService: ClerkService
   ) {
     super();
   }
@@ -63,6 +65,21 @@ export class AuthController extends BaseController {
       username: payload.username,
       currency: 'BRL',
     });
+
+    if (this.clerkService.isEnabled()) {
+      try {
+        await this.clerkService.createUser({
+          externalUserId: result.user.id,
+          email: payload.email,
+          username: payload.username,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          password: payload.password,
+        });
+      } catch (error) {
+        console.warn('Failed to sync user with Clerk:', error);
+      }
+    }
 
     return this.created(res, {
       message: 'Usuário registrado com sucesso',
@@ -202,12 +219,18 @@ export class AuthController extends BaseController {
       return this.notFound(res, 'Usuário não encontrado');
     }
 
+    const clerkUser = await this.clerkService.getUser(userId);
+
+    const defaultNames = user.username.split('.');
+    const defaultFirstName = defaultNames[0] ?? '';
+    const defaultLastName = defaultNames[1] ?? '';
+
     return this.ok(res, {
       id: user.id,
       email: user.email.value,
-      username: user.username,
-      firstName: user.username.split('.')[0], // TODO: Adicionar firstName/lastName ao User
-      lastName: user.username.split('.')[1] || '',
+      username: clerkUser?.username ?? user.username,
+      firstName: clerkUser?.firstName ?? defaultFirstName,
+      lastName: clerkUser?.lastName ?? defaultLastName,
       status: user.status,
       createdAt: user.createdAt,
     });
