@@ -247,24 +247,38 @@ Phase 1: Teste Completo (CONCLUÍDO)
 - [x] CI/CD pipeline validado
 
 ️ Phase 2: Infraestrutura (EM PROGRESSO)
-- [ ] **API REST** - Implementar controllers e rotas
-  - [ ] Autenticação JWT
-  - [ ] Validação de requisições
-  - [ ] Tratamento de erros global
-  - [ ] Rate limiting (variáveis `RATE_LIMIT_*` definidas no `.env` leem-se via `shared/config/appConfig`, mantemos limites altos enquanto estamos em dev)
-  - [ ] Endpoints `/auth/register`, `/auth/login` e `/auth/refresh` agora possuem limitadores específicos que usam `AUTH_REGISTER_RATE_LIMIT_*`, `AUTH_LOGIN_RATE_LIMIT_*` e `AUTH_REFRESH_RATE_LIMIT_*` para evitar abusos
-  - [ ] `createApiRouter` já compõe `/auth`, `/users`, `/wallets`, `/bets` e `/finance` usando repositórios compartilhados e o novo `ClerkService` quando há uma `CLERK_API_KEY` válida
+- [x] **API REST** - Implementar controllers e rotas
+  - [x] Autenticação JWT
+  - [x] Validação de requisições
+  - [x] Tratamento de erros global
+  - [x] Rate limiting (configurado via `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` e `RATE_LIMIT_MESSAGE` em `.env`; `shared/config/appConfig` centraliza a leitura e usa valores altos para dev)
 
-- [ ] **Banco de Dados** - Implementar persistência
-  - [ ] Setup MongoDB
-  - [ ] Migrations
-  - [ ] Seeders de dados
-  - [ ] Índices e otimizações
+- [x] **Banco de Dados** - Implementar persistência
+  - [x] Setup PostgreSQL/MongoDB (MongoDB provisório)
+  - [x] Migrations (`npm run migration:run` aplica os arquivos em `src/infrastructure/database/migrations` e persiste o estado em `migrations`)
+  - [x] Seeders de dados (`npm run seed:initial` usa os use-cases para criar usuários e carteiras iniciais em dev)
+  - [x] Índices e otimizações (a migration acima cria índices únicos; novos scripts podem expandir a cobertura conforme o modelo evoluir)
 
-- [ ] **Cache** - Implementar camada de cache
-  - [ ] Redis setup
-  - [ ] Estratégia de invalidação
-  - [ ] Métricas de hit/miss
+  > Estrutura atual: `src/infrastructure/database` contém o runner de migrações e as declarações versionadas; os scripts em `src/scripts` cobrem a execução (`runMigrations.ts`) e a criação de seeds iniciais (`seedInitialData.ts`). Quando migrarmos para PostgreSQL, basta adicionar novas implementações e ajustar a factory para retomar os mesmos scripts.
+
+- [x] **Cache** - Implementar camada de cache
+  - [x] Redis setup (adicionar conexão/configuração em `shared/config/cacheConfig.ts`, criar cliente único em `infrastructure/cache/RedisClient.ts` e expor helpers sob `infrastructure/cache/cacheHooks.ts`)
+  - [x] Estratégia de invalidação (TTL configurável para saldo `CACHE_USER_BALANCE_TTL_SECONDS`, histórico `CACHE_WALLET_HISTORY_TTL_SECONDS` e odds `CACHE_ODDS_TTL_SECONDS`; use `flushWalletCache` após depósitos/saques)
+  - [x] Métricas de hit/miss (expor `RedisClient.getMetrics()` para dashboards e usar `cacheHooks` nos serviços mais críticos: saldo, histórico, odds, perfil)
+
+  > Detalhe inicial: cachear saldo (`walletBalance`), histórico (`walletHistory`), perfil de usuário (`userProfile`) e odds de evento (`event:odds`). TTL padrão é controlado pelas env vars listadas no `.env`. O cliente redis também pode ser usado para outros casos de leitura intensiva antes de migrar para PostgreSQL.
+
+  > Próximo passo: documentar a arquitetura de cache (Redis + TTL) e, quando a estrutura estiver pronta, implementar um middleware simples que aproveite o cache antes de consultar o banco ou repositórios.
+
+  ### Arquitetura de Cache Redis + TTL
+  - `shared/config/cacheConfig.ts` centraliza as variáveis: `REDIS_URL`, `CACHE_TTL_SECONDS`, `CACHE_USER_BALANCE_TTL_SECONDS`, `CACHE_WALLET_HISTORY_TTL_SECONDS` e `CACHE_ODDS_TTL_SECONDS`. Valores inválidos caem para padrões seguros (15s para saldo, 30s para histórico, 10s para odds).
+  - Cache pode ser desativado via `CACHE_ENABLED=false` (o valor padrão respeita o ambiente de teste, que já desliga o cache). Isso evita travar a suíte quando o Redis não estiver disponível.
+  - `RedisClient` expõe `get`, `set`, `del`, `cached` e `getMetrics()` (hits/misses/writes/errors) e mantém uma única instância reutilizável; problemas reportam via `console.warn` para não bloquear a API.
+  - Helpers em `infrastructure/cache/cacheHooks.ts` (`cacheWalletBalance`, `cacheWalletHistory`, `cacheUserProfile`, `cacheEventOdds`, `flushWalletCache`) encapsulam chaves (`cacheKeys`) e TTLs (`cacheTTL`). Use-os nos serviços mais críticos e invoque `flushWalletCache` após qualquer operação que altere saldo/histórico.
+  - `cacheHooks` também expõem `flushUserProfileCache` e `flushEventOddsCache`. `UserController` usa `cacheUserProfile` para `GET /users/me` e invalida o cache após atualizações/email; `BetController` usa `cacheEventOdds` para `/bets/event/:eventId` e faz `flushEventOddsCache` após place/cancel.
+  - O middleware `cacheResponse` (implementado em `infrastructure/api/middleware/cacheMiddleware.ts`) corta a rota quando o Redis já tem o payload completo; `walletRoutes.ts` aplica `cacheWalletBalanceMiddleware` e `cacheWalletHistoryMiddleware` aos endpoints `GET /wallets/me` e `GET /wallets/history`. A mesma middleware pode ser reutilizada para odds/perfil quando as rotas estiverem prontas.
+  - Cache de leitura é preenchido automaticamente pela resposta da API (o middleware intercepta `res.json`), removendo a necessidade de duplicar loaders em cada controller.
+  - `/health/cache` responde com `{ cache: { enabled, metrics } }` usando `RedisClient.getMetrics()` para dar visibilidade dos hits/misses para observabilidade.
 
 - [ ] **Autenticação** - Implementar segurança
   - [ ] JWT tokens
@@ -272,8 +286,8 @@ Phase 1: Teste Completo (CONCLUÍDO)
   - [ ] Recuperação de senha
   - [ ] MFA (two-factor)
 
-Phase 3: Testes Adicionais (EM PROGRESSO)
-- [ ] Testes de integração API
+- Phase 3: Testes Adicionais (EM PROGRESSO)
+- [x] Testes de integração API
 - [ ] Testes de carga (k6/Artillery)
 - [ ] Testes de segurança
 - [ ] Testes de performance
@@ -363,12 +377,10 @@ Próximas Ações Prioritárias
 ### 1️⃣ Imediato (Esta Semana)
 ```
 [ ] Implementar API REST controllers
-  ├─ AuthController (login, registro)
-  ├─ UserController (perfil, atualização)
-  ├─ WalletController (saldo, depósito, saque)
-  └─ BetController (listar, criar, resolver)
-
-[ ] Atualizar documentação da API (OpenAPI + docs/API_DOCS.mdx) para refletir o roteador compartilhado e o `ClerkService`
+    ├─ AuthController (login, registro)
+    ├─ UserController (perfil, atualização)
+    ├─ WalletController (saldo, depósito, saque)
+    └─ BetController (listar, criar, resolver)
 
 [ ] Setup do banco de dados
     ├─ PostgreSQL connection

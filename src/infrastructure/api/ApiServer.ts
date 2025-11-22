@@ -7,6 +7,8 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from '../config/swagger';
 import { AppError } from '@/shared/errors/AppError';
 import { appConfig } from '@/shared/config/appConfig';
+import { cacheConfig } from '@/shared/config/cacheConfig';
+import { redisClient } from '@/infrastructure/cache/RedisClient';
 
 export class ApiServer {
   private app: Express;
@@ -148,6 +150,16 @@ export class ApiServer {
     this.app.get('/readiness', (_req: Request, res: Response) => {
       // Adicionar validações de dependências aqui depois
       res.status(200).json({ ready: true });
+    });
+
+    this.app.get('/health/cache', (_req: Request, res: Response) => {
+      res.status(200).json({
+        cache: {
+          enabled: cacheConfig.enabled,
+          metrics: cacheConfig.enabled ? redisClient.getMetrics() : null,
+        },
+        timestamp: new Date().toISOString(),
+      });
     });
   }
 

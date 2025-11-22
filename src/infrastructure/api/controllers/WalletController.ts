@@ -6,6 +6,7 @@ import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
+import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
 
 /**
  * Controller de carteiras
@@ -139,6 +140,7 @@ export class WalletController extends BaseController {
 
     // Realiza o depósito via serviço (pode lançar se houver erro)
     const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
+    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
 
     return this.created(res, {
       message: 'Depósito realizado com sucesso',
@@ -225,6 +227,7 @@ export class WalletController extends BaseController {
 
     // Realiza o saque via serviço (pode lançar se houver erro)
     const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
+    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
 
     return this.created(res, {
       message: 'Saque realizado com sucesso',

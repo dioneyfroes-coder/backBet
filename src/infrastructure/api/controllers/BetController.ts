@@ -7,6 +7,7 @@ import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseC
 import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
 import { GetUserBetsUseCase } from '@core/betting/aplication/use-cases/GetUserBetsUseCase';
 import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEventUseCase';
+import { cacheEventOdds, flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
 
 /**
  * Controller de apostas
@@ -48,8 +49,12 @@ export class BetController extends BaseController {
     const { eventId } = req.params;
     if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
 
-    const bets = await this.getEventBetsUseCase.execute(eventId);
-    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+    const response = await cacheEventOdds(eventId, async () => {
+      const bets = await this.getEventBetsUseCase.execute(eventId);
+      return { bets: bets.map((b) => b.toJSON()) };
+    });
+
+    return this.ok(res, response);
   }
 
   /**
@@ -91,6 +96,7 @@ export class BetController extends BaseController {
       amount: payload.amount,
       type: payload.type as any,
     });
+    await flushEventOddsCache(payload.eventId).catch((error) => console.warn('Failed to flush event cache', error));
     return this.created(res, bet.toJSON());
   }
 
@@ -132,6 +138,7 @@ export class BetController extends BaseController {
 
     const payload = this.validateSchema(CancelBetDTO, { betId: req.params.betId, ...(req.body || {}) }) as CancelBetDTOType;
     const bet = await this.cancelBetUseCase.execute({ betId: payload.betId, reason: payload.reason ?? '', canceledBy: userId });
+    await flushEventOddsCache(bet.eventId).catch((error) => console.warn('Failed to flush event cache', error));
     return this.ok(res, bet.toJSON());
   }
 
