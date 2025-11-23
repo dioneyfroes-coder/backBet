@@ -6,32 +6,57 @@ slug: "/docs/contributing"
 
 # Guia de Contribuição
 
-As contribuições para o projeto BackBet são restritas aos colaboradores autorizados.
+As contribuições para o projeto BackBet são restritas aos colaboradores autorizados. Este guia consolida o fluxo esperado, padrões de qualidade e exigências de segurança para manter o repositório saudável.
 
-## Regras básicas
+## Fluxo de Trabalho
 
-1. O acesso ao repositório é concedido apenas a membros da equipe técnica.
-2. Toda modificação deve seguir o fluxo de revisão:
-   - criar branch descritiva
-   - abrir pull request
-   - aguardar revisão de pelo menos um revisor técnico
-3. Commits devem seguir convenções claras:
-   - `feat:` novas funcionalidades  
-   - `fix:` correções  
-   - `docs:` documentação  
-   - `refactor:` melhorias internas  
-   - `chore:` ajustes não relacionados a código  
-4. É proibido incluir dados sensíveis:
-   - tokens  
-   - credenciais  
-   - arquivos .env  
-   - informações de produção  
+1. **Atualize a base**: `git checkout main && git pull origin main`.
+2. **Abra uma branch descritiva** seguindo o padrão `feature/<dominio>-<slug>` ou `fix/<issue>-<slug>` (ex.: `feature/betting-cache-hooks`).
+3. **Implemente e commite** usando mensagens convencionais (ver abaixo).
+4. **Sincronize com a main** antes de abrir o PR (`git pull --rebase origin main`).
+5. **Abra o Pull Request** preenchendo o template padrão, descrevendo contexto, testes executados e verificações de observabilidade.
+6. **Aguarde revisão técnica**; nenhum PR é mesclado sem ao menos 1 aprovação.
 
-## Qualidade e padrões
+## Commits e Branches
 
-- Manter código seguro, limpo e auditável.
-- Priorizar consistência entre serviços.
-- Testes são obrigatórios para novas funcionalidades backend.
-- Testes devem ser feitos de forma compusiva.
+- Use prefixos do Conventional Commits: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `revert`.
+- Commits devem focar em uma unidade lógica. Prefira mensagens no imperativo ("add Redis cache busting").
+- Não faça force-push na branch principal. Em branches de feature, force-push apenas se combinado com quem revisa.
 
-Dúvidas ou necessidade de acesso devem ser enviadas para a liderança técnica.
+## Checklist de Qualidade
+
+Execute e copie para o PR o resultado dos seguintes comandos (na ordem):
+
+```bash
+npm run lint
+npm run test:coverage
+npm run build
+npm run format
+```
+
+- `npm run dev` deve subir sem erros, expondo `/health`, `/readiness` e `/metrics`.
+- Novas migrations, seeds ou scripts precisam estar documentados em `docs/` e referenciados no README/Quickstart.
+- Se o cache ou tracing estiverem envolvidos, mencione como validar (`CACHE_ENABLED`, `TRACING_ENABLED`).
+
+## Testes e Cobertura
+
+- Todo novo caso de uso precisa de testes (unitários ou integração leve). Use os repositórios in-memory quando não for essencial tocar Mongo.
+- Para workflows que dependem de Mongo/Redis reais, utilize os helpers de teste (`mongoMockHelper`, `redisTestClient`) ou configure containers nos pipelines.
+- Garanta que o Jest passe limpo (`npm test`). Falhas intermitentes devem ser abertas como issues antes do merge.
+- Atualize snapshots e dados seeds quando alterar contratos das rotas ou DTOs.
+
+## Documentação e Observabilidade
+
+- Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_DOCS`, `docs/OBSERVABILITY`, `docs/QUICKSTART`).
+- Mantenha exemplos de payloads e env vars consistentes (ex.: `CACHE_ENABLED`, `TRACING_ENABLED`, `RATE_LIMIT_*`).
+- Adicione métricas/logs/traços quando implementar novos fluxos críticos. Documente brevemente no PR onde encontrar esses sinais.
+
+## Segurança e Compliance
+
+- **Nunca** commite arquivos `.env`, chaves, tokens, dumps ou dados de produção.
+- Sanitize logs/prints antes de anexar a PRs ou issues.
+- Dependências novas devem passar por `npm audit` e ter justificativa no PR se houver riscos médios/altos.
+
+## Dúvidas
+
+Em caso de bloqueios, abra um tópico no canal interno de plataforma ou contate a liderança técnica. A aprovação de acesso adicional ao repositório segue o processo padrão da equipe de segurança.

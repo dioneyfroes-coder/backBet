@@ -5,7 +5,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
  */
 const swaggerOptions = {
   definition: {
-    openapi: '3.0.0',
+    openapi: '3.1.0',
     info: {
       title: 'BackBet API',
       version: '1.0.0',
@@ -20,11 +20,11 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000',
+        url: 'http://localhost:3000/api',
         description: 'Desenvolvimento',
       },
       {
-        url: 'https://api.backbet.com',
+        url: 'https://api.backbet.com/api',
         description: 'Produção',
       },
     ],

@@ -6,172 +6,137 @@ slug: "/docs/mongodb-setup"
 
 # MongoDB Setup Guide
 
-Este guia descreve como configurar o MongoDB para o projeto BackBet.
+> O MongoDB é opcional em desenvolvimento, porém obrigatório para ambientes que exigem persistência durável. Este guia explica como habilitar/desabilitar o Mongoose, configurar ambientes locais/Atlas e diagnosticar falhas.
 
-## Opções de Setup
+## Quando habilitar Mongo?
 
-### 1. MongoDB Local (Recomendado para Desenvolvimento)
+- **DEV rápido / testes unitários**: mantenha `USE_MONGOOSE_PERSISTENCE=false` para usar os repositórios in-memory (resetam a cada boot, CI fica mais leve).
+- **Homologação/produção**: defina `USE_MONGOOSE_PERSISTENCE=true` e providencie um Mongo real. O `server.ts` chamará `connectMongoDB()` antes de subir o Express e registrará handlers de shutdown para `disconnectMongoDB()`.
+- **Testes automatizados que precisam de banco**: use containers (Docker/Compose) ou Atlas M0 e exponha `MONGODB_URI` durante o job.
 
-#### Pré-requisitos
-- MongoDB Community Server instalado ([download](https://www.mongodb.com/try/download/community))
-- Ou usando Homebrew (macOS):
-  ```bash
-  brew install mongodb-community
-  brew services start mongodb-community
-  ```
+## Variáveis essenciais
 
-#### Configuração
+| Variável | Obrigatória quando | Exemplo | Observações |
+| --- | --- | --- | --- |
+| `USE_MONGOOSE_PERSISTENCE` | Sempre | `true` / `false` | Escolhe entre repositórios Mongo ou memória. |
+| `MONGODB_URI` | `USE_MONGOOSE_PERSISTENCE=true` ou `NODE_ENV=production` | `mongodb://localhost:27017/backbet-dev` | Pode incluir parâmetros (`retryWrites=true&w=majority`). |
+| `MONGODB_DB_NAME` | `USE_MONGOOSE_PERSISTENCE=true` | `backbet-dev` | Default: `backbet-dev`. Em Atlas use `backbet-prod`. |
+| `NODE_ENV` | Sempre | `development` | Em `production` o loader falha se `MONGODB_URI` estiver vazio. |
 
-1. **Inicie o MongoDB:**
-   ```bash
-   mongod --dbpath /usr/local/var/mongodb
+> Alguns documentos antigos citam `MONGO_URL`; padronizamos `MONGODB_URI`. Se ambos estiverem presentes, priorize `MONGODB_URI`.
 
-   # Windows
-   "C:\Program Files\MongoDB\Server\6.0\bin\mongod.exe"
-   ```
+## Passo a passo para habilitar
 
-2. **Configure as variáveis de ambiente** (`.env`):
-   ```env
+1. Ajuste `.env`:
+   ```properties
+   USE_MONGOOSE_PERSISTENCE=true
+   MONGODB_URI=mongodb://localhost:27017/backbet-dev
    MONGODB_DB_NAME=backbet-dev
    ```
+2. Reinicie o servidor (`npm run dev`). O log deverá mostrar `✓ MongoDB connected to backbet-dev` antes do banner Express.
+3. Bata em `/readiness`: a resposta terá `checks.mongo.status: "up"` e o gauge `backbet_dependency_health{dependency="mongo"}` passa para `1`.
+4. Se quiser voltar ao modo in-memory, defina `USE_MONGOOSE_PERSISTENCE=false` e opcionalmente remova `MONGODB_URI`.
 
-3. **Valide a conexão:**
-   ```bash
-   ```
+## Opções de provisionamento
 
-### 2. MongoDB Atlas (Recomendado para Produção)
-
-#### Pré-requisitos
-- Conta MongoDB Atlas ([signup](https://www.mongodb.com/cloud/atlas/register))
-
-#### Configuração
-
-1. **Crie um novo projeto no Atlas:**
-   - Acesse [MongoDB Atlas](https://cloud.mongodb.com)
-   - Clique em "Create a new project"
-   - Defina um nome para o projeto
-
-2. **Crie um cluster:**
-   - Clique em "Build a Database"
-   - Escolha o tier (Free M0 é grátis para desenvolvimento)
-   - Selecione a região
-   - Clique em "Create"
-
-3. **Configure o acesso:**
-   - Vá para "Security" > "Database Access"
-   - Crie um novo usuário com senha forte
-   - Vá para "Security" > "Network Access"
-   - Adicione seu IP ou use `0.0.0.0/0` (menos seguro)
-
-4. **Obtenha a connection string:**
-   - Clique em "Connect"
-   - Escolha "Drivers"
-   - Copie a connection string
-   - Substitua `` pela senha do usuário
-
-5. **Configure as variáveis de ambiente** (`.env`):
-   ```env
-   MONGODB_DB_NAME=backbet-prod
-   ```
-
-## Variáveis de Ambiente
-
-| Variável | Descrição | Exemplo |
-|----------|-----------|---------|
-| `MONGODB_URI` | Connection string do MongoDB | `mongodb://localhost:27017` |
-| `MONGODB_DB_NAME` | Nome do banco de dados | `backbet-dev` |
-| `NODE_ENV` | Ambiente | `development`, `production`, `test` |
-
-## Testando a Conexão
-
-```typescript
-
-const config = getMongoDBConfig();
-await connectMongoDB(config);
-console.log('✓ MongoDB conectado com sucesso');
-```
-
-## Criar Índices
-
-Os índices são criados automaticamente através dos schemas Mongoose:
+### Mongo local via Docker (mais rápido)
 
 ```bash
-mongosh
-> use backbet-dev
-> db.users.getIndexes()
-> db.wallets.getIndexes()
-> db.bets.getIndexes()
+docker run -d --name backbet-mongo \
+  -p 27017:27017 \
+  -e MONGO_INITDB_DATABASE=backbet-dev \
+  mongo:7.0
+
+export USE_MONGOOSE_PERSISTENCE=true
+export MONGODB_URI="mongodb://localhost:27017/backbet-dev"
+npm run dev
 ```
 
-## Backup e Restore
+Para persistir dados use um volume: `-v ./data/mongo:/data/db`.
 
-### Backup Local
+### MongoDB Community (instalação nativa)
+
+| SO | Comando |
+| --- | --- |
+| macOS (Homebrew) | `brew install mongodb-community && brew services start mongodb-community` |
+| Linux (Debian/Ubuntu) | Siga a [documentação oficial](https://www.mongodb.com/docs/manual/administration/install-on-linux/) e habilite o serviço `mongod`. |
+| Windows | Instale o MSI oficial e execute `"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongod.exe" --dbpath C:\\data\\db`. |
+
+### MongoDB Atlas (staging/prod)
+
+1. Crie um projeto e um cluster (tier M10+ para produção, M0 serve para POCs).
+2. Em **Security → Database Access**, gere um usuário restrito ao database (`backbet-prod`).
+3. Em **Network Access**, autorize o IP fixo do servidor ou configure um VPC/peering.
+4. Copie a connection string (`mongodb+srv://<user>:<pass>@cluster.../backbet-prod?retryWrites=true&w=majority`).
+5. Atualize o `.env` e mantenha TLS (já incluso no `mongodb+srv`).
+6. Configure backups automáticos no Atlas (Snapshots + PITR se disponível).
+
+## Verificando a conexão
+
+```ts
+import { connectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
+
+async function smoke() {
+  const cfg = getMongoDBConfig();
+  await connectMongoDB(cfg);
+  console.log('✓ Mongo conectado');
+}
+```
+
+- `npm run test -- observabilityEndpoints` valida `/readiness` e garante que o ping do Mongo responde.
+- `mongosh "${MONGODB_URI}" --eval 'db.stats()'` é útil para validar o usuário e a conectividade sem rodar o app.
+
+## Índices e migrações
+
+- Os schemas Mongoose em `src/infrastructure/persistence/mongoose/schemas` declaram índices (`unique`, TTLs etc.). Ao conectar, o Mongoose sincroniza automaticamente (`Model.syncIndexes()` implícito).
+- Para conferir manualmente:
+  ```bash
+  mongosh "${MONGODB_URI}"
+  > db.users.getIndexes()
+  > db.wallets.getIndexes()
+  > db.bets.getIndexes()
+  ```
+- Mudanças estruturais relevantes devem vir acompanhadas de migrações (scripts `mongosh` ou `migrate-mongo`) e registro no changelog.
+
+## Backup & restore rápidos
 
 ```bash
-mongodump --db backbet-dev --out ./backup
+# Dump local
+mongodump --uri "$MONGODB_URI" --out ./backups/$(date +%Y%m%d)
 
-# Backup de uma collection
-mongodump --db backbet-dev --collection users --out ./backup
+# Restore em outra instância
+mongorestore --uri "mongodb://localhost:27017/backbet-restored" ./backups/20251123
 ```
 
-### Restore Local
-
-```bash
-mongorestore --db backbet-dev ./backup/backbet-dev
-
-# Restaurar uma collection
-mongorestore --db backbet-dev --collection users ./backup/backbet-dev/users.bson
-```
-
-### Backup MongoDB Atlas
-
-- Use o serviço de backup automático do Atlas
-- Configure snapshots automáticos na aba "Backup" do cluster
-- Use `mongodump` com connection string do Atlas para backups manuais
+- No Atlas, habilite Continuous Backup e defina alertas para falhas em snapshots.
+- Armazene dumps sensíveis em buckets privados; nunca commite arquivos `.bson`.
 
 ## Troubleshooting
 
-### Conexão Recusada
+| Sintoma | Análise | Correção |
+| --- | --- | --- |
+| `ECONNREFUSED 127.0.0.1:27017` | Serviço Mongo parado ou porta bloqueada | `docker start backbet-mongo` ou `brew services start mongodb-community` |
+| `MongoServerSelectionError: authentication failed` | Usuário/senha inválidos na URI | Recrie credenciais no Atlas e escape caracteres especiais (`@` → `%40`). |
+| `/readiness` marca `mongo` como `down` | Ping falhou ou `USE_MONGOOSE_PERSISTENCE=false` | Verifique `USE_MONGOOSE_PERSISTENCE`, logs `readiness_dependency` e conectividade de rede. |
+| `Topology was destroyed` após deploy | Conexão caiu sem retry | Certifique-se de que `retryWrites=true` e que a rede permite TCP keep-alive; reinicie `npm run dev`. |
+| Connection pool saturado | `maxPoolSize` baixo ou queries lentas | Ajuste `?maxPoolSize=50` e monitore `backbet_dependency_latency_ms`. |
 
-**Problema:** `ECONNREFUSED 127.0.0.1:27017`
+## Boas práticas
 
-**Solução:**
-```bash
-ps aux | grep mongod
+1. Sempre propague `USE_MONGOOSE_PERSISTENCE` + `MONGODB_URI` pelos ambientes (Docker Compose, pipelines CI, Helm chart).
+2. Use usuários distintos para leitura/escrita em produção (princípio do menor privilégio).
+3. Configure alertas de disco/latência no Atlas ou no provedor gerenciado.
+4. Não exponha o cluster a `0.0.0.0/0` em produção; prefira VPC peering ou VPN.
+5. Documente qualquer alteração de schema e sincronize com `docs/MONGOOSE_REPOSITORIES.mdx`.
 
-# Inicie o MongoDB
-mongod --dbpath /usr/local/var/mongodb
+## Próximos passos
 
-# Ou com Homebrew
-brew services start mongodb-community
-```
+1. Automatizar um script `npm run mongo:status` que testa `connectMongoDB()` isoladamente.
+2. Adicionar fixtures/migrations iniciais para ambientes de staging (usuário seed, carteira com saldo).
+3. Integrar backups com o pipeline (ex.: upload diário para S3 + retenção).
 
-### Autenticação Falhou
+## Referências úteis
 
-**Problema:** `error: authentication failed`
-
-**Solução:**
-- Verifique se o usuário existe no MongoDB Atlas
-- Valide a senha (sem caracteres especiais não escapados)
-- Escape caracteres especiais: `password@123` → `password%40123`
-
-### Connection Pool Esgotado
-
-**Problema:** `MongoServerSelectionError: connect ECONNREFUSED`
-
-**Solução:**
-- Aumente o pool size na connection string: `?maxPoolSize=50`
-- Verifique Network Access no MongoDB Atlas
-- Aguarde a criação completa do cluster
-
-## Próximos Passos
-
-1.
-2.  (se necessário)
-3.
-
-## Referências
-
-- [MongoDB Documentation](https://docs.mongodb.com/)
-- [Mongoose Documentation](https://mongoosejs.com/)
-- [MongoDB Best Practices](https://docs.mongodb.com/manual/administration/production-checklist/)
+- [MongoDB Manual](https://www.mongodb.com/docs/manual/)
+- [Atlas Quickstart](https://www.mongodb.com/docs/atlas/getting-started/)
+- [Mongoose Docs](https://mongoosejs.com/docs/guide.html)

@@ -6,316 +6,103 @@ slug: "/docs/mongoose-repositories"
 
 # Mongoose Repositories Integration Guide
 
-Este guia explica como integrar os repositórios Mongoose à sua aplicação BackBet.
+> Os repositórios Mongoose são plugáveis e espelham as interfaces de domínio (`IUserRepository`, `IWalletRepository`, etc.). Esta página mostra como ativar a persistência Mongo, quais arquivos importar e como manter a paridade com as versões in-memory.
 
-## Arquitetura
+## Visão geral da arquitetura
 
-Os repositórios Mongoose implementam as mesmas interfaces que os repositórios em memória, facilitando a substituição:
+1. **Domínio** define as interfaces (`src/core/**/domain/repositories/*`).
+2. **Factories** (`src/infrastructure/persistence/factory.ts`) escolhem entre as implementações in-memory e Mongo lendo `USE_MONGOOSE_PERSISTENCE`.
+3. **server.ts** conecta/desconecta o Mongo via `connectMongoDB()` / `disconnectMongoDB()` quando a flag está ativa.
+4. **Casos de uso/rotas** apenas importam as factories; portanto, alternar entre memória e Mongo não exige mudança de código.
 
 ```
-Domain Layer (Interfaces)
-  ↓
-Infrastructure Layer (Mongoose Implementation)
-  ↓
-Persistence Layer (MongoDB)
+Domain (interfaces) → Persistence factory → Mongoose repo → Schema → MongoDB
 ```
 
-## Repositórios Disponíveis
+## Matriz de repositórios
 
-### 1. MongooseUserRepository
+| Contexto | Interface | Implementação Mongo | Schema principal | Observações |
+| --- | --- | --- | --- | --- |
+| Usuários | `IUserRepository` | `src/infrastructure/persistence/mongoose/repositories/MongooseUserRepository.ts` | `schemas/UserSchema.ts` | Índices únicos em `email` e `username`; sincroniza IDs do Clerk. |
+| Carteiras | `IWalletRepository` | `MongooseWalletRepository.ts` | `schemas/WalletSchema.ts` | Mantém `transactions[]` embutidas; usa projeções para histórico paginado. |
+| Apostas | `IBetRepository` | `MongooseBetRepository.ts` | `schemas/BetSchema.ts` | Índices combinados por `status`, `userId`, `eventId`. |
+| Eventos | `IEventRepository` | *(in-memory apenas)* | — | Planejado para futura coleção. |
+| Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository.ts` | `schemas/CreditPackageSchema.ts` | Campos derivados (`bonusPercent`) calculados no domínio antes de persistir. |
+| Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository.ts` | `schemas/WithdrawalRequestSchema.ts` | Guarda audit trail (`approverId`, `approvedAt`). |
 
-Implementa `IUserRepository` para persistência de usuários.
+## Ativando/desativando Mongo
 
-**Métodos:**
-- `save(user: User): Promise` - Criar ou atualizar usuário
-- `findById(id: string): Promise` - Buscar por ID
-- `findByEmail(email: string): Promise` - Buscar por email
-- `update(user: User): Promise` - Atualizar usuário existente
+1. Defina no `.env`:
+   ```properties
+   USE_MONGOOSE_PERSISTENCE=true
+   MONGODB_URI=mongodb://localhost:27017/backbet-dev
+   MONGODB_DB_NAME=backbet-dev
+   ```
+2. Reinicie o servidor. `server.ts` conectará o Mongo antes de inicializar o `ApiServer` e registrará `SIGINT/SIGTERM` para `disconnectMongoDB()`.
+3. `create<User|Wallet|Bet|...>Repository()` passará a importar os módulos Mongoose dinamicamente (lazy import evita carregar schemas quando a flag está falsa).
+4. Para rodar em memória novamente, troque a flag para `false` e reinicie.
 
-**Exemplo:**
+## Padrões de implementação
 
-```typescript
+- **Mapeamento**: cada repositório possui helpers `toDomain` / `toPersistence`. Nunca manipule documentos diretamente na camada de aplicação.
+- **Lean queries**: leituras usam `.lean({ virtuals: true })` para reduzir custo de hidratação.
+- **Atualizações idempotentes**: `save()` aplica `findOneAndUpdate({ _id }, dto, { upsert: true })`, garantindo convergência com as regras do domínio.
+- **Erro padronizado**: violações de índice ou falhas inesperadas são convertidas para `AppError` (`CONFLICT`, `INTERNAL_SERVER_ERROR`). Use `AppError.isAppError` ao tratar em casos de uso.
+- **Data consistency**: timestamps (`createdAt`, `updatedAt`) são gerenciados pelo domínio; o schema apenas define defaults.
 
-// Criar usuário
-const user = new User({
+### Exemplo (User Repository)
+
+```ts
+const repo = await createUserRepository();
+
+const user = User.create({
   email: new Email('user@example.com'),
   username: 'john_doe',
   status: 'ACTIVE',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-}, 'user-id-123');
-
-await userRepository.save(user);
-
-// Buscar usuário
-const foundUser = await userRepository.findById('user-id-123');
-```
-
-### 2. MongooseWalletRepository
-
-Implementa `IWalletRepository` para persistência de carteiras e transações.
-
-**Métodos:**
-- `save(wallet: Wallet): Promise` - Criar carteira
-- `findByUserId(userId: string): Promise` - Buscar carteira de usuário
-- `update(wallet: Wallet): Promise` - Atualizar saldo
-- `delete(userId: string): Promise` - Deletar carteira
-- `getHistory(userId: string, limit?: number, offset?: number): Promise` - Histórico de transações
-
-**Exemplo:**
-
-```typescript
-
-// Criar carteira
-const wallet = new Wallet('user-id-123', 'BRL');
-wallet.deposit(1000);
-await walletRepository.save(wallet);
-
-// Buscar carteira
-const userWallet = await walletRepository.findByUserId('user-id-123');
-
-// Histórico de transações
-const { transactions, total } = await walletRepository.getHistory('user-id-123', 10, 0);
-console.log(`Total de transações: ${total}`);
-console.log(`Primeiras 10: ${transactions.length}`);
-```
-
-### 3. MongooseBetRepository
-
-Implementa `IBetRepository` para persistência de apostas.
-
-**Métodos:**
-- `create(bet: Bet): Promise` - Criar aposta
-- `update(bet: Bet): Promise` - Atualizar aposta
-- `findById(id: string): Promise` - Buscar por ID
-- `findByUserId(userId: string): Promise` - Apostas do usuário
-- `findByEventId(eventId: string): Promise` - Apostas do evento
-- `findByStatus(status: BetStatus): Promise` - Apostas por status
-- `findAll(filter?: {...}): Promise` - Listar com filtros
-- `exists(id: string): Promise` - Verificar existência
-- `delete(id: string): Promise` - Deletar aposta
-
-**Exemplo:**
-
-```typescript
-
-// Buscar apostas pendentes
-const pendingBets = await betRepository.findByStatus('PENDING');
-
-// Buscar apostas de um usuário
-const userBets = await betRepository.findByUserId('user-id-123');
-
-// Buscar com múltiplos filtros
-const filteredBets = await betRepository.findAll({
-  userId: 'user-id-123',
-  status: 'WON',
 });
-```
 
-## Integração com Dependency Injection
+await repo.save(user); // converte para schema e faz upsert
 
-Se usar um padrão de DI, configure os repositórios da seguinte forma:
-
-```typescript
-
+const fetched = await repo.findByEmail(user.email.value);
+if (!fetched) {
+  throw new AppError('NOT_FOUND', 'Usuário não encontrado', 404);
 }
 ```
 
-## Factory Pattern para Persistência
+## Testes e ambientes
 
-Crie uma factory que escolha entre em-memória e Mongoose baseado em variável de ambiente:
+| Cenário | Recomendação |
+| --- | --- |
+| Unit tests de casos de uso | Use os repositórios in-memory (flag `false`). Mantém testes rápidos e determinísticos. |
+| Integração/Mongo real | Suba Mongo com Docker ou Testcontainers, habilite a flag e rode `npm run test -- integration`. Limpe coleções com `dropDatabase()` antes de cada suite. |
+| CI | Evite habilitar Mongo a menos que o pipeline suba um container. Sem URI válido, `env.ts` interrompe o processo em produção. |
 
-```typescript
+## Índices e migrações
 
-const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
+- Schemas em `src/infrastructure/persistence/mongoose/schemas/**/*` definem índices via `schema.index(...)`. O Mongoose sincroniza automaticamente quando o app sobe, mas valide com `db.<collection>.getIndexes()` em ambientes críticos.
+- Mudanças grandes (novos campos obrigatórios, TTLs) devem vir acompanhadas de scripts em `scripts/migrations/<timestamp>.ts` ou instruções no runbook.
+- Revisite `docs/MONGODB_SETUP.mdx` antes de mexer em índices para garantir que os ambientes estão configurados.
 
-}
+## Troubleshooting rápido
 
-}
+| Sintoma | Causa provável | Mitigação |
+| --- | --- | --- |
+| `MongoDB connection failed` no boot | URI incorreta ou instância off-line | Verifique `MONGODB_URI`, teste com `mongosh`, confira se o container está ativo. |
+| `duplicate key error` ao salvar usuário/carteira | Índice único violado | Trate com `AppError('CONFLICT')`; execute `findByEmail`/`findByUserId` antes de salvar. |
+| `/readiness` retorna `mongo: down` | Flag habilitada mas banco indisponível | Observe os logs `readiness_dependency` e confirme firewall/Network Access no Atlas. |
+| `Topology was destroyed` em produção | Conexão foi encerrada abruptamente | Garanta `retryWrites=true` e que o cluster aceita keep-alive; reinicie o pod após instabilidades. |
 
-}
-```
+## Checklist para novos repositórios
 
-Use na aplicação:
-
-```typescript
-
-const userRepository = createUserRepository();
-const walletRepository = createWalletRepository();
-const betRepository = createBetRepository();
-
-// Usar normalmente - sem diferença de interface
-```
-
-## Esquemas MongoDB
-
-Os seguintes esquemas estão disponíveis:
-
-### User Schema
-
-```typescript
-  _id: ObjectId,
-  email: string (unique),
-  username: string (unique),
-  firstName?: string,
-  lastName?: string,
-  status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED',
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-**Índices:**
-- `email` (unique)
-- `username` (unique)
-
-### Wallet Schema
-
-```typescript
-  _id: ObjectId,
-  userId: string (unique, indexed),
-  balance: number (min: 0),
-  lockedBalance: number (min: 0),
-  currency: 'BRL' | 'USD' | 'EUR',
-  transactions: [
-    {
-      id: string,
-      type: 'DEPOSIT' | 'WITHDRAW' | 'LOCK' | 'UNLOCK',
-      amount: number,
-      description?: string,
-      createdAt: Date
-    }
-  ],
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-**Índices:**
-- `userId` (unique, indexed)
-- `transactions.createdAt` (para queries rápidas de histórico)
-
-### Bet Schema
-
-```typescript
-  _id: ObjectId,
-  userId: string (indexed),
-  eventId: string (indexed),
-  marketId: string,
-  oddId: string,
-  amount: number (min: 0.01),
-  odds: number (min: 1.0),
-  potentialReturn: number,
-  status: 'PENDING' | 'WON' | 'LOST' | 'CANCELED' (indexed),
-  type: 'SINGLE' | 'MULTIPLE',
-  currency: 'BRL' | 'USD' | 'EUR',
-  resolvedAt?: Date,
-  cancellationReason?: string,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-**Índices:**
-- `userId` (para queries por usuário)
-- `eventId` (para queries por evento)
-- `status` (para queries por status)
-- `createdAt` (para ordenação por data)
-
-## Tratamento de Erros
-
-Todos os repositórios lançam `AppError` com códigos padronizados:
-
-```typescript
-  const user = await userRepository.findById('invalid-id');
-  if (!user) {
-    // Não encontrado - retorna null, não lança erro
-  }
-} catch (error) {
-  if (error instanceof AppError) {
-    console.error(`[${error.code}] ${error.message}`);
-    // INTERNAL_SERVER_ERROR: Erro na conexão MongoDB
-    // NOT_FOUND: Recurso não encontrado
-    // CONFLICT: Violação de constraints (email/username duplicado)
-  }
-}
-```
-
-## Performance e Boas Práticas
-
-### 1. Índices
-
-Garanta que os índices estão criados:
-
-```bash
-> use backbet-dev
-> db.users.getIndexes()
-> db.wallets.getIndexes()
-> db.bets.getIndexes()
-```
-
-### 2. Paginação
-
-Para listas grandes, use pagination:
-
-```typescript
-const page = 1;
-const pageSize = 20;
-const skip = (page - 1) * pageSize;
-
-const bets = await betRepository.findAll({
-  userId: 'user-id-123',
-  status: 'PENDING'
-});
-// Aplicar slice no cliente ou modify método com skip/limit
-```
-
-### 3. Lean Queries
-
-Todas as queries usam `.lean()` para melhor performance em leitura:
-
-```typescript
-// Sem modificar a query de escrita
-```
-
-### 4. Transações (Futuro)
-
-Para operações multi-documento:
-
-```typescript
-// await session.startTransaction();
-// try {
-//   await userRepository.save(user);
-//   await walletRepository.save(wallet);
-//   await session.commitTransaction();
-// } catch (error) {
-//   await session.abortTransaction();
-// }
-```
-
-## Troubleshooting
-
-### Erro: "MongoDB connection failed"
-
-Verifique:
-1. MongoDB está rodando: `mongod --dbpath /usr/local/var/mongodb`
-2. MONGODB_URI correto no `.env`
-3. Network access no MongoDB Atlas
-
-### Erro: "duplicate key error"
-
-Significa violação de índice único. Verifique:
-- Email/username já existe (IUserRepository)
-- UserId já tem carteira (IWalletRepository)
-
-Use `findByEmail()` antes de criar novo usuário.
-
-### Erro: "The MongoClient instance has been closed"
-
-A conexão foi fechada. Verifique se `disconnectMongoDB()` foi chamado antes do tempo.
+- [ ] Interface de domínio definida em `core/<context>/domain/repositories`.
+- [ ] Schema criado em `infrastructure/persistence/mongoose/schemas` com índices explícitos.
+- [ ] Implementação adicionada à factory em `persistence/factory.ts`.
+- [ ] Testes cobrindo conversão domínio ↔ persistence.
+- [ ] Documentação atualizada aqui e no `docs/MONGODB_SETUP.mdx` se novos env vars forem necessários.
 
 ## Referências
 
-- [Mongoose Documentation](https://mongoosejs.com/)
-- [MongoDB Best Practices](https://docs.mongodb.com/manual/administration/production-checklist/)
--
+- `src/infrastructure/persistence/factory.ts`
+- `src/infrastructure/persistence/mongoose/repositories/*`
+- `docs/MONGODB_SETUP.mdx` (flags e provisionamento)
+- [Mongoose docs](https://mongoosejs.com/docs/guide.html)

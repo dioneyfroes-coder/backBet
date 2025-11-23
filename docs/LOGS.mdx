@@ -1,221 +1,160 @@
 ---
-title: "Log"
-description: "Histórico resumido de mudanças relevantes no projeto BackBet."
-slug: "/docs/changelog"
+title: "Logs Estruturados"
+description: "Guia completo de coleta, correlação e boas práticas de logging no BackBet."
+slug: "/docs/logs"
 ---
 
-# Changelog - 14 de Novembro de 2025
+# Logs estruturados — BackBet
 
-## Sprint 1 Phase 1 - Conclusão ✅
+> Esta página substitui o antigo changelog. Ela documenta como os logs são gerados, quais campos compõem cada entrada e como coletá-los em desenvolvimento, homologação e produção.
 
-### Correções Críticas Implementadas
+## Objetivos
 
-#### 1. **Carregamento de Variáveis de Ambiente**
-- **Arquivo**: `src/server.ts`
-- **Mudança**: Adicionado `import 'dotenv/config'` no topo
-- **Problema**: Clerk middleware estava tentando validar chaves mesmo em desenvolvimento
-- **Solução**: Carrega `.env` antes de inicializar o servidor
-- **Resultado**: ✅ Servidor inicia sem erros de autenticação
+- Garantir rastreabilidade ponta a ponta (request → log → métrica → trace).
+- Fornecer um formato único de log para análise em Loki, ELK ou CloudWatch.
+- Acelerar troubleshooting com campos obrigatórios (`requestId`, `userId`, `event`, `durationMs`).
 
-#### 2. **Middleware Condicional do Clerk**
-- **Arquivo**: `src/infrastructure/api/ApiServer.ts`
-- **Mudança**: Implementado detecção de modo desenvolvimento
-  ```typescript
-    process.env.NODE_ENV === 'development' &&
-    process.env.CLERK_SECRET_KEY?.includes('sk_test');
-  ```
-- **Problema**: Clerk era usado mesmo com chaves inválidas
-- **Solução**: Se em desenvolvimento com mock keys, usar middleware alternativo
-- **Resultado**: ✅ Desenvolvimento possível sem chaves Clerk reais
+## Arquitetura e arquivos relevantes
 
-#### 3. **Roteamento da API**
-- **Arquivo**: `src/infrastructure/api/ApiServer.ts` e `src/server.ts`
-- **Mudança**: Adicionado suporte a prefixos nas rotas
-  ```typescript
-  this.app.use('/api', router);
+| Responsabilidade | Arquivo |
+| --- | --- |
+| Geração/propagação de `requestId` + `AsyncLocalStorage` | `src/shared/observability/requestContext.ts` |
+| Middlewares `requestIdMiddleware` e `loggingMiddleware` | `src/infrastructure/api/ApiServer.ts` |
+| Serialização de erros e logs `request_error` | `src/infrastructure/api/ApiServer.ts#registerErrorHandler` |
+| Configuração dos endpoints `/health`, `/metrics`, `/readiness` (para correlação) | `src/infrastructure/api/ApiServer.ts` |
+| Documentação geral de observabilidade | `docs/OBSERVABILITY.mdx` |
 
-  // Depois
-  public registerRoutes(router: Router, prefix: string = ''): void {
-    this.app.use(`/api${prefix}`, router);
-  }
-  ```
-- **Problema**: Rotas não estavam acessíveis em `/api/auth/*`
-- **Solução**: Método `registerRoutes` agora aceita prefixo customizável
-- **Resultado**: ✅ Endpoints acessíveis em `/api/auth/register`, `/api/auth/me`, etc
+## Eventos emitidos automaticamente
 
-#### 4. **Middleware de Autenticação (Fallback)**
-- **Arquivo**: `src/infrastructure/api/middleware/AuthMiddleware.ts`
-- **Mudança**: Adicionado suporte a Bearer token em desenvolvimento
-  ```typescript
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      userId = authHeader.substring(7);
-    }
-  }
-  ```
-- **Problema**: Sem autenticação real, endpoints protegidos não funcionavam
-- **Solução**: Bearer token simples com userId como token em desenvolvimento
-- **Resultado**: ✅ Teste manual de endpoints protegidos possível
+| Evento | Nível | Quando acontece | Campos adicionais |
+| --- | --- | --- | --- |
+| `request_start` | `info` | Entrada no `loggingMiddleware` | `method`, `path`, `ip`, `userId` |
+| `request_end` | `info` | `res.finish` | `status`, `durationMs`, `contentLength` |
+| `request_error` | `error` | Middleware global captura `AppError` ou `Error` | `code`, `statusCode`, `details` |
+| `request_healthcheck` | `info` | Handlers de `/health*` | `endpoint`, `result`, `cacheEnabled` |
+| `readiness_dependency` | `warn`/`error` | Dependência caiu durante `/readiness` | `dependency`, `status`, `latencyMs`, `error` |
+| `startup` | `info` | `ApiServer.start()` | `port`, `swaggerUrl`, `env` |
 
-### Arquivos Modificados
+> Todos os eventos compartilham `timestamp` ISO, `requestId` (quando disponível) e `service: 'backbet-api'`.
 
-```diff
-+ import 'dotenv/config';
+## Formato padronizado
 
-src/infrastructure/api/ApiServer.ts
-- public registerRoutes(router: express.Router): void {
--   this.app.use('/api', router);
-- }
-+ public registerRoutes(router: express.Router, prefix: string = ''): void {
-+   const fullPath = `/api${prefix}`;
-+   this.app.use(fullPath, router);
-+ }
+Cada log é uma linha JSON, enviada para `stdout`/`stderr`.
 
-- if (process.env.NODE_ENV !== 'development' || ...) {
-+ const isDevModeWithMockKeys =
-+   process.env.NODE_ENV === 'development' &&
-+   process.env.CLERK_SECRET_KEY?.includes('sk_test');
-+ if (isDevModeWithMockKeys) {
+```json
+{
+  "level": "info",
+  "event": "request_end",
+  "timestamp": "2025-11-23T13:37:10.123Z",
+  "requestId": "req-1732369030123-abc123",
+  "method": "POST",
+  "path": "/api/auth/register",
+  "status": 201,
+  "durationMs": 128.42,
+  "userId": "user_2YQk",
+  "ip": "2804:14c:..."
+}
 ```
 
-### Testes Validados
+Campos obrigatórios: `level`, `event`, `timestamp`. Prefira snake-case apenas para campos herdados de payloads externos; demais campos usam camelCase.
 
-✅ **150/150 testes passando**
-✅ **100% de cobertura mantida**
-✅ **Build TypeScript: 0 erros**
-✅ **Servidor inicia sem erros**
+## Contexto e correlação
 
-### Endpoints Testados Manualmente
+- `requestId` vem do cabeçalho `X-Request-ID` ou é criado em `requestIdMiddleware` e propagado via `runWithRequestContext`.
+- `updateRequestContext` injeta `userId` assim que o middleware de autenticação resolve o usuário; o valor fica disponível em qualquer camada (use cases, repositórios) via `getRequestContext()`.
+- `traceId` aparece nos headers OTLP quando `TRACING_ENABLED=true`. Inclua `traceId` manualmente em logs específicos caso esteja instrumentando novas dependências externas.
+
+### Logs customizados em casos de uso
+
+```ts
+import { getRequestContext } from '@/shared/observability/requestContext';
+
+const ctx = getRequestContext();
+console.log(
+  JSON.stringify({
+    level: 'info',
+    event: 'wallet_deposit_completed',
+    requestId: ctx?.requestId,
+    userId: ctx?.userId,
+    amount: payload.amount,
+  }),
+);
+```
+
+Sempre serializamos manualmente para JSON para evitar diferenças entre runtimes e facilitar a ingestão no Loki.
+
+## Severidade e política de níveis
+
+| Nível | Uso permitido | Ações recomendadas |
+| --- | --- | --- |
+| `info` | Eventos esperados (start/end, mutações bem-sucedidas) | Mantido em todos os ambientes; base para métricas derivadas |
+| `warn` | Requisições atendidas, mas com fallback ou degradação (ex.: dependência `skipped`) | Abra issue se o volume aumentar em 5m │ configure alertas no Grafana |
+| `error` | Fluxos abortados, exceções capturadas, dependências fora do ar | Gatilho para incidentes; deve ter `code` ou `dependency` |
+| `fatal` | Reservado para falhas que derrubam o processo (não usado hoje) | Se necessário, integre com o orchestrator para reiniciar pods |
+
+## Coleta de logs por ambiente
+
+### Desenvolvimento
 
 ```bash
-curl http://localhost:3000/health
-→ {"status":"healthy",...}
+npm run dev | jq -c '.'
 
-Registrar usuário
-POST /api/auth/register
-→ 201 Created
-
-Obter dados autenticado
-GET /api/auth/me (com Bearer token)
-→ 200 OK com dados do usuário
-
-Logout
-POST /api/auth/logout (com Bearer token)
-→ 200 OK
+# filtrar apenas request_error
+npm run dev | grep 'request_error'
 ```
 
-### Documentação Atualizada
+- Use `LOG_PRETTY=true npm run dev` quando precisar de saída legível (utilize apenas localmente para não quebrar ingestão).
+- Combine com `curl -H "X-Request-ID: debug-123"` para testar correlação.
 
-1. **DEVELOPMENT_STATUS.md** - Status atual detalhado
-2. **QUICKSTART.md** - Atualizado com instruções para desenvolvimento sem Clerk
-3. **Este arquivo** - Changelog de mudanças
+### Homologação/Produção
 
----
+1. O contêiner escreve logs JSON em `stdout`/`stderr`.
+2. O runtime (Docker, Kubernetes) envia para o agente (Fluent Bit, Vector ou Promtail).
+3. Os agentes transmitem para o Loki / Elasticsearch definido em `reports/phase4/alerts.yaml`.
 
-O que Funciona Agora
-
-| Item | Status |
-|------|--------|
-| Servidor Express | ✅ Rodando em http://localhost:3000 |
-| Autenticação Dev | ✅ Bearer tokens funcionando |
-| Autenticação Prod | ✅ Clerk integration pronta |
-| API Auth | ✅ 5/5 endpoints funcionando |
-| Tests | ✅ 150/150 passando |
-| Coverage | ✅ 100% |
-| Build | ✅ 0 erros TypeScript |
-
----
-
-Próximas Tarefas
-
-### Phase 2 - User & Finance Controllers (Estimado: 2-3h)
-- [ ] `GET /api/users/me` - Obter perfil completo
-- [ ] `PATCH /api/users/me` - Atualizar dados do perfil
-- [ ] `PATCH /api/users/me/email` - Trocar email
-- [ ] `GET /api/wallets/me` - Consultar saldo
-- [ ] `POST /api/wallets/deposit` - Depositar
-- [ ] `POST /api/wallets/withdraw` - Sacar
-- [ ] E2E tests para fluxos completos
-
-### Phase 3 - Database Integration (Futuro)
-- [ ] Implementar PostgreSQL connection
-- [ ] Trocar in-memory repositories por database
-- [ ] Migrations
-- [ ] Connection pooling
-
----
-
-Como Reproduzir o Fluxo de Testes
+Comandos úteis:
 
 ```bash
-npm run build
+docker logs backbet-api -f | jq -c 'select(.event == "request_error")'
 
-# 2. Iniciar servidor
-npm start &
-
-# 3. Testar health
-curl http://localhost:3000/health
-
-# 4. Registrar
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@ex.com","firstName":"T","lastName":"U","username":"tu","password":"Pass123!"}'
-
-# 5. Copiar ID da resposta e usar como Bearer token
-
-# 6. Testar autenticação
-curl -H "Authorization: Bearer " http://localhost:3000/api/auth/me
-
-# 7. Parar servidor
-pkill -f "node dist/server.js"
+# Kubernetes
+kubectl logs deploy/backbet-api -n backbet --since=30m
 ```
 
----
+## Integração com métricas e tracing
 
-Resumo de Métricas
+- Os mesmos `requestId` e `userId` aparecem nos gauges `backbet_http_in_flight` (labels) e nos spans OTEL, permitindo pivotar entre painéis sem perder contexto.
+- O middleware de erro incrementa `backbet_http_errors_total` e emite `request_error`, garantindo que logs e métricas tenham contagens equivalentes.
+- Traces incluem atributos `log.level` e `log.event` quando o `DiagConsoleLogger` está em modo `debug` (`OTEL_DIAGNOSTIC_LOG_LEVEL=debug`).
 
-### Antes das Correções
-- ❌ Servidor não iniciava
-- ❌ Erro: "Publishable key is missing"
-- ❌ Endpoints retornavam 404
-- ❌ Autenticação não funcionava
+## Boas práticas para novos logs
 
-### Depois das Correções
-- ✅ Servidor inicia em < 1s
-- ✅ Modo development funciona sem Clerk
-- ✅ Todos endpoints acessíveis
-- ✅ Autenticação com Bearer tokens
-- ✅ 150/150 testes passando
-- ✅ 100% de cobertura
+1. Prefira objetos rasos (no máximo dois níveis) para simplificar queries no Loki.
+2. Redija `message` ou `event` em inglês curto e estável (`snake_case`).
+3. Não logue dados sensíveis (tokens, segredos, números completos de documentos). Mascarar é obrigatório (`****7890`).
+4. Inclua `elapsedMs` ou `latencyMs` sempre que medir uma chamada externa.
+5. Evite `console.log` fora do formato JSON; use `JSON.stringify` explicitamente.
 
----
+## Troubleshooting rápido
 
-Variáveis de Ambiente (Final)
+| Sintoma | Comando / ação | Resultado esperado |
+| --- | --- | --- |
+| Endpoint responde 500 | `kubectl logs ... | grep request_error` + `requestId` | Encontrar `code` e `details` para abrir bug |
+| Latência alta | `jq 'select(.event=="request_end" and .durationMs>500)'` | Identificar rotas acima do SLO |
+| Dependência instável | `grep readiness_dependency` | Confirmar `dependency="redis"` e latência |
+| Request sem requestId | Garantir proxy está passando `X-Request-ID` ou deixar middleware gerar | Sempre existir `requestId` nas linhas subsequentes |
 
-```properties
-NODE_ENV=development
-CLERK_PUBLISHABLE_KEY=pk_test_Y2xlcmsuYWNjb3VudHMuZGV2
-CLERK_SECRET_KEY=sk_test_local_development_only
-CLERK_API_KEY=sk_test_local_development_only
-CORS_ORIGIN=http://localhost:3000,http://localhost:3001,http://localhost:5173
-LOG_LEVEL=debug
-```
+## Checklist de mudanças
 
-**Nota**: Valores com prefixo "sk_test" sinalizam modo development.
-Para produção, usar valores reais do Clerk Dashboard.
+- [ ] Adicionou log estrutural ao criar fluxo crítico? (depósitos, saques, apostas)
+- [ ] Reutilizou `requestId`/`userId` via `getRequestContext()`?
+- [ ] Sanitizou payloads antes de logar (`password`, `token`)?
+- [ ] Documentou novos campos nesta página e no dashboard (`reports/phase4/dashboard.json`)?
 
----
+## Próximos passos sugeridos
 
-Lições Aprendidas
+1. Introduzir `LOG_LEVEL` e `LOG_DESTINATION` no `appConfig` para reduzir volume em produção.
+2. Enviar logs diretamente para o agente OTLP (`otlp-logs`) quando for habilitado na stack grafana/tempo/loki.
+3. Automatizar testes de contrato que validem `requestId` e `Content-Type` nos logs de erro.
 
-1. **Dotenv Import**: Deve estar no topo do entry point
-2. **Conditional Middleware**: Permite dev/prod sem duplicação
-3. **Route Prefixes**: Devem ser declarativos no register
-4. **Bearer Tokens**: Ótimo para testes sem OAuth
-5. **Environment Detection**: Prefixos em secret keys indicam modo
-
----
-
-**Data**: 14 de Novembro de 2025
-**Autor**: Development Team
-**Status**: ✅ Phase 1 Complete
+**Última atualização:** 23 de novembro de 2025.

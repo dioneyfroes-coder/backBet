@@ -1,143 +1,179 @@
 ---
 title: "Módulo Finanças"
-description: "Documentação do núcleo financeiro: Wallet, serviços e repositórios."
+description: "Como o núcleo financeiro emite carteiras, pacotes de crédito e saques com cache, rate limit e integrações com Betting."
 slug: "/docs/finance"
 ---
 
-# Core Finance - Documentação
+# Core Finance
 
-Esta documentação descreve o núcleo financeiro (core/finance) da aplicação: carteira do usuário, serviços relacionados a depósito/saque, value-objects, repositórios e contratos.
+> Camada responsável por créditos dos usuários (balance + lockedBalance), pacotes promocionais e solicitações de saque. Tudo é construído sobre DDD, value objects e use cases reutilizáveis por Auth, Betting e painéis administrativos.
 
-## Visão Geral
+## Estrutura
 
-O core financeiro é responsável por tudo que envolve saldo do usuário: criação de carteiras, depósitos, saques, bloqueio de valores (reservas) e transformações para persistência (DTOs). Ele é projetado para ser independente, testável e consumido por outros domínios (por exemplo, betting).
+```
+src/core/finance/
+  domain/
+    entities/{Wallet,Transaction,CreditPackage,WithdrawalRequest}.ts
+    value-objects/Currency.ts
+    services/{WalletService,CreditPackageService,WithdrawalRequestService,IWalletService}.ts
+    repositories/{IWalletRepository,WalletRepository,ICreditPackageRepository,...}.ts
+  application/
+    errors/WalletErrorMapper.ts
+    use-cases/
+      {GetWallet,Deposit,Withdraw,GetHistory,
+       ListCreditPackages,PurchaseCreditPackage,
+       RequestWithdrawal,GetWithdrawalRequests,
+       ProcessWithdrawalRequest}.ts
+  types/wallet.types.ts
+src/infrastructure/
+  api/controllers/{WalletController,FinanceController}.ts
+  api/routes/{walletRoutes,financeRoutes}.ts
+  api/dtos/{WalletDTOs,FinanceDTOs}.ts
+  api/middleware/{cacheMiddleware,routeRateLimiter}.ts
+  cache/{RedisClient,cacheHooks,cacheKeys}.ts
+  persistence/factory.ts (seleciona repos in-memory ou Mongoose via USE_MONGOOSE_PERSISTENCE)
+src/scripts/seedCreditPackages.ts (popular pacotes padrão)
+```
 
-## Conceitos e Entidades
+## Domínio e entidades
 
-- Wallet (Carteira): representa o saldo disponível de um usuário, saldo bloqueado (reservas) e a moeda.
-	- Campos principais:
-		- userId: string
-		- balance: number
-		- lockedBalance: number
-		- currency: string (ex.: BRL, USD, EUR)
+### Wallet (`src/core/finance/domain/entities/Wallet.ts`)
+- Mantém `balance`, `lockedBalance`, `currency` e histórico de `Transaction`.
+- Expõe operações atômicas: `deposit`, `withdraw`, `lock`, `unlock`, `withdrawLocked`, todas validadas por `Money` (value object compartilhado) e lançando `DomainError` (`WALLET_INVALID_AMOUNT`, `WALLET_INSUFFICIENT_FUNDS`, etc.).
+- `recordTransaction` gera `Transaction` com `type` (`deposit`, `withdraw`, `lock`, `unlock`, `withdraw_locked`) e agrega telemetria local sem bloquear o fluxo caso a criação falhe.
 
-## Value Objects
+### Transaction (`src/core/finance/domain/entities/Transaction.ts`)
+- DTO-friendly (`toDTO`) usado pelo histórico paginado (`IWalletRepository.getHistory`).
+- Não há persistência própria; cabe ao repositório escolher salvar em Mongo/Mongoose ou manter em memória.
 
-- CurrencyValueObject
-	- Tipo suportado: `'BRL' | 'USD' | 'EUR'`.
-	- Responsável por validar códigos de moeda.
+### CreditPackage (`src/core/finance/domain/entities/CreditPackage.ts`)
+- Define pacotes com `baseAmount`, `bonusAmount`, `totalCredits`, `price` e `isActive`.
+- Usado para `PurchaseCreditPackage`, retornando `creditPackage.toDTO()` para front e painel.
 
-## Tipos / DTOs
+### WithdrawalRequest (`src/core/finance/domain/entities/WithdrawalRequest.ts`)
+- Representa todo saque manual, com `status` (`PENDING`, `APPROVED`, `REJECTED`), `ApprovalLog` e validação de valor.
+- `approve`/`reject` adicionam logs e garantem que cada solicitação só seja processada uma vez.
 
-- `IWalletDTO`
-	- Forma serializável da `Wallet` para persistência / redes.
+### CurrencyValueObject (`src/core/finance/domain/value-objects/Currency.ts`)
+- Aceita apenas `BRL | USD | EUR`. Valores inválidos disparam `DomainError('CURRENCY_INVALID_CODE')` e são convertidos para `AppError` via mapper.
 
-- `ICreateWalletDTO`
-	- Payload para criar uma carteira: `{ userId: string; currency: string }`.
+## Serviços e repositórios
 
-Os tipos vivem em `src/core/finance/types/wallet.types.ts`.
+- `WalletService`: orquestra verificações e delega persistência para `IWalletRepository`. Expõe `createWallet`, `deposit`, `withdraw`, `lock`, `unlock`, `withdrawLocked`, `getHistory`.
+- `IWalletService`: contrato consumido por `BetService` para debitar/creditar apostas sem acoplar a implementação concreta.
+- `CreditPackageService`: lista/recupera pacotes (via `ICreditPackageRepository`) e valida existência antes da compra.
+- `WithdrawalRequestService`: sincroniza `WithdrawalRequest` com operações de carteira (lock durante a criação, `withdrawLocked` ou `unlock` ao aprovar/rejeitar) e possui validações anti saldo negativo.
+- `WalletRepository`, `CreditPackageRepository`, `WithdrawalRequestRepository`: implementações in-memory para dev/teste.
+- `src/infrastructure/persistence/factory.ts`: carrega versões Mongoose (`MongooseWalletRepository`, etc.) quando `USE_MONGOOSE_PERSISTENCE=true`, mantendo a mesma interface para rotas Auth/Wallet/Finance.
 
-## Repositórios (contratos)
+## Casos de uso principais
 
-- `IWalletRepository` (em `src/core/finance/domain/repositories/IWalletRepository.ts`)
-	- Responsabilidades:
-		- `findByUserId(userId: string): Promise`
-		- `save(wallet: Wallet): Promise`
-		- `update(wallet: Wallet): Promise`
-		- `delete(userId: string): Promise`
+| Use case | Responsabilidade | Entrada | Saída |
+|----------|------------------|---------|-------|
+| `GetWallet` | Busca carteira do usuário e propaga `null` se inexistente | `userId` | `Wallet | null` |
+| `Deposit` / `Withdraw` | Deposita ou saca valores diretos | `userId`, `amount` | `Wallet` atualizado |
+| `GetHistory` | Retorna histórico paginado (`limit`, `offset`) | `userId`, `limit`, `offset` | `{ transactions, total }` |
+| `ListCreditPackages` | Lista pacotes ativos | — | `CreditPackage[]` |
+| `PurchaseCreditPackage` | Deposita `base + bônus` após validar pacote | `userId`, `packageId` | `{ creditPackage, wallet }` |
+| `RequestWithdrawal` / `GetWithdrawalRequests` | Cria e lista `WithdrawalRequest` bloqueando saldo | `userId`, `amount`, `currency`, `notes?` | Entidade(s) de saque |
+| `ProcessWithdrawalRequest` | Aprova/rejeita e executa `withdrawLocked`/`unlock` | `requestId`, `adminId`, `action`, `notes?` | `WithdrawalRequest` atualizado |
 
-Implementações concretas (DB, in-memory, Redis) devem implementar esta interface.
+Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `AppError` com status HTTP coerentes.
 
-## Serviços
+## Fluxos ponta a ponta
 
-- `WalletService` (em `src/core/finance/domain/services/WalletService.ts`)
-	- Métodos:
-		- `createWallet(input: ICreateWalletDTO): Promise` - cria carteira para usuário (valida existência e moeda)
-		- `deposit(userId: string, amount: number): Promise` - realiza depósito (valida carteira e valor)
-		- `withdraw(userId: string, amount: number): Promise` - realiza saque (valida saldo suficiente)
+### Criação de carteira no onboarding
+1. `RegisterUser.execute` cria usuário e invoca `WalletService.createWallet` com moeda default (`BRL`).
+2. Em caso de erro (`WALLET_ALREADY_EXISTS`), o mapper devolve 409 e o fluxo de cadastro é interrompido.
 
-O serviço é intencionalmente pequeno e delega persistência para o repositório.
+### Compra de pacote de créditos
+1. `POST /api/finance/packages/:packageId/purchase` valida params (`CreditPackagePurchaseDTO`).
+2. `PurchaseCreditPackage` busca o pacote, soma `base + bonus` e chama `WalletService.deposit`.
+3. `flushWalletCache(userId)` limpa `wallet:balance` e `wallet:history` para refletir o novo saldo imediatamente.
 
-## Entidade Wallet (detalhes)
+### Solicitação e aprovação de saque
+1. `POST /api/finance/withdrawal-requests` valida `CreateWithdrawalRequestDTO`, chama `RequestWithdrawal` que bloqueia o valor (`wallet.lock`).
+2. Admins usam `PATCH /api/finance/withdrawal-requests/:id` para aprovar (`withdrawLocked`) ou rejeitar (`unlock`).
+3. Cada decisão gera `ApprovalLog` e dispara `flushWalletCache`.
 
-- `deposit(amount: number)` → adiciona ao saldo. Valida `amount > 0`.
-- `withdraw(amount: number)` → subtrai do saldo. Valida fundos suficientes.
-- `lock(amount: number)` → move do `balance` para `lockedBalance` (usar em reservas para apostas/ordens).
-- `unlock(amount: number)` → reverte `lock`.
-- `toDTO()` → converte para `IWalletDTO`.
+### Integração com Betting
+- `BetService.placeBet` usa `IWalletService.withdraw` para reservar stake; cancelamentos devolvem via `deposit` e vitórias pagam `wallet.deposit(potentialReturn)`.
+- Como `BetService` fala com o contrato e não com o repositório, é fácil trocar a implementação (e.g., Mongoose) sem tocar no domínio de apostas.
 
-## Integração com outros domínios
+## HTTP API
 
-- O `BetService` (domínio de apostas) consome o `IWalletService` para debitar reservas quando uma aposta é colocada e creditar ganhos na resolução.
-- Contratos claros (`IWalletService`, `IWalletRepository`) permitem testar e mockar o comportamento nas camadas superiores.
+### Rotas de carteira (`src/infrastructure/api/routes/walletRoutes.ts`)
 
-## Sistema de créditos e pacotes
+| Método | Caminho | Proteção | Cache/Rate limit | Observações |
+|--------|---------|----------|------------------|-------------|
+| `GET` | `/api/wallets/me` | `protectedRoute` | `cacheWalletBalanceMiddleware` (Redis) | Retorna `wallet.toDTO()`; 404 se carteira não existir.
+| `POST` | `/api/wallets/deposit` | `protectedRoute` | `createRouteRateLimiter` usando `WALLET_DEPOSIT_RATE_LIMIT_*` | Payload `DepositDTO`; dispara `flushWalletCache`.
+| `POST` | `/api/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aplica validações de saldo.
+| `GET` | `/api/wallets/history` | `protectedRoute` | `cacheWalletHistoryMiddleware` (cache por `limit/offset`) | Responde `{ transactions, pagination }`.
 
-- A `Wallet` representa créditos (pontos digitais) que imitam dinheiro real dentro do universo BackBet. Cada unidade de `balance` equivale a um ponto que pode ser usado para apostar.
-- Os clientes adquirem esses créditos em duas modalidades:
-	- **Compra individual:** chama `WalletService.deposit(userId, amount)` e registra uma transação `deposit` com o valor comprado.
-	- **Pacotes de créditos:** definem `amount`, `bonus` e `label` (ex.: "Pacote Bronze"). O sistema ainda utiliza `deposit`, mas registra metadados extras para saber se o valor veio de um pacote, facilitando contabilidade e promoções futuras.
-- É recomendado criar um modelo adicional (`CreditPackage`, `PurchaseOrder` ou domínio similar) que represente preço, bônus e limites de validade; essa entidade vive em `src/core/finance/domain` ou em um subdomínio específico de vendas.
+### Rotas financeiras (`src/infrastructure/api/routes/financeRoutes.ts`)
 
-## Fluxo de apostas com pontos
+| Método | Caminho | Proteção | Observações |
+|--------|---------|----------|-------------|
+| `GET` | `/api/finance/packages` | `protectedRoute` | Lista pacotes ativos com datas em ISO 8601.
+| `POST` | `/api/finance/packages/:packageId/purchase` | `protectedRoute` | Realiza depósito `base+bonus`, retorna carteira atualizada e pacote.
+| `POST` | `/api/finance/withdrawal-requests` | `protectedRoute` | Cria solicitação de saque e bloqueia saldo.
+| `GET` | `/api/finance/withdrawal-requests` | `protectedRoute` | Lista solicitações do usuário autenticado.
+| `PATCH` | `/api/finance/withdrawal-requests/:requestId` | `protectedRoute` | Processa aprovação/rejeição. (Para uso administrativo; autenticação delegada a `AuthMiddleware`.)
 
-- Antes de aceitar uma aposta, o `BetService` chama `wallet.lock(stake)` para mover os pontos do `balance` para o `lockedBalance`, garantindo que o valor não possa ser usado em outra aposta enquanto estiver ativa.
-- Resolução da aposta:
-	- Se perdida ou cancelada: `wallet.unlock(amount)` retorna os pontos reservados para o `balance`.
-	- Se vencedora: `wallet.deposit(payout)` credita o prêmio diretamente no `balance`, podendo incluir retornos maiores do que o valor bloqueado.
-- Essas operações são orquestradas pelo `WalletService` para garantir que cada mutação passe pelos mesmos gateways de validação e persistência.
+## DTOs e validação
 
-## Saques e solicitações administrativas
+- `DepositDTO` / `WithdrawDTO` (`src/infrastructure/api/dtos/WalletDTOs.ts`): exigem `amount > 0`, `currency ∈ {BRL,USD,EUR}` e `description?`.
+- `FinanceDTOs.ts` contém: `CreditPackagePurchaseDTO`, `CreateWithdrawalRequestDTO` (mínimo 0.01), `ProcessWithdrawalRequestDTO`, `CreditPackageResponseDTO`, `WithdrawalRequestResponseDTO`.
+- Todos os controllers usam `BaseController.validateSchema` para retornar `AppError` padronizado (`code`, `message`, `status`).
 
-- O saque é feito mediante uma **solicitação de saque** (ex.: `WithdrawalRequest`) criada pelo usuário com `requestedAmount`. Essa entidade registra `userId`, `amount`, `status` (`pending`, `approved`, `rejected`), `createdAt` e dados bancários.
-- Somente após análise manual e aprovação da administração, o sistema executa `wallet.withdraw(amount)` para refletir a saída real de créditos. Esse saque gera uma transação do tipo `withdraw` no histórico.
-- Separar o pedido de saque da alteração do saldo evita que chamadas automáticas ao `withdraw` sejam executadas antes da confirmação da transferência financeira real.
-- A área financeira pode guardar evidências (comprovantes) e alimentar relatórios de compliance usando o mesmo histórico de transações do `Wallet`.
+## Cache e consistência
 
-## Seed de pacotes de crédito
+- `redisClient` lê `cacheConfig` (`REDIS_URL`, TTLs) e expõe helpers `cacheWalletBalance`, `cacheWalletHistory` e `flushWalletCache`.
+- `cacheMiddleware` intercepta respostas, salva JSON e devolve hits rapidamente (inclusive com query params em `/history`).
+- Sempre que a carteira muda (`deposit`, `withdraw`, compras de pacote, criação/processamento de saque) os controllers chamam `flushWalletCache` para invalidar `wallet:balance` e `wallet:history` do usuário.
 
-- Há um script de seed (`npm run seed:credit-packages`) que popula o catálogo inicial de pacotes, garantindo que o sistema tenha pacotes padrão quando conectado a Mongo ou a um repositório em memória.
-- O script (`src/scripts/seedCreditPackages.ts`) utiliza o `createCreditPackageRepository` para aplicar um `upsert` e registrar as datas de criação/atualização sem gerar duplicatas por código.
-- Use esse recurso sempre que iniciar uma nova instância ou quiser repor rapidamente os pacotes promocionais básicos (Bronze, Prata, Ouro e VIP).
+## Configurações e rate limits
 
-## APIs e painel administrativo
+- **Persistência:** `USE_MONGOOSE_PERSISTENCE=true` liga repositórios Mongo (`MongooseWalletRepository`, etc.).
+- **Cache:** `CACHE_ENABLED`, `CACHE_TTL_SECONDS`, `CACHE_USER_BALANCE_TTL_SECONDS`, `CACHE_WALLET_HISTORY_TTL_SECONDS`, `REDIS_URL` controlam Redis.
+- **Wallet rate limit:** `WALLET_DEPOSIT_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e `WALLET_WITHDRAW_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` abastecem `createRouteRateLimiter`.
+- **Finance:** `AUTH_*` e `RATE_LIMIT_*` globais ainda protegem rotas pois herdam o middleware padrão definido em `app.ts`.
 
-- Lista de pacotes: `GET /api/finance/packages` retorna os pacotes ativos com `totalCredits`, `price` e metadados.
-- Compra de pacote: `POST /api/finance/packages/:packageId/purchase` chama `PurchaseCreditPackage` e credita o valor total (`base + bônus`). O endpoint devolve a carteira atualizada e os dados do pacote adquirido.
-- Solicitação de saque: `POST /api/finance/withdrawal-requests` cria um `WithdrawalRequest` pendente e bloqueia os créditos necessários. Use esse endpoint em conjunto com formulários administrativos para solicitar análise humana.
-- Histórico de solicitações: `GET /api/finance/withdrawal-requests` e `PATCH /api/finance/withdrawal-requests/:requestId` expõem o status para o usuário e permitem que um admin aprove ou rejeite a operação.
-- A aprovação chama `withdrawLocked` para deduzir os créditos bloqueados após a transferência real; a rejeição chama `unlock` e retorna os pontos ao saldo.
+## Seeds e dados iniciais
 
-## Exemplo de uso (Fluxo simplificado)
+- Rode `npm run seed:credit-packages` para criar pacotes Bronze/Prata/Ouro/VIP (`src/scripts/seedCreditPackages.ts`).
+- O script reutiliza `createCreditPackageRepository`, portanto persiste tanto em memória quanto em Mongo (se `USE_MONGOOSE_PERSISTENCE=true`).
+- Use esse seed sempre que subir um novo ambiente para garantir catálogos consistentes e evitar compras com pacote inexistente.
 
-1. Usuário solicita `createWallet({ userId, currency })` → `WalletService` valida e persiste via `IWalletRepository`.
-2. Usuário pede `deposit(userId, amount)` → `WalletService` carrega carteira, chama `deposit()` e `update()`.
-3. Ao colocar uma aposta, `BetService` chama `walletService.withdraw(userId, stake)` para reservar o valor.
-4. Ao resolver a aposta, `BetService` chama `walletService.deposit(userId, payout)` caso o usuário ganhe.
+## Observabilidade e troubleshooting
 
-## Observações de design e boas práticas
+- `executeWithWalletErrorMapping` converte `DomainError` → `AppError` com status (ex.: `WALLET_ALREADY_EXISTS` → 409, `WALLET_NOT_FOUND` → 404, `WALLET_INVALID_AMOUNT` → 400).
+- Logs relevantes:
+  - `FinanceController` loga falhas ao limpar cache.
+  - `RedisClient` incrementa métricas (`hits`, `misses`, `writes`, `errors`) e emite `console.warn` quando operações falham.
+- Problemas comuns:
+  - `NOT_FOUND Wallet not found` → certifique-se de que o fluxo de cadastro criou a carteira (recrie com `WalletService.createWallet`).
+  - `BAD_REQUEST Saldo insuficiente` em saques/withdraw → verifique `lockedBalance` e histórico.
+  - `CACHE_DISABLED` (implícito) → quando `CACHE_ENABLED=false`, as rotas continuam funcionando sem Redis.
 
-- Separar contratos (interfaces) das implementações facilita testes e troca de backend (por exemplo, trocar in-memory por TypeORM).
-- Toda lógica que altera estado da carteira (balance / lockedBalance) fica dentro da entidade `Wallet` para centralizar validações.
-- O serviço (`WalletService`) é responsável por orquestrar validações de alto nível e persistência.
+## Testes
 
-## Como testar
+- Suite de use cases (`src/core/finance/application/use-cases/__tests__`): `GetWallet.test.ts`, `GetHistory.test.ts`, `PurchaseCreditPackage.test.ts` garantem orquestração e integração com `WalletService`.
+- Execute `npm test -- finance` (ou `npm test -- PurchaseCreditPackage`) para focar nas specs.
+- Teste manualmente:
+  ```bash
+  curl -X POST http://localhost:3000/api/wallets/deposit     -H 'Authorization: Bearer <token>'     -H 'Content-Type: application/json'     -d '{"amount":100,"currency":"BRL"}'
+  ```
+- Habilite Redis antes de rodar testes end-to-end para observar `cacheWalletHistory` funcionando (`docker run -p 6379:6379 redis`).
 
-- Testes unitários das entidades (`Wallet`) e value-objects (`CurrencyValueObject`) devem cobrir cenários de borda: depósitos negativos, saques maiores que o saldo, lock/unlock inconsistentes.
-- Testes do `WalletService` devem mockar `IWalletRepository` e validar chamadas a `save`/`update` e lançamentos de erro.
+## Próximos passos
 
-## Próximos passos sugeridos
-
-1. Implementar adaptadores de persistência: um repositório em memória para teste e um adaptador com banco (TypeORM ou Prisma).
-2. Adicionar eventos de domínio para operações críticas (ex.: `WalletCredited`, `WalletDebited`).
-3. Implementar limites anti-fraude e validações de compliance quando necessário.
+1. Persistir histórico de `Transaction` em coleção dedicada para auditar débitos/créditos independentemente de Wallet.
+2. Expor webhooks/integrações com gateways de pagamento para automatizar depósitos e conciliar purchase orders.
+3. Adicionar alertas de risco (limite diário de saque, múltiplas tentativas rejeitadas) usando eventos de domínio.
+4. Criar testes de integração Auth + Wallet + Finance com Redis habilitado e rate limit real para evitar regressões de cache.
 
 ---
 
-Arquivo fonte do core financeiro:
-
-- `src/core/finance/domain/entities/Wallet.ts` - entidade principal
-- `src/core/finance/domain/services/WalletService.ts` - service
-- `src/core/finance/domain/repositories/IWalletRepository.ts` - contrato persistência
-- `src/core/finance/domain/value-objects/Currency.ts` - value-object de moeda
-- `src/core/finance/types/wallet.types.ts` - DTOs e tipos
+**Última atualização:** 23 de novembro de 2025

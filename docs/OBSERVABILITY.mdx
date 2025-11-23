@@ -1,237 +1,192 @@
 ---
 title: "Observabilidade"
-description: "Como instrumentar e consumir métricas do BackBet"
+description: "Tudo sobre healthchecks, métricas Prometheus, tracing e logs estruturados no BackBet."
 slug: "/docs/backbet/observability"
 ---
 
-# Observabilidade e Métricas
+# Observabilidade
 
-## Panorama
-A aplicação expõe métricas nativas (via `prom-client`) e métricas customizadas em dois pontos principais:
+> Status da API, métricas, tracing e logs são habilitados ainda no bootstrap (`src/index.ts`). Esta página descreve como cada peça funciona, como consumir os dados e quais variáveis controlam o comportamento.
 
-- `/metrics`: endpoint que retorna todas as métricas registradas pelo `prom-client`, pronto para ser lido pelo Prometheus.
-- `/health/cache`: detalhe rápido sobre o estado do cache Redis (habilitado/desabilitado e contadores de hits/misses/escritas/erros).
+## Estrutura
 
-O middleware `metricsMiddleware` (registrado antes das rotas) contabiliza cada requisição para alimentar um contador e um histograma, enquanto o cron interno em `infrastructure/observability/metrics.ts` atualiza 4 gauges com os valores retornados por `RedisClient.getMetrics()` a cada 3 segundos.
+```
+src/shared/observability/requestContext.ts        (AsyncLocalStorage para requestId/userId)
+src/infrastructure/api/ApiServer.ts               (middlewares, endpoints /health*/metrics)
+src/infrastructure/observability/{metrics,tracing}.ts
+src/infrastructure/cache/{RedisClient,cacheHooks}.ts (contadores de cache usados pelos gauges)
+src/infrastructure/api/__tests__/observabilityEndpoints.test.ts
+reports/phase4/{dashboard.json,alerts.yaml}
+```
 
-## Métricas expostas
-### Métricas padrão
-Ao instanciar o `Registry`, também é chamada `collectDefaultMetrics({ prefix: 'backbet_', register: registry })`. Isso significa que há métricas como:
+## Pipeline no ApiServer
 
-- `backbet_process_cpu_user_seconds_total`
-- `backbet_nodejs_heap_used_bytes`
-- `backbet_process_resident_memory_bytes`
+Ordem de middlewares em `ApiServer`:
 
-Essas métricas são úteis para acompanhar o consumo de recursos do processo Node.
+1. `requestIdMiddleware` gera ou propaga `X-Request-ID` e inicia o contexto com `runWithRequestContext`.
+2. `loggingMiddleware` registra `request_start` / `request_end` com duração, IP e userId derivado de Clerk/JWT.
+3. `metricsMiddleware` mede requisições HTTP (contadores, histogramas, in-flight) antes de despachar para as rotas.
+4. Controle de erros (`registerErrorHandler`) fecha o circuito emitindo logs JSON e payload padronizado.
 
-### Métricas HTTP
-Dados registrados pelo middleware:
+## Saúde e readiness
 
-- `backbet_http_requests_total{method,route,status}` — contador incrementado a cada resposta completa.
-- `backbet_http_request_duration_ms_bucket`, `_sum`, `_count` — histograma em milissegundos usado para percentis na casa de ms.
-- `backbet_http_request_duration_seconds_bucket`, `_sum`, `_count` — mesmo histograma em segundos com label `status_class`; facilita dashboards mistos no Grafana.
-- `backbet_http_errors_total{method,route,status}` — contador específico para respostas 5xx.
-- `backbet_http_in_flight{method,route}` — gauge de requests em andamento (incrementa no início, decrementa em `finish`/`close`).
+| Endpoint | Responsabilidade | Retorno rápido |
+|----------|------------------|----------------|
+| `GET /health` | Heartbeat leve para liveness. Não toca Redis/Mongo. | `{ status, uptime, timestamp }` |
+| `GET /health/cache` | Reflete `cacheConfig.enabled` e o snapshot de `redisClient.getMetrics()`. | `{ cache: { enabled, metrics }, timestamp }` |
+| `GET /readiness` | Ping em Redis (quando `CACHE_ENABLED=true`) e Mongo (quando `USE_MONGOOSE_PERSISTENCE=true`). Ajusta `backbet_dependency_health`. | `{ ready, timestamp, checks }` com `status: up|down|skipped` |
 
-**Sugestões de consultas PromQL**
+Detalhes do readiness (`ApiServer.readinessHandler`):
+
+- Redis medido via `redisClient.ping()`; quando falha, o endpoint devolve `503` e o gauge recebe `0`.
+- Mongo verifica `mongoose.connection.readyState`. Se conectado, executa `db.admin().ping()` para coletar `latencyMs`; se indisponível, retorna `503`.
+- Dependências desabilitadas retornam `status: skipped` e definem o gauge como `-1`, útil para diferenciar “não aplicável” de “fora do ar”.
+
+### Troubleshooting rápido
+
+- **Redis down**: confira `CACHE_ENABLED`, `REDIS_URL` e use `redis-cli -u <url> ping`.
+- **Mongo down**: confirme `USE_MONGOOSE_PERSISTENCE=true`, confira `mongoose.connection.readyState` e o log do container.
+- **Tudo skipped**: esperado em testes (cache desligado + Mongo inativo). Ajuste flags no CI se precisar validar readiness real.
+
+## Métricas Prometheus
+
+### Registro e default metrics
+
+`src/infrastructure/observability/metrics.ts` cria um `Registry` e chama `collectDefaultMetrics({ prefix: 'backbet_' })`, expondo CPU, heap e uso de memória do processo Node sem esforço adicional.
+
+### HTTP middleware
+
+`metricsMiddleware` (montado antes das rotas) alimenta:
+
+- `backbet_http_requests_total{method,route,status}`
+- `backbet_http_request_duration_ms_bucket` / `_sum` / `_count`
+- `backbet_http_request_duration_seconds_bucket` (com label `status_class`)
+- `backbet_http_errors_total{method,route,status}` (respostas 5xx)
+- `backbet_http_in_flight{method,route}` (incrementa na entrada, decrementa em `finish/close`)
+
+PromQL úteis:
+
 ```
 rate(backbet_http_requests_total[1m])
 histogram_quantile(0.95, sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le))
-histogram_quantile(0.99, sum(rate(backbet_http_request_duration_seconds_bucket[5m])) by (status_class, le))
 sum(backbet_http_in_flight) by (route)
 sum(rate(backbet_http_errors_total[5m])) by (route)
 ```
 
-### Métricas de cache
-Atualizadas pelo `updateCacheMetrics()` (executado a cada 3 segundos). Os gauges são:
+### Cache e dependências
 
-- `backbet_cache_hits_total`
-- `backbet_cache_misses_total`
-- `backbet_cache_writes_total`
-- `backbet_cache_errors_total`
+- `updateCacheMetrics()` roda a cada ~3s (quando `CACHE_ENABLED=true`) e copia `redisClient.getMetrics()` para `backbet_cache_{hits,misses,writes,errors}_total`. Com cache desligado, todos os gauges ficam em 0.
+- `/readiness` também é responsável por atualizar `backbet_dependency_health{dependency="redis|mongo"}` e `backbet_dependency_latency_ms{dependency}` (latência medida em ms). Use isso para alarmes sem precisar varrer o endpoint.
 
-Esses valores acompanham o `RedisClient.getMetrics()` e continuarão 0 quando `CACHE_ENABLED=false`.
+### Endpoint `/metrics`
 
-### Métricas de dependências
-
-- `backbet_dependency_health{dependency="redis"|"mongo"}` — gauge setado pelo `/readiness` com valores `1` (up), `0` (down) e `-1` (skipped). Útil para alertas imediatos sem precisar bater no endpoint.
-- Futuras dependências podem reaproveitar o mesmo gauge adicionando novos labels (ex.: `dependency="message_bus"`).
-
-Consulta exemplo:
-
-```
-sum(backbet_dependency_health) by (dependency)
-```
-
-## Endpoint `/metrics`
-
-A rota `/metrics` faz o streaming do conteúdo de `metricsRegistry`. O usual é configurá-la como alvo de scrape do Prometheus:
+`registerMetricsEndpoint()` define `GET /metrics`, devolvendo `text/plain` no formato Prometheus. Configure um scrape assim:
 
 ```yaml
 scrape_configs:
   - job_name: backbet
     metrics_path: /metrics
     static_configs:
-      - targets: ['localhost:3000']
+      - targets: ['api.backbet.local:3000']
 ```
 
-Se a aplicação estiver atrás de um proxy (NGINX, traefik etc.), garanta que o caminho seja repassado exatamente e que as métricas não fiquem protegidas por autenticação (ou configure um bearer token/vhost dedicado para o Prometheus).
+Evite que proxies comprimam a resposta para não truncar o stream.
 
-## Endpoint `/health/cache`
+## Logs estruturados e request context
 
-Fornece um payload rápido com o estado do cache:
+- `requestIdMiddleware` garante `X-Request-ID` (gerado ou propagado) e o salva via `runWithRequestContext`.
+- `loggingMiddleware` emite logs JSON `request_start` / `request_end` com IP, userId e duração em ms.
+- `registerErrorHandler` serializa qualquer exceção em `{ success:false, error:{code,message}, meta:{timestamp,requestId} }` e emite log `request_error` reutilizando `getRequestContext()`.
+- Para logs customizados dentro de serviços/use-cases, basta importar `getRequestContext()` ou `updateRequestContext()` e incluir `requestId` no payload.
 
-```json
-{
-  "cache": {
-    "enabled": true,
-    "metrics": {
-      "hits": 120,
-      "misses": 34,
-      "writes": 75,
-      "errors": 0
-    }
-  },
-  "timestamp": "..."
-}
-```
-
-Use esse endpoint para alertas simples (por exemplo, reduzir o cache quando `enabled` for `false`) ou para dashboards de status.
-
-## Endpoint `/readiness`
-
-Retorna o estado de cada dependência crítica antes de colocar o pod atrás de um load balancer.
-
-```json
-{
-  "ready": true,
-  "timestamp": "2025-11-22T23:55:00.000Z",
-  "checks": {
-    "redis": { "status": "up", "latencyMs": 2 },
-    "mongo": { "status": "skipped", "reason": "mongoose_disabled" }
-  }
-}
-```
-
-- `status: up` — ping do Redis respondeu rapidamente e/ou `mongoose.connection.readyState === 1`.
-- `status: down` — a dependência falhou; o endpoint retorna **503** e `ready=false`.
-- `status: skipped` — a verificação não se aplica (cache desabilitado ou Mongo não está em uso).
-
-### Debug rápido
-- Redis retornando `down`: verifique `CACHE_ENABLED`, `REDIS_URL` e se o serviço aceita conexões (`redis-cli -u <url> ping`).
-- Mongo retornando `down`: confirme se `USE_MONGOOSE_PERSISTENCE=true` e se `mongoose.connection.readyState` está 1 (rode `db.stats()` ou cheque logs do container).
-- Todos os campos `skipped`: é esperado em ambientes de teste, onde o cache fica desativado e o Mongo permanece desconectado.
-
-Configure alertas para detectar `ready=false` ou respostas `503` consecultivas; isso evita que uma implantação parcialmente conectada receba tráfego.
-
-### Forçando readiness do Mongo em CI
-
-- Exporte `USE_MONGOOSE_PERSISTENCE=true` durante os testes (por exemplo, no `npm test -- observabilityEndpoints.test.ts`).
-- Se não houver Mongo real disponível, use os helpers de mock em `src/infrastructure/api/__tests__/mongoMockHelper.ts` para simular `mongoose.connection` com `readyState=1` e `db.admin().ping()` resolvendo.
-- Em pipelines que rodam a aplicação end-to-end, injete `MONGO_URL` e garanta que o usuário tenha permissão para `db.admin().ping()`; o readiness precisa desse comando para capturar a latência real.
-
-## Contexto de requisição e logs estruturados
-
-Cada requisição recebe um `X-Request-ID` logo no início do pipeline (`requestIdMiddleware`). O ID é armazenado em um `AsyncLocalStorage` (`shared/observability/requestContext.ts`), o que permite recuperá-lo em qualquer camada (controllers, use cases, serviços) sem repassar o valor manualmente. O `loggingMiddleware` e o `registerErrorHandler` usam esse contexto para emitir logs JSON com campos consistentes (`event`, `requestId`, `method`, `path`, `statusCode`, `userId`).
-
-Exemplo de log:
-
-```json
-{
-  "level": "error",
-  "event": "request_error",
-  "requestId": "req-1763853600899-duclu2g9e",
-  "method": "POST",
-  "path": "/api/auth/register",
-  "statusCode": 409,
-  "code": "CONFLICT",
-  "timestamp": "2025-11-22T23:20:01.365Z"
-}
-```
-
-Para logs customizados, importe `getRequestContext()` e acrescente `requestId`/`userId` ao payload:
+Exemplo:
 
 ```ts
 import { getRequestContext } from '@/shared/observability/requestContext';
 
 const ctx = getRequestContext();
-console.log(JSON.stringify({ level: 'info', requestId: ctx?.requestId, event: 'bet_resolved' }));
+console.log(JSON.stringify({ level: 'info', event: 'bet_resolved', requestId: ctx?.requestId }));
 ```
 
-## Tracing com OpenTelemetry
+## Tracing OpenTelemetry
 
-O bootstrap agora cria spans automaticamente (HTTP, Express, ioredis, Mongoose) quando o tracing estiver habilitado.
+`src/infrastructure/observability/tracing.ts` ativa o `NodeSDK` apenas quando `appConfig.tracing.enabled` é `true` (`TRACING_ENABLED=true` e `NODE_ENV!=='test'`). Instrumentações habilitadas:
 
-### Variáveis relevantes
+- HTTP + Express (com `ignoreIncomingRequest` para `/health`, `/health/cache`, `/readiness`, `/metrics`).
+- ioredis
+- Mongoose
 
-| Variável | Default | Observação |
-|----------|---------|------------|
-| `TRACING_ENABLED` | `false` (exceto `NODE_ENV=test`, sempre desliga) | Habilite com `true` em ambientes onde exista um collector OTLP. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | URL do collector (OTLP/HTTP). |
-| `OTEL_EXPORTER_OTLP_HEADERS` | _(vazio)_ | Cabeçalhos extras, formato `api-key=123,tenant=backbet`. |
-| `OTEL_SERVICE_NAME` | `backbet-api` | Nome que aparecerá no backend de tracing. |
-| `OTEL_DIAGNOSTIC_LOG_LEVEL` | `error` | Pode ser `error`, `warn`, `info`, `debug`, `verbose` ou `none`. |
+Configuração principal:
 
-### Como ativar localmente
+| Variável | Default | Efeito |
+|----------|---------|--------|
+| `TRACING_ENABLED` | `false` | Liga/desliga o SDK. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | Destino OTLP/HTTP. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | _(vazio)_ | Cabeçalhos extras (`key=value,key2=value2`). |
+| `OTEL_SERVICE_NAME` | `backbet-api` | `resource.service.name`. |
+| `OTEL_DIAGNOSTIC_LOG_LEVEL` | `error` | Verbosidade do logger OpenTelemetry. |
 
-1. Suba um collector (ex.: `docker run -p 4318:4318 grafana/otel-lgtm`).
-2. Exporte `TRACING_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces` antes de `npm run dev`.
-3. Gere tráfego; os spans aparecerão no Tempo/Grafana Cloud/Jaeger configurado.
+Como testar localmente:
 
-As rotas de health (`/health`, `/metrics`, `/readiness`) são ignoradas para reduzir ruído. Spans incluem atributos `service.name=backbet-api` e `deployment.environment` igual ao `NODE_ENV`.
+```bash
+docker run -d -p 4318:4318 grafana/otel-lgtm
+export TRACING_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+npm run dev
+```
 
-## Configuração ambiental relevante
+Gere tráfego e confira os spans no backend (Grafana Tempo, Jaeger, etc.).
 
-| Variável | Descrição |
-|----------|-----------|
-| `CACHE_ENABLED` | Habilita o Redis (default `true`). O valor padrão em testes é `false` para evitar dependência externa. |
-| `CACHE_USER_BALANCE_TTL_SECONDS`, `CACHE_WALLET_HISTORY_TTL_SECONDS`, `CACHE_ODDS_TTL_SECONDS` | TTLs específicos usados pelos `cacheHooks`. |
-| `REDIS_URL` | Conexão com o Redis usado pelo `RedisClient`. |
+## Variáveis e flags relevantes
 
-Ao desligar o cache (`CACHE_ENABLED=false`), as métricas continuam presentes, mas as gauges retornam 0, deixando o painel “em branco” até que o cache seja reativado.
+- `CACHE_ENABLED`, `REDIS_URL`, `CACHE_*_TTL_SECONDS`: controlam Redis, TTLs e, por consequência, `backbet_cache_*` e `/health/cache`.
+- `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL`: determinam se o readiness pingará Mongo (e qual instância).
+- `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*`, `BET_*`: alteram o comportamento das rotas e tendem a impactar histogramas de HTTP; monitore após ajustar limites.
 
-## Dashboards recomendados
+## Dashboards e alertas
 
-Os ativos versionados vivem em `reports/phase4/`:
+Artefatos em `reports/phase4/`:
 
-- `dashboard.json` — importe no Grafana (Settings → JSON model → Load/Save) e selecione o datasource Prometheus.
-- `alerts.yaml` — inclua no Alertmanager/Prometheus Operator, garantindo que o label `service=backbet-api` chegue ao canal correto.
+- `dashboard.json`: painel Grafana com seções de tráfego, latência, cache e dependências.
+- `alerts.yaml`: exemplos de Alertmanager (erro em cache, P95 alto, readiness caindo).
 
-1. **Overview geral**
-   - `rate(backbet_http_requests_total[5m])` (gráfico de taxa de requisições)
-   - `histogram_quantile(0.5, ...)`, `histogram_quantile(0.95, ...)` para latências por rota
-   - `backbet_process_cpu_user_seconds_total` (line chart)
-   - `backbet_nodejs_heap_used_bytes`
+Queries recomendadas:
 
-2. **Cache Redis**
-   - `backbet_cache_hits_total`, `backbet_cache_misses_total`, `backbet_cache_writes_total`, `backbet_cache_errors_total` (gauge/heatmap)
-   - Taxa de acertos/misses: `rate(backbet_cache_hits_total[5m]) / rate(backbet_cache_misses_total[5m])`
+1. **Tráfego geral** — `rate(backbet_http_requests_total[5m])`, `histogram_quantile(0.95, sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le))`.
+2. **Cache** — `rate(backbet_cache_hits_total[5m])`, `increase(backbet_cache_errors_total[5m])`.
+3. **Dependências** — `backbet_dependency_health{dependency="redis"}` (single stat) e `avg_over_time(backbet_dependency_latency_ms[5m])`.
 
-3. **Alertas rápidos**
-   - Alertar se `backbet_cache_errors_total` aumentar rapidamente ou se `backbet_http_request_duration_ms_bucket` mostrar picos.
-   - Sinalizar quando `/health/cache` retorna `enabled: false` para guiar a investigação de disponibilidade do Redis.
-
-### Snippets de alertas PromQL
-
-- **Erro no cache** – dispara quando há pelo menos 1 erro em 5 minutos:
+Alertas úteis (PromQL):
 
 ```promql
 increase(backbet_cache_errors_total[5m]) > 0
-```
 
-- **Latência P95 acima de 1s** por rota:
-
-```promql
 histogram_quantile(
   0.95,
   sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le)
 ) > 1000
+
+backbet_dependency_health{dependency="mongo"} == 0
 ```
 
-Associe as expressões a painéis do Grafana e configure alertas (Slack, PagerDuty) para receber notificações automáticas.
+Associe-os a Slack/PagerDuty para resposta rápida.
 
-## Próximos passos sugeridos
+## Testes e verificações
 
-- Integrar com Grafana (explore panels para as métricas acima) e vincular dashboards a alertas (e.g. PagerDuty ou Slack).
-- Registrar métricas customizadas adicionais conforme novos recursos (deposit, bet, etc.).
-- Adicionar tracing distribuído (OpenTelemetry) e correlacionar `TRACEPARENT` com `X-Request-ID`.
+- `npm test -- observabilityEndpoints` garante `/health`, `/health/cache`, `/readiness`, `/metrics` e o serializador de erros.
+- Para smoke manual:
+
+```bash
+curl http://localhost:3000/health
+curl http://localhost:3000/readiness | jq
+curl -H 'Accept: text/plain' http://localhost:3000/metrics | head
+```
+
+## Próximos passos
+
+1. Propagar `traceparent`/`X-Request-ID` até o frontend para correlacionar spans com UX.
+2. Persistir métricas de negócio (apostas criadas, depósitos aprovados) em contadores próprios.
+3. Armazenar histórico do readiness (ex.: Loki) para investigar instabilidades de dependências.
+
+---
+
+**Última atualização:** 23 de novembro de 2025

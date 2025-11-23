@@ -1,415 +1,171 @@
 ---
 title: "Arquitetura BackBet"
-description: "Visão geral da arquitetura, integração e núcleos de negócio do BackBet."
+description: "Visão detalhada das camadas, bounded contexts e infraestrutura operacional do BackBet."
 slug: "/docs/architecture"
 ---
-# Domínio de Negócio - Arquitetura e Integração
 
-## Visão Geral
+# Arquitetura BackBet
 
-A aplicação é estruturada em torno de **3 cores de negócio principais** (bounded contexts) que funcionam de forma integrada:
+O BackBet é um monólito modular escrito em TypeScript/Node 20 que aplica princípios de **DDD**, **ports & adapters** e **observabilidade nativa**. Todo o código vive em `src/` e é separado em camadas coerentes:
 
-1. **User Core** - Gerencia usuários e autenticação
-2. **Finance Core** - Gerencia carteiras e operações financeiras
-3. **Betting Core** - Gerencia apostas e eventos
+1. **Interface / API (`src/infrastructure/api`)** – Express 5, controllers, DTOs e middlewares.
+2. **Aplicação (`src/core/**/application`)** – use cases e serviços orquestradores que conversam por interfaces.
+3. **Domínio (`src/core/**/domain`)** – entidades, value objects e regras puras.
+4. **Infraestrutura (`src/infrastructure/*`)** – persistência, cache, autenticação, observabilidade e config.
+5. **Shared (`src/shared`)** – erros, configs, request context e utilidades reutilizadas.
 
-Todos compartilham abstrações comuns no **Shared Domain**.
+A seguir detalhamos cada área funcional e as decisões de engenharia que sustentam o projeto.
 
-## Cores de Negócio
+## Visão Geral dos Bounded Contexts
 
-### 1. User Core (`src/core/user/`)
-**Responsabilidades:**
-- Criar e gerenciar usuários
-- Autenticação e verificação de identidade
-- Gerenciar status do usuário (ACTIVE, SUSPENDED, PENDING_VERIFICATION)
+| Contexto | Diretório | Responsabilidades chave | Principais agregados |
+|----------|-----------|-------------------------|----------------------|
+| User Core | `src/core/user` | Cadastro, autenticação local, sincronização com Clerk, atualização de perfil e e-mail. | `User`, `Email` VO |
+| Finance Core | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito e workflow de solicitações de saque (locks/unlock). | `Wallet`, `Money`, `Currency` |
+| Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `BetAmount`, `Odds` |
+| Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados e contratos genéricos. | - |
 
-**Entidades:**
-- `User` - agregado raiz com email, username, status
+Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) consumidas pela camada de aplicação. Implementações concretas são providas por factories que escolhem entre MongoDB/Mongoose e stores in-memory, permitindo testes rápidos e produção durável.
 
-**Serviços:**
-- `UserService` - orquestra criação, ativação, suspensão
+## Camadas em Detalhe
 
-**Repositórios:**
-- `IUserRepository` - contrato de persistência
+### 1. API Layer (`src/infrastructure/api`)
+- **`ApiServer.ts`** monta Express 5 com `helmet`, CORS dinâmico, `express-rate-limit`, parsers, Swagger UI (`/api/docs`) e endpoints de saúde/metrics.
+- Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware`, métricas Prometheus e handlers de erro padronizados.
+- Autenticação:
+  - Produção: Clerk (`@clerk/express` + `requireAuth`).
+  - Dev/Test: bypass opcional (`ALLOW_DEV_BEARER_BYPASS`) que aceita `Authorization: Bearer <userId>` sem JWT.
+- Rotas residem em `routes/*.ts` e importam controllers do respectivo módulo (`controllers/*Controller.ts`). Todas são registradas via `createApiRouter` no `server.ts` por prefixos: `/auth`, `/users`, `/wallets`, `/finance`, `/bets`.
 
-**Implementações de Persistência:**
-- `MongooseUserRepository` - implementação MongoDB/Mongoose com:
-  - Índices únicos em email e username
-  - Validação de status (ACTIVE, SUSPENDED, PENDING_VERIFICATION)
-  - Métodos: save, findById, findByEmail, update
-- `UserRepository` - implementação in-memory (fallback para testes)
+### 2. Application Layer
+- Use cases ficam em `src/core/<context>/application/use-cases`. Ex: `RegisterUser`, `UpdateProfile`, `DepositFunds`, `PlaceBet`.
+- Cada caso injeta repositórios + serviços via construtor (DI manual) e retorna `Result<T>` para padronizar sucesso/erro.
+- Hooks de cache (`cacheUserProfile`, `cacheWalletBalance`, etc.) são chamados aqui para manter o domínio puro.
 
-**Factory de Repositórios:**
-- `createUserRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
+### 3. Domain Layer
+- Entidades estendem `AggregateRoot` e expõem métodos para mutações válidas (`Wallet.lockFunds`, `Bet.cancel`).
+- Value Objects encapsulam validações (`Email`, `Money`, `BetAmount`, `Odds`).
+- Erros de domínio herdam de `DomainError`, permitindo tradução direta para `AppError` na camada API.
 
-**Integração com outros cores:**
-- Cria `Wallet` automaticamente ao registrar novo usuário
-- Consulta carteira ao processar operações financeiras
+### 4. Infraestrutura
+- **Persistência (`src/infrastructure/persistence`)**: factories (`factory.ts`) escolhem Mongoose (`persistence/mongoose/*`) ou adaptadores in-memory.
+- **Cache (`src/infrastructure/cache`)**: `RedisClient` (ioredis), métricas internas e hooks declarativos. TTLs configurados em `shared/config/cacheConfig.ts`.
+- **Autenticação (`src/infrastructure/auth`)**: `JwtService`, helpers Clerk e middlewares complementares.
+- **Observabilidade (`src/infrastructure/observability`)**: métricas Prometheus (`metrics.ts`) e tracing OpenTelemetry (`tracing.ts`).
+- **Config (`src/shared/config/*.ts`)**: single source of truth para envs, rate limit, CORS, security, cache e OTLP.
+
+### 5. Shared Layer (`src/shared`)
+- `errors/AppError`, `observability/requestContext`, helpers de logging e tipos comuns.
+- Config loaders (`env.ts`, `appConfig.ts`, `cacheConfig.ts`, `observabilityConfig.ts`).
+
+## Fluxo de Requisição
+
+1. **Entrada HTTP** – `ApiServer` aplica middlewares (helmet, CORS, rate-limit, request-id, logging, metrics).
+2. **Autenticação** – Clerk ou bypass preenche `req.auth.userId`; rotas críticas usam `protectedRoute` para validar token.
+3. **Controller/DTO** – Envelopes `BaseController` + Zod validam input e produzem resposta uniforme.
+4. **Use Case** – Execução de `RegisterUser`, `DepositFunds`, `PlaceBet`, etc., orquestrando domínios e cache.
+5. **Repositórios** – Factories resolvem `create<User|Wallet|Bet>Repository()` e tocam Mongo ou memória.
+6. **Cache / Side effects** – Hooks Redis atualizam perfis, saldos, odds. Eventos (log/tracing) são emitidos.
+7. **Resposta** – Controller traduz `Result` para o envelope JSON com `success`, `data/error`, `meta` (timestamp + `requestId`).
+
+## Persistência e Repositórios
+
+| Recurso | Interface | Implementações | Observações |
+|---------|-----------|----------------|-------------|
+| Usuários | `IUserRepository` | `MongooseUserRepository`, `UserRepository` (in-memory) | Índices únicos em email/username; sincroniza Clerk IDs. |
+| Carteiras | `IWalletRepository` | `MongooseWalletRepository`, `WalletRepository` | Histórico embutido e locks de saque. |
+| Apostas/Eventos | `IBetRepository`, `IEventRepository` | `MongooseBetRepository`, `BetRepository`, `EventRepository` | Índices por `status`/`userId`/`eventId`. |
+| Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository`, `CreditPackageRepository` | Mantém catálogos com tiers, bônus e ativos/inativos. |
+| Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository`, `WithdrawalRequestRepository` | Controla lifecycle (`PENDING`, `APPROVED`, `REJECTED`) com logs de aprovação. |
+
+Factories `create<User|Wallet|Bet|Event>Repository()` leem `USE_MONGOOSE_PERSISTENCE`. Em produção, `server.ts` garante `connectMongoDB()` antes de montar o `ApiServer` e registra handlers de shutdown para `disconnectMongoDB()` e `redisClient.quit()`.
+
+## Cache, Rate Limiting e Confiabilidade
+
+- **Cache Redis**: habilitado via `CACHE_ENABLED`. Hook especiais:
+  - `cacheUserProfileMiddleware`, `cacheWalletBalanceMiddleware`, `cacheWalletHistoryMiddleware`, `cacheEventOddsMiddleware`.
+  - Flush helpers após mutações (`flushWalletCache`, `flushEventOddsCache`).
+- **Rate limiting**:
+  - Global (`express-rate-limit`) configurável por `RATE_LIMIT_*`.
+  - Por rota via `createRouteRateLimiter` com variáveis dedicadas (`AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_*`).
+- **Request Context**: `AsyncLocalStorage` propaga `requestId/userId` para logs, métricas e handlers de erro.
+- **Health/Readiness**: `/health`, `/readiness`, `/health/cache` e `/metrics` expostos pelo `ApiServer`. Gauges `backbet_dependency_health{dependency="redis|mongo"}` sinalizam status.
+
+## Observabilidade
+
+- **Métricas**: `httpRequestCounter`, `httpRequestLatency`, `httpActiveRequests`, contadores de erros, métricas de cache e dependências expostas no endpoint `/metrics`.
+- **Tracing**: `src/infrastructure/observability/tracing.ts` inicializa OpenTelemetry (Express, Mongoose, ioredis instrumentations) quando `TRACING_ENABLED=true`.
+- **Logging estruturado**: middleware escreve JSON com `request_start`, `request_end` e `request_error`, sempre incluindo `requestId`, método, rota e duração.
+
+## Fluxos Críticos
+
+### Registro de Usuário + Carteira
+```
+POST /api/auth/register
+→ AuthController valida DTO (Zod) e chama RegisterUser use case
+→ UserService cria User (Email VO) e persiste via IUserRepository
+→ WalletService cria Wallet padrão (BRL) e persiste via IWalletRepository
+→ Cache invalida perfil/carteira e resposta inclui ambos os agregados
+```
+
+### Depósito / Saque
+```
+POST /api/wallets/deposit | withdraw
+→ WalletController verifica rate limit específico e autenticação
+→ WalletService.deposit/withdraw usa Value Objects Money/Currency
+→ Persistência atualiza histórico + locks
+→ cacheWalletBalance/cacheWalletHistory são atualizados
+```
+
+### Colocar/Cancelar Aposta
+```
+POST /api/bets
+→ BetController chama PlaceBet use case
+→ BetService valida usuário ativo, mercado aberto e odds
+→ WalletService.withdraw bloqueia fundos
+→ BetRepository persiste Bet PENDING; cache de odds é consultado
+→ Cancelamentos chamam WalletService.deposit para reversão
+```
+
+## Segurança
+
+- Autenticação: Clerk (produção) ou JWT/bypass dev.
+- Autorização: `protectedRoute` + guardas adicionais (ex.: aprovação de withdraw).
+- Segurança HTTP: `helmet`, CORS com allowlist, HSTS opcional, `x-request-id` obrigatório.
+- Configurações sensíveis carregadas por `shared/config/env.ts`, mantendo secrets fora do código.
+
+## Estrutura de Diretórios (resumo)
+
+```
+src/
+├── core/
+│   ├── shared/
+│   ├── user/
+│   │   ├── domain/
+│   │   └── application/use-cases/
+│   ├── finance/
+│   └── betting/
+├── infrastructure/
+│   ├── api/
+│   ├── auth/
+│   ├── cache/
+│   ├── observability/
+│   ├── persistence/
+│   └── config/
+├── shared/
+├── index.ts
+├── server.ts
+└── integration/
+```
+
+## Roadmap Arquitetural
+
+1. **Eventos de domínio/Outbox** – formalizar `UserCreated`, `BetPlaced`, `FundsWithdrawn` e publicar para integrações futuras.
+2. **Persistência única (Mongo)** – remover fallback in-memory em produção e habilitar migrações automáticas.
+3. **Feature Flags** – mover toggles críticos (bypass auth, cache) para um provider dedicado.
+4. **Escala Horizontal** – preparar `ApiServer` para múltiplas instâncias atrás de um ingress e externalizar sessões Clerk.
+5. **Observabilidade avançada** – dashboards oficiais + alertas para `httpRequestLatency` e `dependencyHealthGauge`.
 
 ---
 
-### 2. Finance Core (`src/core/finance/`)
-**Responsabilidades:**
-- Gerenciar carteiras de usuários
-- Realizar depósitos e saques
-- Bloquear fundos (lock/unlock) para reservas
-
-**Entidades:**
-- `Wallet` - agregado raiz com balance, lockedBalance, currency
-
-**Value Objects:**
-- `CurrencyValueObject` - valida moedas suportadas (BRL, USD, EUR)
-- `Money` (em shared) - valor monetário com operações
-
-**Serviços:**
-- `WalletService` - orquestra operações financeiras
-
-**Repositórios:**
-- `IWalletRepository` - contrato de persistência
-
-**Implementações de Persistência:**
-- `MongooseWalletRepository` - implementação MongoDB/Mongoose com:
-  - Índice único em userId
-  - Subdocumento de transactions com histórico completo
-  - Métodos: save, findByUserId, update, getHistory, delete
-  - Validação de currency (BRL, USD, EUR)
-- `WalletRepository` - implementação in-memory (fallback para testes)
-
-**Factory de Repositórios:**
-- `createWalletRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
-
-**Integração com outros cores:**
-- Consultado por `BetService` ao colocar apostas
-- Consultado por `BetService` ao resolver apostas
-- Enriquecido com domínio de pagamentos futuro
-
----
-
-### 3. Betting Core (`src/core/betting/`)
-**Responsabilidades:**
-- Gerenciar apostas de usuários
-- Criar e gerenciar eventos esportivos
-- Definir mercados e odds
-- Resolver apostas
-
-**Entidades:**
-- `Bet` - agregado raiz de uma aposta (status: PENDING, WON, LOST, CANCELED)
-- `Event` - agregado raiz de um evento esportivo
-- `Market` - entidade dentro do agregado Event
-
-**Value Objects:**
-- `Odds` - cotação de uma aposta (intervalo: (1, 1000])
-- `BetAmount` - valor da aposta com validações
-
-**Serviços:**
-- `BetService` - orquestra operação de apostas
-
-**Repositórios:**
-- `IBetRepository` / `IEventRepository` - contratos de persistência
-
-**Implementações de Persistência:**
-- `MongooseBetRepository` - implementação MongoDB/Mongoose com:
-  - Índices em userId, eventId, status para queries otimizadas
-  - Subdocumento de resolution (result, resolvedAt, resolvedBy)
-  - Métodos: create, update, findById, findByUserId, findByEvent, delete
-  - Validação de status (PENDING, WON, LOST, CANCELED)
-- `BetRepository` / `EventRepository` - implementações in-memory (fallback para testes)
-
-**Factory de Repositórios:**
-- `createBetRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
-- `createEventRepository()` - seleciona implementação baseado em `USE_MONGOOSE_PERSISTENCE` env var
-
-**Integração com outros cores:**
-- Valida User no User Core
-- Gerencia fundos via Finance Core
-
----
-
-## 4. Shared Domain (`src/core/shared/`)
-
-**Repositórios:**
-- `IRepository<T>` - contrato genérico para CRUD
-
-### Entidades Base
-- `AggregateRoot` - classe abstrata com id, createdAt, updatedAt, version
-
-### Value Objects Comuns
-- `UniqueId` - gerador e validador de UUIDs
-- `Money` - operações monetárias (add, subtract, multiply, compare)
-
-### Tipos Compartilhados
-- `SupportedCurrency` - 'BRL' | 'USD' | 'EUR'
-- `ResourceStatus` - status genérico de recursos
-- `DomainError` - estrutura de erros
-- `Result` - padrão Result para retorno de operações
-- `PaginatedDTO` - resposta paginada padrão
-- `FilterDTO` - filtros genéricos
-
----
-
-## Infraestrutura de Persistência
-
-### Factory Pattern (`src/infrastructure/persistence/factory.ts`)
-
- A aplicação utiliza o **Factory Pattern** para permitir troca transparente entre implementações de repositórios:
-
-```typescript
-// Variável de ambiente controla qual implementação usar
-USE_MONGOOSE_PERSISTENCE=true  // MongoDB/Mongoose
-USE_MONGOOSE_PERSISTENCE=false // In-Memory
-
-// Factory seleciona automaticamente
-export async function createUserRepository(): Promise<IUserRepository> {
-  if (process.env.USE_MONGOOSE_PERSISTENCE === 'true') {
-    const { MongooseUserRepository } = await import('./mongoose/repositories/MongooseUserRepository');
-    return new MongooseUserRepository();
-  }
-  return new UserRepository(); // fallback in-memory
-}
-```
-
-**Vantagens:**
-- Zero mudança no código de domínio ao trocar persistência
-- Testes podem usar in-memory para velocidade
-- Produção usa MongoDB para durabilidade
-- Futuras implementações (Redis, PostgreSQL) podem ser adicionadas facilmente
-
-## Configuração e Variáveis de Ambiente
-
-A aplicação carrega as configurações no arranque via `shared/config/env.ts`, expondo `dotenv` e reduzindo ruído quando não há arquivo `.env`. O objeto `appConfig` expõe:
-
-- `appConfig.env`: `NODE_ENV` (default `development`).
-- `appConfig.server.port`: porta HTTP (default `3000`).
-- `appConfig.rateLimit`: parâmetros do rate limiter:
-   - `windowMs`, `max`, `message` e `enabled` são lidos de `RATE_LIMIT_*` (consultar o `.env.example`).
-   - Os valores padrão são altos (5000 requisições/10 min) para não bloquear o desenvolvimento, mas você pode reduzir para staging/produção.
-
-Todos os middlewares usam `appConfig`, garantindo um único ponto de controle para `helmet`, `cors`, `rateLimit`, autenticação e possibilidades futuras (logging, observabilidade). A documentação e os checklists agora mencionam explicitamente as variáveis `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX` e `RATE_LIMIT_MESSAGE`.
-
-### MongoDB/Mongoose (`src/infrastructure/persistence/mongoose/`)
-
-**Schemas:**
-- `UserSchema.ts` - User com índices únicos em email/username
-- `WalletSchema.ts` - Wallet com índice único em userId e subdocumento transactions
-- `BetSchema.ts` - Bet com índices compostos (userId+status, eventId+status)
-
-**Repositories:**
-- `MongooseUserRepository` - implementa IUserRepository
-- `MongooseWalletRepository` - implementa IWalletRepository
-- `MongooseBetRepository` - implementa IBetRepository
-
-**Configuration:**
-- `config.ts` - helpers connectMongoDB(), disconnectMongoDB(), getMongoDBConfig()
-- Conexão estabelecida em `src/server.ts` na inicialização
-- Graceful shutdown com handlers SIGINT/SIGTERM
-
-
-**Variáveis de Ambiente:**
-```env
-USE_MONGOOSE_PERSISTENCE=true
-MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB_NAME=backbet-dev
-NODE_ENV=development
-```
-
----
-
-## Fluxo de Integração
-
-### Fluxo 1: Registrar Novo Usuário
-```
-1. UserService.registerUser(email, username, currency)
-   ├─ Valida email e username
-   ├─ Cria User
-   └─ Cria Wallet (BRL por padrão ou currency especificada)
-
-2. Ambos persistem em seus repositórios respectivos
-3. Eventos: UserCreated, WalletCreated (para auditoria futura)
-```
-
-### Fluxo 2: Colocar Aposta
-```
-1. BetService.placeBet({ userId, eventId, marketId, oddId, amount })
-   ├─ Valida se User exists e está ACTIVE
-   ├─ Valida se Event está SCHEDULED
-   ├─ Valida se Market está OPEN
-   ├─ Consulta WalletService.withdraw(userId, amount)
-   │  └─ WalletService verifica balance >= amount
-   │  └─ Reduz balance (ou move para lockedBalance)
-   ├─ Cria Bet com status PENDING
-   └─ Persiste Bet
-
-2. Eventos: BetPlaced, FundsWithdrawn (para auditoria futura)
-```
-
-### Fluxo 3: Resolver Aposta
-```
-1. BetService.resolveBet({ betId, result })
-   ├─ Localiza Bet
-   ├─ Valida status PENDING
-   ├─ Atualiza status (WON ou LOST)
-   ├─ Se WON:
-   │  └─ WalletService.deposit(userId, potentialReturn)
-   │     └─ Aumenta balance
-   └─ Persiste resultado
-
-2. Eventos: BetResolved, FundsDeposited (para auditoria futura)
-```
-
----
-
-## Padrões de Design Utilizados
-
-### 1. Domain-Driven Design (DDD)
-- **Aggregate Roots**: User, Wallet, Bet, Event
-- **Value Objects**: Email, Currency, Money, Odds, UniqueId
-- **Bounded Contexts**: user, finance, betting cores
-- **Ubiquitous Language**: termos consistentes em toda a aplicação
-
-### 2. Repository Pattern
-- Interfaces genéricas para abstrair persistência
-- Mockáveis para testes
-- Facilita troca de backend via Factory Pattern
-
-### 3. Factory Pattern
-- `createUserRepository()`, `createWalletRepository()`, `createBetRepository()`
-- Seleção automática de implementação via variável de ambiente
-- Zero impacto no código de domínio
-
-### 4. Service Layer
-- Orquestra operações de negócio
-- Coordena entre repositórios
-- Centraliza validações
-
-### 5. Value Objects
-- Imutáveis
-- Com validações
-- Reutilizáveis entre cores
-
-### 6. Dependency Injection (via Factory)
-- Cores não são acoplados (usado via interfaces)
-- Fácil de testar com mocks
-- Async factories para suportar imports dinâmicos
-
----
-
-## Status Atual da Implementação
-
-### ✅ Completamente Implementado
-- [x] Domain Models (User, Wallet, Bet, Event)
-- [x] Value Objects (Email, Currency, Money, UniqueId, Odds)
-- [x] Service Layer (UserService, WalletService, BetService)
-- [x] Repository Interfaces (IUserRepository, IWalletRepository, IBetRepository)
-- [x] In-Memory Repositories (para desenvolvimento e testes)
-- [x] MongoDB/Mongoose Schemas (UserSchema, WalletSchema, BetSchema)
-- [x] MongoDB/Mongoose Repositories (MongooseUserRepository, etc.)
-- [x] Factory Pattern (createUserRepository, etc.)
-- [x] Connection Management (connectMongoDB, disconnectMongoDB)
-- [x] Graceful Shutdown Handlers (SIGINT/SIGTERM)
-- [x] Testes Unitários (159 testes, 66.37% coverage geral)
-- [x] GitHub Actions CI/CD (build, test, lint)
-- [x] API REST com Express 5.1.0
-- [x] Validação com Zod
-- [x] Documentação Swagger/OpenAPI
-
-### 🟡 Em Progresso
-- [ ] Expansão de testes do Betting Core (~20% → 100%)
-- [ ] Autenticação Clerk (validação server-side)
-- [ ] Rate limiting middleware
-- [ ] Cache layer (Redis)
-
-### 📋 Próximos Passos
-
-1. **Eventos de Domínio**
-   - `UserCreated`, `WalletCreated`
-   - `BetPlaced`, `BetResolved`
-   - `FundsDeposited`, `FundsWithdrawn`
-   - Event Bus para propagação
-
-2. **Testes de Integração E2E**
-   - Teste fluxos completos (user → betting → finance)
-   - Teste transações e rollback
-   - Teste eventos de domínio
-
-3. **Auditoria e Compliance**
-   - Event Sourcing (registrar todas as operações)
-   - Logs estruturados
-   - Rastreamento de transações
-
-4. **Performance e Escalabilidade**
-   - Cache Redis para queries frequentes
-   - Connection pooling MongoDB otimizado
-   - Rate limiting por usuário
-   - Paginação em todas as listagens
-
----
-
-## Estrutura de Diretórios
-
-```
-src/core/
-├── shared/                           # Abstrações e padrões compartilhados
-│   ├── domain/
-│   │   ├── entities/
-│   │   │   └── AggregateRoot.ts      # Base para todos os agregados
-│   │   ├── repositories/
-│   │   │   └── IRepository.ts        # Interface genérica
-│   │   └── value-objects/
-│   │       ├── UniqueId.ts           # ID único
-│   │       └── Money.ts              # Valor monetário
-│   └── types/
-│       └── domain.types.ts           # Tipos compartilhados
-│
-├── user/                             # Domínio de Usuários
-│   ├── domain/
-│   │   ├── entities/
-│   │   │   └── User.ts
-│   │   ├── services/
-│   │   │   └── UserService.ts
-│   │   ├── repositories/
-│   │   │   └── IUserRepository.ts
-│   │   └── value-objects/
-│   │       └── Email.ts
-│   └── types/
-│       └── user.types.ts
-│
-├── finance/                          # Domínio Financeiro
-│   ├── domain/
-│   │   ├── entities/
-│   │   │   └── Wallet.ts
-│   │   ├── services/
-│   │   │   ├── IWalletService.ts
-│   │   │   └── WalletService.ts
-│   │   ├── repositories/
-│   │   │   └── IWalletRepository.ts
-│   │   └── value-objects/
-│   │       └── Currency.ts
-│   └── types/
-│       └── wallet.types.ts
-│
-└── betting/                          # Domínio de Apostas
-    ├── domain/
-    │   ├── entities/
-    │   │   ├── Bet.ts
-    │   │   └── Event.ts
-    │   ├── services/
-    │   │   └── BetService.ts
-    │   ├── repositories/
-    │   │   ├── IBetRepository.ts
-    │   │   └── IEventRepository.ts
-    │   └── value-objects/
-    │       ├── Odds.ts
-    │       └── BetAmount.ts
-    └── types/
-        └── bet.types.ts
-```
-
----
-
-## Conclusão
-
-A arquitetura é **modular, testável e escalável**:
-- Cada core é independente e pode ser testado isoladamente
-- Abstrações em `shared` evitam duplicação
-- Integração via interfaces bem definidas
-- Preparada para crescimento e novas features
+**Última atualização:** 23 de novembro de 2025

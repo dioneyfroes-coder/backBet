@@ -6,9 +6,16 @@ slug: "/docs/erros"
 
 # ERROS (AppError) — BackBet
 
-Esta página descreve os erros padronizados usados pela API BackBet. A aplicação lança erros estruturados usando a classe `AppError` com os campos `code`, `message`, `statusCode` e (`details` opcional).
+O BackBet utiliza a classe `AppError` para padronizar respostas de falha em toda a stack (casos de uso, serviços e adaptadores HTTP). Cada erro carrega `code`, `message`, `statusCode` e `details?`, permitindo instrumentação consistente, métricas e documentação OpenAPI.
 
-Formato padrão de resposta de erro
+## Pipeline de tratamento
+
+1. **Validação** — Schemas Zod ou validações de domínio usam `new AppError('VALIDATION_ERROR', ...)` detalhando quais campos falharam.
+2. **Casos de uso** — Quando uma regra de negócio bloqueia a ação (saldo insuficiente, aposta inexistente), o caso de uso propaga um `AppError` com contexto em `details`.
+3. **Infraestrutura** — Adaptadores (database, Redis, APIs externas) traduzem falhas conhecidas para códigos sem expor mensagens internas.
+4. **Middleware global** — `src/shared/http/error-handler.ts` intercepta qualquer `AppError`, normaliza o payload e anexa `requestId`, `timestamp`, `traceId` e metadados de ambiente.
+
+## Formato da resposta
 
 ```json
 {
@@ -18,48 +25,53 @@ Formato padrão de resposta de erro
     "message": "Descrição legível do erro",
     "details": { "campo": "mensagem de validação" }
   },
-  "meta": { "timestamp": "2025-11-15T12:00:00.000Z" }
-}
+  "meta": {
+    "timestamp": "2025-11-15T12:00:00.000Z",
+    "requestId": "req_123",
+    "traceId": "trace_abc"
+  }
 }
 ```
 
-Principais códigos (lista e mapeamento HTTP)
+## Catálogo de códigos
 
-- `VALIDATION_ERROR` — 400
-  - Uso: erros de validação de entrada (Zod). `details` contém um objeto campo → mensagem.
-- `BAD_REQUEST` — 400
-  - Uso: requisições malformadas ou regras de negócio violadas (ex.: atualizar recurso inválido).
-- `UNAUTHORIZED` — 401
-  - Uso: token ausente/expirado ou credenciais inválidas.
-- `FORBIDDEN` — 403
-  - Uso: usuário sem permissão para executar a ação.
-- `NOT_FOUND` — 404
-  - Uso: recurso não encontrado (usuário, carteira, aposta, evento).
-- `CONFLICT` — 409
-  - Uso: conflitos, por exemplo email já cadastrado.
-- `RATE_LIMIT_EXCEEDED` — 429
-  - Uso: política de rate limiting violada. Pode incluir `retryAfter` em `error.details`.
-- `INTERNAL_SERVER_ERROR` — 500
-  - Uso: erro inesperado no servidor.
+| Código | HTTP | Quando usar | Detalhes recomendados |
+| --- | --- | --- | --- |
+| `VALIDATION_ERROR` | 400 | Falha em schemas Zod ou invariantes | mapa campo → mensagem, `rule` opcional |
+| `BAD_REQUEST` | 400 | Regras de negócio quebradas (ex.: estado inválido) | `reason`, `expectedState`, `currentState` |
+| `UNAUTHORIZED` | 401 | Token ausente, inválido ou dev bypass desativado | `authMode`, `hint` mínimo |
+| `FORBIDDEN` | 403 | Papel não permite a ação | `requiredPermission`, `userRole` |
+| `NOT_FOUND` | 404 | Qualquer recurso inexistente | `resource`, `identifier` |
+| `CONFLICT` | 409 | Duplica chave ou condição otimista quebrada | `resource`, `field`, `value` |
+| `RATE_LIMIT_EXCEEDED` | 429 | Limite de IP/usuário atingido | `retryAfter` em segundos |
+| `SERVICE_UNAVAILABLE` | 503 | Dependência externa fora do ar (Clerk, Redis) | `dependency`, `retryAfter` |
+| `INTERNAL_SERVER_ERROR` | 500 | Erro inesperado; log completo somente no observability stack | `requestId` apenas |
 
-Exemplos
+> Sempre use códigos específicos antes de cair no fallback `INTERNAL_SERVER_ERROR`.
 
-- Validação falhou (400 / `VALIDATION_ERROR`)
+## Exemplos
+
+### Validação (400)
 
 ```json
+{
   "success": false,
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Dados inválidos",
-    "details": { "email": "Formato inválido", "username": "Obrigatório" }
+    "details": {
+      "email": "Formato inválido",
+      "username": "Obrigatório"
+    }
   },
   "meta": { "timestamp": "2025-11-15T12:01:00.000Z" }
 }
 ```
 
-- Conflito (409 / `CONFLICT`)
+### Conflito (409)
 
 ```json
+{
   "success": false,
   "error": {
     "code": "CONFLICT",
@@ -69,27 +81,44 @@ Exemplos
 }
 ```
 
-- Rate limit (429 / `RATE_LIMIT_EXCEEDED`)
+### Rate limit (429)
 
 ```json
+{
   "success": false,
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
     "message": "Limite de requisições atingido",
     "details": { "retryAfter": 60 }
-  }
+  },
+  "meta": { "timestamp": "2025-11-15T12:03:00.000Z" }
 }
 ```
 
-Como documentar no OpenAPI
+## Observabilidade
 
-- `components.schemas.ErrorResponse` : já existe e descreve `error.code`, `error.message` e `error.details`.
-- Use `ValidationError` para descrever o formato de `details` quando for um mapa campo→mensagem.
+- **Logs estruturados**: cada `AppError` gera um log com `error.code`, `requestId`, `userId?`, `useCase` e `latencyMs`.
+- **Métricas**: `error_total{code="CONFLICT"}` é exposta no endpoint `/metrics` para alertas no Grafana.
+- **Tracing**: o middleware anexa `error.code` e `status` nos spans OTEL, permitindo filtrar sessões problemáticas em segundos.
 
-Boas práticas para desenvolvedores
+## Documentação OpenAPI
 
-- Sempre lance `AppError` no domínio em vez de `throw new Error(...)`.
-- Controllers não devem capturar erros — deixe o middleware global formatar a resposta.
-- Ao retornar `details`, mantenha apenas informações necessárias (não exponha stacks ou segredos).
+- `components.schemas.ErrorResponse` descreve a estrutura `<success, error, meta>` e deve ser referenciada em cada endpoint 4xx/5xx.
+- Para validações campo → mensagem, reutilize `ValidationErrorMap` (schema auxiliar) ou adicione `additionalProperties` em `details`.
+- Quando criar um novo código, atualize `docs/API_DOCS.mdx` e a coleção de testes de contrato.
+
+## Boas práticas
+
+1. Lance somente `AppError` em regra de negócio previsível; use `logger.error` para exceções não tratadas antes do fallback 500.
+2. Nunca exponha mensagens de infraestrutura ou stack traces no `message`; o detalhe sensível deve viver no log.
+3. Prefira `details` minimalistas e estáveis, para que clientes possam automatizar o tratamento.
+4. Inclua testes de contrato (Jest + supertest) cobrindo o payload de erro, especialmente para novos códigos.
+
+## Como propor um novo código
+
+1. Abra uma issue descrevendo o cenário e o comportamento esperado.
+2. Ajuste `AppErrorCode` e o middleware de mapeamento HTTP, adicionando testes.
+3. Atualize esta página, o schema OpenAPI e qualquer doc relacionada (API, Quickstart, Architecture).
+4. Peça revisão dos mantenedores para garantir compatibilidade com os clientes existentes.
 
 Arquivo relacionado: `src/shared/errors/AppError.ts`

@@ -1,216 +1,157 @@
 ---
-id: betting-domain
-title: Módulo de Apostas
-sidebar_label: Betting
+title: "Módulo de Apostas"
+description: "Visão completa do domínio de betting: entidades, casos de uso, endpoints HTTP e integrações operacionais."
+slug: "/docs/betting"
 ---
 
-# Visão Geral
+# Core Betting
 
-O domínio de **apostas** é responsável por todas as operações relacionadas às apostas dos usuários: criação, gerenciamento, resolução, cálculo de odds e pagamentos.
+> Responsável por gerenciar todo o ciclo de vida de apostas: consulta de mercados, débito de saldo, criação/cancelamento, resolução e publicação dos resultados.
 
----
+## Estrutura e limites
 
-## Conceitos Principais
+```
+src/core/betting/
+	aplication/
+		errors/BetErrorMapper.ts
+		use-cases/*.ts
+	config/bet.ts
+	domain/
+		entities/{Bet,Event}.ts
+		factories/BetFactory.ts
+		repositories/*
+		services/BetService.ts
+		value-objects/{BetAmount,Odds}.ts
+	types/bet.types.ts
+src/infrastructure/
+	api/controllers/BetController.ts
+	api/dtos/BetDTOs.ts
+	api/routes/betRoutes.ts
+	cache/cacheHooks.ts (invalidação de odds)
+```
 
-### Aposta (Bet)
+- **Domain** reúne regras e invariantes (entidades, value objects, repositórios, serviço).
+- **Application** expõe os casos de uso e mapeia erros de domínio via `executeWithBetErrorMapping`.
+- **Infraestrutura** publica rotas HTTP com autenticação, cache Redis e rate limits específicos.
+- **Config** (`src/core/betting/config/bet.ts`) cria o grafo de dependências para scripts e workers.
 
-- **ID**: Identificador único  
-- **Usuário**: Referência ao autor da aposta  
-- **Valor**: Quantia apostada  
-- **Status**: `PENDING` | `WON` | `LOST` | `CANCELED`  
-- **Criada em**: Timestamp de criação  
-- **Resolvida em**: Timestamp de resolução  
-- **Odds**: Cotação no momento da aposta  
-- **Retorno Potencial**: Valor possível de ganho  
-- **Tipo**: `SINGLE` | `MULTIPLE`
+## Modelo de domínio
 
----
+### Entidades
 
-### Evento (Event)
+- `Bet` (`domain/entities/Bet.ts`)
+	- Campos: `id`, `userId`, `eventId`, `marketId`, `amount: BetAmount`, `odds: Odds`, `status`, `type`, `createdAt`, `resolvedAt?`, `cancellationReason?`.
+	- Métodos: `resolve(result)`, `cancel(reason)`, `potentialReturn` (usa `Odds.calculatePotentialReturn`).
+	- Regras: somente apostas `PENDING` podem ser resolvidas/canceladas; validações de IDs e datas lançam `DomainError`.
 
-- **ID**
-- **Nome**
-- **Data**
-- **Status**: `SCHEDULED` | `LIVE` | `FINISHED` | `CANCELED`
-- **Categoria**: Ex: `FOOTBALL`, `BASKETBALL`
-- **Participantes**
-- **Mercados**
+- `Event` + `Market` (`domain/entities/Event.ts`)
+	- Um `Event` mantém `markets: Map<string, Market>`; apenas eventos `SCHEDULED` aceitam apostas ou inclusão de novos mercados.
+	- `Market` controla status (`OPEN`, `SUSPENDED`, `CLOSED`), resultado e coleção de odds (`Map<string, Odds>`), bloqueando updates quando o mercado não está aberto.
 
----
+### Value Objects
 
-### Mercado (Market)
+- `BetAmount` valida valores positivos e restringe moedas suportadas.
+- `Odds` valida cotações > 0 e expõe helpers de cálculo de retorno.
 
-- **ID**
-- **Tipo**: `WIN_DRAW_WIN`, `OVER_UNDER`, etc.  
-- **Status**: `OPEN` | `SUSPENDED` | `CLOSED`  
-- **Odds**  
-- **Resultado**  
-- **Limites de Aposta**
+### DTOs e tipos (`types/bet.types.ts`)
 
----
+- `ICreateBetDTO`, `ICancelBetDTO`, `IResolveBetDTO` descrevem as entradas dos casos de uso.
+- Aliases (`BetStatus`, `BetType`, `EventStatus`, `MarketStatus`, `OddStatus`) padronizam estados entre camadas.
 
-### Odd
+## Serviços e casos de uso
 
-- **Valor**  
-- **Tipo**: Ex: `HOME_WIN`, `DRAW`, etc.  
-- **Status**: `ACTIVE` | `SUSPENDED`  
-- **Timestamp**
+- **BetService** (`domain/services/BetService.ts`)
+	- `placeBet`: valida evento/mercado/odd via `IEventRepository`, chama `IWalletService.withdraw` e persiste com `IBetRepository`.
+	- `cancelBet`: garante evento `SCHEDULED`, marca a aposta como `CANCELED`, devolve fundos (`WalletService.deposit`) e atualiza o repositório.
+	- `resolveBet`: muda status para `WON`/`LOST`, credita o pagamento quando aplicável e atualiza o estado.
+	- Leituras: `getUserBets`, `getEventBets`.
 
----
+- **Casos de uso** (`aplication/use-cases/*.ts`)
+	- `PlaceBetUseCase`, `CancelBetUseCase`, `ResolveBetUseCase`, `GetUserBetsUseCase`, `GetEventBetsUseCase` apenas orquestram o serviço e aplicam `executeWithBetErrorMapping`.
+	- O mapper converte `DomainError` em `AppError` com status HTTP consistente.
 
-## Regras de Negócio
+### Integração financeira
 
-### Criação de Apostas
+O `BetService` consome `WalletService` (`src/core/finance/domain/services/WalletService.ts`) via `IWalletService`.
 
-1. Usuário deve ter saldo suficiente  
-2. Valor deve respeitar limites do mercado  
-3. Odds precisam estar ativas  
-4. Evento não pode ter começado (pré-jogo)
+1. `withdraw(userId, amount)` garante saldo antes de criar a aposta.
+2. `deposit(userId, amount)` devolve fundos após cancelamentos ou paga ganhos em resoluções `WON`.
+3. Evolução futura: utilizar `lock/unlock` para reservas sem débito imediato.
 
----
+## Persistência e configuração
 
-### Gerenciamento de Risco
+- **Contratos**: `IBetRepository` e `IEventRepository` descrevem as operações de persistência.
+- **Implementações**:
+	- In-memory (`domain/repositories/*Repository.ts`) usada em desenvolvimento/testes.
+	- `MongooseBetRepository` (`infrastructure/persistence/mongoose/repositories/MongooseBetRepository.ts`) habilitada com `USE_MONGOOSE_PERSISTENCE=true` (decisão feita em `createBetRepository`).
+	- `EventRepository` ainda é apenas in-memory; integrações externas devem seguir `IEventRepository`.
+- **Factory compartilhada**: `src/infrastructure/persistence/factory.ts` garante uma única instância dos repositórios por processo (users, wallets, bets, finance).
 
-1. Limites por usuário/evento/mercado  
-2. Detecção de padrões suspeitos  
-3. Ajuste automático de odds por volume
+## API HTTP
 
----
+Endpoints definidos em `BetController` e registrados por `betRoutes` sob `/api/bets`.
 
-### Resolução de Apostas
+| Método | Caminho | Autenticação | Rate limit | Observações |
+|--------|---------|--------------|------------|-------------|
+| `GET` | `/api/bets/event/:eventId` | pública | n/a | Usa `cacheEventOddsMiddleware` + Redis e retorna `BetListResponseDTO` por evento.
+| `POST` | `/api/bets` | Bearer (Clerk ou token dev) | `BET_PLACE_RATE_LIMIT_*` | Valida `PlaceBetDTO`, debita carteira e invalida cache do evento.
+| `POST` | `/api/bets/:betId/cancel` | Bearer obrigatório | `BET_CANCEL_RATE_LIMIT_*` | `CancelBetDTO` aceita `reason`; devolve fundos se o evento ainda está `SCHEDULED`.
+| `GET` | `/api/bets/me` | Bearer obrigatório | n/a | Lista apostas do usuário autenticado usando `BetListResponseDTO`.
 
-1. Verificação do resultado  
-2. Cálculo de pagamento  
-3. Atualização de saldo  
-4. Registro no histórico
-
----
-
-### Validações
-
-1. Idade e localização  
-2. Limites de aposta  
-3. Conflitos de interesse  
-4. Odds válidas no momento da aposta
-
----
-
-## Use Cases
-
-### Fazer Aposta
+### DTOs expostos (Zod)
 
 ```ts
-interface PlaceBetDTO {
-  userId: string;
-  eventId: string;
-  marketId: string;
-  oddId: string;
-  amount: number;
-  type: 'SINGLE' | 'MULTIPLE';
-}
-Cancelar Aposta
-ts
-Copiar código
-interface CancelBetDTO {
-  betId: string;
-  reason: string;
-  canceledBy: string;
-}
-Resolver Aposta
-ts
-Copiar código
-interface ResolveBetDTO {
-  betId: string;
-  result: 'WON' | 'LOST';
-  marketResult: string;
-}
-Value Objects
-Odds
-ts
-Copiar código
-class Odds {
-  constructor(
-    public readonly value: number,
-    public readonly type: string
-  ) {
-    this.validate();
-  }
-}
-BetAmount
-ts
-Copiar código
-class BetAmount {
-  constructor(
-    public readonly value: number,
-    public readonly currency: string
-  ) {
-    this.validate();
-  }
-}
-Entidades
-Bet
-ts
-Copiar código
-interface Bet {
-  id: string;
-  userId: string;
-  eventId: string;
-  marketId: string;
-  amount: BetAmount;
-  odds: Odds;
-  status: BetStatus;
-  type: BetType;
-  createdAt: Date;
-  resolvedAt?: Date;
-  potentialReturn: number;
-}
-Event
-ts
-Copiar código
-interface Event {
-  id: string;
-  name: string;
-  startDate: Date;
-  status: EventStatus;
-  category: string;
-  participants: string[];
-  markets: Market[];
-}
-Serviços
-BetService
-Gerencia ciclo de vida da aposta
+export const PlaceBetDTO = z.object({
+	eventId: z.string().uuid(),
+	marketId: z.string(),
+	oddId: z.string(),
+	amount: z.number().positive().min(0.01),
+	type: z.enum(['SINGLE', 'MULTIPLE']).optional().default('SINGLE'),
+	currency: z.enum(['BRL', 'USD', 'EUR']).optional().default('BRL'),
+});
+```
 
-Aplica regras de negócio
+Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/docs.json`.
 
-Calcula retorno potencial
+## Regras de negócio essenciais
 
-Integra pagamentos
+- **Criação**: exige saldo, evento `SCHEDULED`, mercado `OPEN`, odd válida e `amount > 0`.
+- **Cancelamento**: permitido apenas antes do início do evento; motivo salvo em `Bet.cancellationReason`.
+- **Resolução**: somente apostas `PENDING`; resultado `WON` credita `potentialReturn`, `LOST` apenas finaliza.
+- **Eventos/mercados**: alterações de status devem ser persistidas via `IEventRepository`; mercados fechados lançam `DomainError`.
+- **Segurança**: autenticação via Clerk (`clerkMiddleware`) ou header Bearer fake em dev; erros retornam `AppError` padronizado.
 
-OddsService
-Gerencia e atualiza odds
+## Cache, rate-limit e consistência
 
-Mantém margens
+- `cacheEventOddsMiddleware` + `redisClient` respondem a `GET /event/:eventId` com baixa latência; TTL vem de `cacheTTL.oddsForEvent` (`shared/config/cacheConfig.ts`).
+- Escritas (`placeBet`, `cancelBet`, `resolveBet`) chamam `flushEventOddsCache(eventId)` para evitar dados obsoletos.
+- Rate limits por endpoint vivem em `appConfig.betRateLimit` e são configurados com:
+	- `BET_PLACE_RATE_LIMIT_WINDOW_MS` / `BET_PLACE_RATE_LIMIT_MAX`
+	- `BET_CANCEL_RATE_LIMIT_WINDOW_MS` / `BET_CANCEL_RATE_LIMIT_MAX`
+	- Mensagens customizáveis via `BET_*_RATE_LIMIT_MESSAGE`
+- O middleware `createRouteRateLimiter` usa `X-Forwarded-For` para identificar IP real e retorna `AppError` 429 com detalhes no corpo/log.
 
-Ajusta via volume
+## Observabilidade e operação
 
-RiskManagementService
-Avalia risco
+- **Logs**: `ApiServer` injeta `requestId` e `userId` (quando autenticado) via `AsyncLocalStorage`; erros são estruturados em JSON.
+- **Métricas**: `httpRequestCounter`, `httpRequestLatency`, `httpErrorCounter` e `dependencyHealthGauge` rotulam rota/método/status. `/metrics` expõe os dados para Prometheus.
+- **Health checks**: `/health`, `/readiness`, `/health/cache` validam Redis/Mongo — críticos para endpoints de aposta.
+- **Tracing**: habilitado por `TRACING_ENABLED` e `OTEL_*` (detalhes em `docs/OBSERVABILITY.mdx`), permitindo seguir `BetController → UseCase → BetService → WalletService`.
 
-Monitora padrões
+## Testes e qualidade
 
-Ajusta limites
+- `src/core/betting/aplication/use-cases/__tests__/BetUseCases.test.ts`: garante delegação correta e mapeamento de erros.
+- `src/core/betting/domain/repositories/__tests__/EventRepository.test.ts`: cobre operações do repositório em memória.
+- Para e2e use `supertest` ou `curl` com os endpoints de `/api/bets`; scripts como `src/scripts/seedInitialData.ts` ajudam a gerar usuários/carteiras antes das chamadas.
+- Rode `npm test -- --testPathPattern=betting` para focar somente no módulo.
 
-Detecta fraude
+## Próximos passos sugeridos
 
-Eventos de Domínio
-BetPlaced
+1. Implementar `IEventRepository` persistente (MongoDB ou feed externo) para eliminar dependência de fixtures.
+2. Introduzir reservas (`lock/unlock`) no fluxo de criação de apostas (ao invés de saque imediato).
+3. Adicionar validações antifraude (limites por usuário/mercado, fingerprint) e eventos de domínio (`BetPlaced`) publicados no barramento.
+4. Expandir testes de integração cobrindo cache + rate-limit e e2e com Clerk/JWT reais.
 
-BetCanceled
+---
 
-BetResolved
-
-OddsChanged
-
-MarketClosed
-
-EventStarted
+**Última atualização:** 23 de novembro de 2025

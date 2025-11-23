@@ -1,139 +1,154 @@
 ---
 title: "Módulo Usuário"
-description: "Documentação do núcleo de usuários: entidade, serviços e repositório."
+description: "Visão completa do núcleo de usuários: domínio, APIs de perfil/autenticação e integrações com Wallet, Clerk e JWT."
 slug: "/docs/user"
 ---
 
-# Módulo User
+# Core User
 
-## Descrição
-O módulo User é responsável pelo gerenciamento de usuários da plataforma de apostas. Ele implementa padrões de Domain-Driven Design (DDD) e Clean Architecture para manter o código organizado e flexível.
+> Responsável por onboarding, gestão de perfil e entrega de dados consistentes para Auth, Finance e Betting. Segue DDD + Clean Architecture e expõe endpoints REST protegidos por Clerk/JWT.
 
 ## Estrutura
 
 ```
 src/core/user/
-├── application/
-│   └── use-cases/
-│       └── RegisterUser.ts
-├── domain/
-│   ├── entities/
-│   │   └── User.ts
-│   ├── repositories/
-│   │   └── IUserRepository.ts
-│   ├── services/
-│   │   └── UserService.ts
-│   └── value-objects/
-│       └── Email.ts
-└── types/
-    └── user.types.ts
+  application/
+    use-cases/{RegisterUser,GetUserProfile,UpdateProfile,ChangeEmail}.ts
+  config/user-config.ts
+  domain/
+    entities/User.ts
+    repositories/{IUserRepository,UserRepository}.ts
+    services/UserService.ts
+    value-objects/Email.ts
+  types/user.types.ts
+src/infrastructure/
+  api/controllers/{AuthController,UserController}.ts
+  api/routes/{authRoutes,userRoutes}.ts
+  api/dtos/{AuthDTOs,UserDTOs}.ts
+  api/middleware/{AuthMiddleware,cacheMiddleware}.ts
+shared/services/{ClerkService,JwtService}.ts
 ```
 
-## Componentes Principais
+## Fluxo de cadastro end-to-end
 
-### Entidades
+1. `POST /api/auth/register` valida payload (`RegisterDTO`) e delega para `RegisterUser`.
+2. O use-case chama `UserService.registerUser` (garante email único, aplica `bcrypt` com fator 12, exige `minPasswordLength` de `userConfig`).
+3. Em seguida `WalletService.createWallet` é acionado via `executeWithWalletErrorMapping`, gerando carteira com a moeda solicitada ou `BRL` (default).
+4. Com Clerk habilitado (`CLERK_SECRET_KEY` real), `AuthController` sincroniza o usuário via `ClerkService.createUser`, preservando o `externalId = user.id`.
+5. A resposta inclui `user.toDTO()` e `wallet.toDTO()`, consumidos pelo front-end e por workflows de ativação.
 
-#### User
-Representa um usuário da plataforma.
+## Modelo de domínio
 
-Atributos:
-- `id`: Identificador único do usuário
-- `email`: Email do usuário (Value Object)
-- `username`: Nome de usuário
-- `status`: Status do usuário (ACTIVE, SUSPENDED, PENDING_VERIFICATION)
-- `createdAt`: Data de criação
-- `updatedAt`: Data da última atualização
+### Entidade `User` (`src/core/user/domain/entities/User.ts`)
+- Campos: `id`, `email: Email`, `username`, `passwordHash`, `status`, `createdAt`, `updatedAt`.
+- Métodos: `canOperate`, `suspend`, `activate`, `toDTO`.
+- Estados (`UserStatus`): `PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`.
 
-Métodos:
-- `canOperate()`: Verifica se o usuário pode realizar operações
-- `suspend()`: Suspende o usuário
-- `activate()`: Ativa o usuário
-- `toDTO()`: Converte a entidade para um objeto de transferência de dados
+### Value Object `Email`
+- Valida sintaxe, remove espaços e domínios malformados, lança `AppError(400, VALIDATION_ERROR)` quando inválido.
 
-### Value Objects
+### DTOs (`src/core/user/types/user.types.ts`)
+- `ICreateUserDTO`: `{ email, username, password, currency? }`.
+- `IUserDTO`: projeção serializável da entidade.
+- `IUserResponseDTO`: envelope `{ user, wallet }` retornado pelo cadastro.
 
-#### Email
-Encapsula a lógica de validação de email.
+## Serviços e casos de uso
 
-Métodos:
-- `constructor(value: string)`: Valida e cria um novo email
-- `toString()`: Retorna o valor do email como string
+### `UserService`
+- `registerUser`: cria `User` com `PENDING_VERIFICATION`, hash da senha e salva via `IUserRepository`.
+- `suspendUser` / `activateUser`: validam estado antes de atualizar para evitar operações redundantes.
+- `updateProfile`: altera `username` (derivado de first/last name enviados) e atualiza `updatedAt`.
+- `changeEmail`: verifica unicidade, recria VO `Email` e persiste.
+- `comparePassword`: usa `bcrypt.compare` durante o login legado.
 
-### Services
+### Use cases
+- `RegisterUser`: cadastro + criação de carteira.
+- `GetUserProfile`: provê dados para `/api/users/me` e `/api/auth/me`.
+- `UpdateProfile`: encapsula regras de mutação de perfil.
+- `ChangeEmail`: executa fluxo de troca de email.
 
-#### UserService
-Implementa a lógica de negócio relacionada aos usuários.
+## Persistência e factories
 
-Métodos:
-- `registerUser(input: ICreateUserDTO)`: Registra um novo usuário
-- `suspendUser(userId: string)`: Suspende um usuário existente
+- `IUserRepository` define `findById`, `findByEmail`, `save`, `update`.
+- Implementações disponíveis:
+  - `UserRepository`: in-memory (default em desenvolvimento/testes).
+  - `MongooseUserRepository`: utiliza `UserModel` quando `USE_MONGOOSE_PERSISTENCE=true`.
+- `createUserRepository()` (em `src/infrastructure/persistence/factory.ts`) decide qual implementação carregar e é compartilhado por `authRoutes` e `userRoutes`, evitando divergência de instâncias.
 
-### Use Cases
+## Integrações com Auth, Clerk e JWT
 
-#### RegisterUser
-Implementa o fluxo de registro de um novo usuário.
+- `AuthController` cobre registro, login, refresh, `me` e logout.
+- `JwtService` assina tokens (HS256) com parâmetros de `appConfig.jwt` (`JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`).
+- `AuthMiddleware` aceita:
+  - Bearer JWT válido → popula `req.auth` com `userId`/`sessionId`.
+  - Dev bypass (`ALLOW_DEV_BEARER_BYPASS=true`) → qualquer `Bearer <user-id>` é aceito para testes locais.
+- `ClerkService` só inicializa quando há chave real (desconsidera `sk_test`). Quando ativo, as rotas Auth sincronizam usuários e enriquecem respostas com dados Clerk.
 
-Métodos:
-- `execute(input: ICreateUserDTO)`: Executa o registro do usuário e cria uma carteira associada
+## API HTTP
 
-### Types
+### Rotas de usuário (`src/infrastructure/api/routes/userRoutes.ts`)
 
-#### UserStatus
-```typescript
-```
+| Método | Caminho | Autenticação | Cache | Observações |
+|--------|---------|--------------|-------|-------------|
+| `GET` | `/api/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; divide `username` em `firstName`/`lastName` para respostas.
+| `PATCH` | `/api/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
+| `PATCH` | `/api/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
 
-#### IUserDTO
-```typescript
-  id: string;
-  email: string;
-  username: string;
-  status: UserStatus;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
+### Rotas de autenticação (`src/infrastructure/api/routes/authRoutes.ts`)
 
-#### ICreateUserDTO
-```typescript
-  email: string;
-  username: string;
-  currency?: string;
-}
-```
+| Método | Caminho | Rate limit | Observações |
+|--------|---------|-----------|-------------|
+| `POST` | `/api/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com Clerk quando disponível.
+| `POST` | `/api/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
+| `POST` | `/api/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
+| `GET` | `/api/auth/me` | `protectedRoute` | Expõe perfil combinando User + Clerk.
+| `POST` | `/api/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client/Clerk.
 
-#### IUserResponseDTO
-```typescript
-  user: IUserDTO;
-  wallet: IWalletDTO;
-}
-```
+> Ajuste limites via `AUTH_{REGISTER|LOGIN|REFRESH}_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e configure o rate limit global (`RATE_LIMIT_*`) conforme o ambiente.
 
-## Exemplos de Uso
+## DTOs e validações
 
-### Registrando um Novo Usuário
+- `RegisterDTO`, `LoginDTO`, `RefreshTokenDTO` (Zod) vivem em `src/infrastructure/api/dtos/AuthDTOs.ts`.
+- `UpdateProfileDTO` e `ChangeEmailDTO` (`src/infrastructure/api/dtos/UserDTOs.ts`) garantem tamanho mínimo de nomes, limite de bio (500 chars) e emails válidos.
+- Toda validação utiliza `BaseController.validateSchema`, que retorna `AppError` padronizado (`code`, `message`, `status`).
 
-```typescript
+## Cache e consistência
 
-const result = await registerUser.execute({
-  email: "user@example.com",
-  username: "user123",
-  currency: "BRL"
-});
-```
+- `cacheUserProfileMiddleware` atende `GET /users/me` reutilizando Redis (`cacheKeys.userProfile`). TTL configurado em `shared/config/cacheConfig.ts`.
+- Mutadores (`PATCH /users/me`, `/users/me/email`) chamam `flushUserProfileCache(userId)` para evitar servir dados obsoletos.
+- Caso novos fluxos alterem perfil (ex.: upgrade de plano), reutilize os helpers de cache para manter consistência.
 
-### Suspendendo um Usuário
+## Configuração
 
-```typescript
-```
+- `src/core/user/config/user-config.ts`:
+  - `minPasswordLength` (8), `maxLoginAttempts`, `accountVerificationTimeout`, `defaultCurrency`, limites de depósito/saque.
+- Variáveis chave:
+  - `CLERK_SECRET_KEY`, `CLERK_API_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_API_URL`.
+  - `JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`.
+  - `ALLOW_DEV_BEARER_BYPASS` (false por padrão) para testes locais.
+  - `USE_MONGOOSE_PERSISTENCE` para selecionar o repositório.
 
-## Validações
+## Testes e troubleshooting
 
-- Email deve ser válido e único
-- Username é obrigatório
-- Status deve ser um dos valores definidos em UserStatus
-- Operações só podem ser realizadas por usuários ativos
+- `src/core/user/application/use-cases/__tests__/RegisterUser.test.ts` cobre o fluxo principal (cadastro + wallet), mockando serviços.
+- `UserRepository` fornece helpers (`getAllUsers`, `clear`) para cenários de teste.
+- Teste endpoints manualmente:
+  ```bash
+  curl -X POST http://localhost:3000/api/auth/register     -H 'Content-Type: application/json'     -d '{"email":"dev@example.com","username":"dev.user","password":"Secret123!"}'
+  ```
+- Rode `npm test -- User` para focar na suíte do módulo.
+- Problemas comuns:
+  - `CONFLICT Email already exists` → email duplicado em memória ou no Mongo.
+  - `CLERK_SECRET_KEY must be configured` → desabilite Clerk em dev ou configure chaves reais.
+  - `UNAUTHORIZED` em dev → defina `ALLOW_DEV_BEARER_BYPASS=true` e envie `Authorization: Bearer <user-id>`.
 
-## Integração com Outros Módulos
+## Próximos passos
 
-- **Finance**: O módulo User se integra com o módulo Finance para criar e gerenciar carteiras de usuários
-- **Auth**: (Futuro) Integrará com o módulo de autenticação para gerenciamento de credenciais
+1. Emitir eventos de domínio (`UserRegistered`, `EmailChanged`) para futuros consumers (notificações, compliance).
+2. Persistir campos opcionais (bio, avatar) em um repositório dedicado e sincronizar com Clerk via webhooks.
+3. Implementar fluxo de recuperação/verificação de email usando `ClerkService`.
+4. Adicionar testes de integração Auth + Wallet com Redis habilitado e rate limits reais.
+
+---
+
+**Última atualização:** 23 de novembro de 2025

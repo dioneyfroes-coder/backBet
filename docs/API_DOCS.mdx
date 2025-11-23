@@ -1,622 +1,209 @@
 ---
 title: "API Docs"
-description: "Documentação dos endpoints da API BackBet."
+description: "Guia único dos endpoints públicos do BackBet (auth, usuários, carteiras, finanças e apostas)."
 slug: "/docs/api"
 ---
 
-# Documentação de Endpoints - BackBet API
+# BackBet API
 
-> **Nota de implementação:** o servidor centraliza `/auth`, `/users`, `/wallets`, `/bets` e `/finance` via `createApiRouter`, compartilhando instâncias de repositórios e o `ClerkService` (quando uma `CLERK_API_KEY` válida é configurada). O `ClerkService` enriquece `/auth/me` com dados reais e tenta sincronizar cadastros novos, mas permanece desligado se só houver chaves de teste (`sk_test`).
+> Os módulos `auth`, `user`, `wallet`, `finance` e `bet` são montados pelo `ApiServer` em `/api/**`, compartilhando o mesmo container de dependências (repositórios, serviços de domínio, cache hooks, Clerk/JWT, rate limiters e métricas). Este guia resume os contratos expostos hoje.
 
-## Base URL
+## Base URLs
 
-```
-Desenvolvimento:  http://localhost:3000/api
-Produção:        https://api.backbet.com/api
-```
+| Ambiente | URL base | Docs interativos |
+|----------|----------|------------------|
+| Desenvolvimento | `http://localhost:3000/api` | `http://localhost:3000/api/docs` |
+| Produção (exemplo) | `https://api.backbet.com/api` | `https://api.backbet.com/api/docs` |
 
-## Health Checks
+> A especificação completa está disponível em `/api/docs.json` (OpenAPI 3.1) e usa os mesmos `servers` com prefixo `/api`. Todos os exemplos usam versão v1.
 
-### `GET /health`
-Status geral da aplicação
+## Autenticação e cabeçalhos
 
-**Resposta (200):**
+- `Authorization: Bearer <token>` é obrigatório nas rotas marcadas como protegidas (`protectedRoute`).
+- Tokens aceitos:
+  - JWT emitido pelo Clerk (produção).
+  - JWT local gerado pelo `JwtService` (`/auth/login`, `/auth/refresh`).
+  - Bypass de desenvolvimento: defina `ALLOW_DEV_BEARER_BYPASS=true` e envie `Authorization: Bearer <userId>` para forçar a sessão.
+- `Content-Type: application/json` em `POST` / `PATCH`.
+- Cada requisição recebe `X-Request-ID`; o mesmo valor é logado e propagado via `AsyncLocalStorage` (vide `docs/OBSERVABILITY.mdx`).
+
+## Resposta padrão e erros
+
+Todos os controllers herdam `BaseController`, produzindo envelopes consistentes:
+
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2025-11-14T10:30:00.000Z",
-  "uptime": 3600.5
+  "success": true,
+  "data": { "message": "...", "payload": { /* ... */ } },
+  "meta": { "timestamp": "2025-11-23T15:00:00.000Z", "requestId": "req-..." }
 }
 ```
 
-### `GET /readiness`
-Verificar se aplicação está pronta para receber requisições
+Erros seguem:
 
-**Resposta (200):**
 ```json
 {
-  "ready": true
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Dados inválidos",
+    "details": { "email": "Formato inválido" }
+  },
+  "meta": { "timestamp": "...", "requestId": "req-..." }
 }
 ```
 
----
+| Código | HTTP | Ocorrência (exemplos) |
+|--------|------|-----------------------|
+| `VALIDATION_ERROR` / `BAD_REQUEST` | 400 | Falha em DTOs Zod (`RegisterDTO`, `DepositDTO`, etc.). |
+| `UNAUTHORIZED` | 401 | Token ausente/expirado. |
+| `NOT_FOUND` | 404 | Usuário, carteira ou aposta inexistente. |
+| `CONFLICT` | 409 | Email duplicado, mudança de email inválida, carteira já criada. |
+| `RATE_LIMIT_EXCEEDED` | 429 | Limite global ou específico atingido. |
+| `INTERNAL_SERVER_ERROR` | 500 | Erro inesperado não tratado. |
 
-## Autenticação (`/auth`)
+## Rate limiting
 
-> **Proteção:** `/auth/register`, `/auth/login` e `/auth/refresh` são protegidos pelo `routeRateLimiter` compartilhado. Os limites são configuráveis via variáveis de ambiente `AUTH_REGISTER_RATE_LIMIT_WINDOW_MS`, `AUTH_REGISTER_RATE_LIMIT_MAX`, `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`, `AUTH_LOGIN_RATE_LIMIT_MAX`, `AUTH_REFRESH_RATE_LIMIT_WINDOW_MS` e `AUTH_REFRESH_RATE_LIMIT_MAX`; o middleware retorna `429` usando o mesmo formato de erro padrão se o limite for excedido.
+- **Global:** `express-rate-limit` (defaults `windowMs=600000`, `max=5000`). Configure com `RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE,ENABLED}`.
+- **Por rota:** `createRouteRateLimiter` injeta limites para endpoints críticos.
 
-### `POST /auth/register`
-Registra novo usuário
+| Rota | Variáveis | Padrão |
+|------|-----------|--------|
+| `POST /auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | `window=60s`, `max=10` |
+| `POST /auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | `window=60s`, `max=15` |
+| `POST /auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | `window=60s`, `max=30` |
+| `POST /wallets/deposit` | `WALLET_DEPOSIT_RATE_LIMIT_*` | `window=60s`, `max=20` |
+| `POST /wallets/withdraw` | `WALLET_WITHDRAW_RATE_LIMIT_*` | `window=60s`, `max=10` |
+| `POST /bets` | `BET_PLACE_RATE_LIMIT_*` | `window=60s`, `max=30` |
+| `POST /bets/:betId/cancel` | `BET_CANCEL_RATE_LIMIT_*` | `window=60s`, `max=10` |
 
-**Request:**
+Headers retornados (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`) seguem o padrão IETF.
+
+## Observabilidade rápida
+
+| Endpoint | Função | Proteção |
+|----------|--------|----------|
+| `GET /health` | Heartbeat (status/uptime). | Público |
+| `GET /readiness` | Ping em Redis/Mongo, atualiza `backbet_dependency_*`. | Público (proteja via proxy) |
+| `GET /health/cache` | Snapshot de `redisClient.getMetrics()`. | Público |
+| `GET /metrics` | Metrics Prometheus do `metricsRegistry`. | Público |
+| `GET /api/docs` | Swagger UI. | Público |
+
+Detalhes completos em `docs/OBSERVABILITY.mdx`.
+
+## Módulos e endpoints
+
+### Auth (`/api/auth`)
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| `POST` | `/auth/register` | Cria usuário + carteira (BRL). Sincroniza com Clerk quando habilitado. |
+| `POST` | `/auth/login` | Valida credenciais locais, emite `accessToken`/`refreshToken`, retorna perfil. |
+| `POST` | `/auth/refresh` | Recebe `refreshToken` e devolve novo par de tokens. |
+| `GET` | `/auth/me` | Perfil autenticado (dados do domínio + Clerk). |
+| `POST` | `/auth/logout` | Placeholder; retorna mensagem de sucesso. |
+
+**Registro (201)**
+
+```http
+POST /api/auth/register
+Content-Type: application/json
+```
+
 ```json
+{
   "email": "usuario@example.com",
-  "password": "senhaForte123!",
+  "password": "SenhaForte123!",
   "username": "usuario_123",
   "firstName": "João",
   "lastName": "Silva"
 }
 ```
 
-**Success (201):**
 ```json
+{
   "success": true,
   "data": {
     "message": "Usuário registrado com sucesso",
-    "user": {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "email": "usuario@example.com",
-      "username": "usuario_123",
-      "status": "PENDING_VERIFICATION",
-      "createdAt": "2025-11-14T10:30:00.000Z"
-    }
+    "user": { "id": "usr_01", "status": "PENDING_VERIFICATION" },
+    "wallet": { "userId": "usr_01", "balance": 0, "currency": "BRL" }
   }
 }
 ```
 
-**Errors:**
-```json
-  "success": false,
-  "error": {
-    "code": "CONFLICT",
-    "message": "Email já cadastrado"
-  }
-}
-```
+### Usuários (`/api/users`)
 
----
+Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`).
 
-### `POST /auth/login`
-Autentica usuário (via Clerk OAuth)
+| Método | Caminho | Notas |
+|--------|---------|-------|
+| `GET` | `/users/me` | Retorna perfil completo; servido do Redis quando `CACHE_ENABLED=true`. |
+| `PATCH` | `/users/me` | Atualiza `firstName/lastName` (o backend recalcula `username` e `updatedAt`). |
+| `PATCH` | `/users/me/email` | Troca email após validar unicidade e VO `Email`. Limpa cache de perfil. |
 
-**Note:** Login é feito no cliente via Clerk SDK
+### Carteiras (`/api/wallets`)
 
-**Response:**
-```json
-  "success": false,
-  "error": {
-    "code": "AUTH_METHOD_CLERK",
-    "message": "Login deve ser feito via Clerk OAuth"
-  }
-}
-```
+| Método | Caminho | Proteções / Cache | Descrição |
+|--------|---------|-------------------|-----------|
+| `GET` | `/wallets/me` | `protectedRoute` + `cacheWalletBalanceMiddleware` | Carteira atual `{ userId, balance, lockedBalance, currency }`. |
+| `GET` | `/wallets/history?limit&offset` | `protectedRoute` + `cacheWalletHistoryMiddleware` | Histórico paginado (`transactions`, `pagination`). |
+| `POST` | `/wallets/deposit` | `protectedRoute` + rate limit `wallet-deposit` | Body `{ amount, currency, description? }`. Responde 201 com carteira. |
+| `POST` | `/wallets/withdraw` | `protectedRoute` + rate limit `wallet-withdraw` | Mesma estrutura do depósito; valida saldo e bloqueios. |
 
----
+### Finanças (`/api/finance`)
 
-### `GET /auth/me`
-Retorna dados do usuário autenticado
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| `GET` | `/finance/packages` | Lista pacotes ativos (`CreditPackageResponseDTO`). |
+| `POST` | `/finance/packages/:packageId/purchase` | Compra pacote, credita `base+bonus` e retorna `{ wallet, creditPackage }`. |
+| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes? }` e trava o saldo (`wallet.lock`). |
+| `GET` | `/finance/withdrawal-requests` | Lista pedidos do usuário com `approvalLogs`. |
+| `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"|"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
 
-**Headers:**
-```
-Authorization: Bearer
-```
+### Apostas (`/api/bets`)
 
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "usuario@example.com",
-    "username": "usuario_123",
-    "firstName": "João",
-    "lastName": "Silva",
-    "status": "ACTIVE",
-    "createdAt": "2025-11-14T10:00:00.000Z"
-  }
-}
-```
+| Método | Caminho | Auth | Descrição |
+|--------|---------|------|-----------|
+| `GET` | `/bets/event/:eventId` | opcional | Lista apostas e odds do evento (cache em `cacheEventOddsMiddleware`). |
+| `GET` | `/bets/me` | Bearer | Retorna apostas do usuário. |
+| `POST` | `/bets` | Bearer + rate limit `bet-place` | Body `PlaceBetRequest` (`eventId`, `marketId`, `oddId`, `amount`, `type`). Debita via `WalletService.withdraw` e cria bet `PENDING`. |
+| `POST` | `/bets/:betId/cancel` | Bearer + rate limit `bet-cancel` | Cancela aposta pendente, devolve valores (`wallet.deposit`). |
 
-**Errors:**
-- `401 Unauthorized` - Token ausente ou expirado
-- `404 Not Found` - Usuário não encontrado
+`Bet` responses incluem `status`, `potentialReturn`, `odds`, `createdAt`, `updatedAt` e detalhes do evento/mercado associados.
 
----
+## Ferramentas e exemplos
 
-### `POST /auth/logout`
-Faz logout
+### Swagger / Postman
 
-**Headers:**
-```
-Authorization: Bearer
-```
+- Acesse `/api/docs` e clique em **Authorize** para informar o bearer token (`accessToken` recebido em `/auth/login`).
+- Para Postman/Insomnia, importe `/api/docs.json`, defina `{{baseUrl}}` e injete `{{accessToken}}` no header `Authorization`.
 
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "message": "Logout realizado com sucesso"
-  }
-}
-```
+### cURL de referência
 
----
-
-### `POST /auth/refresh`
-Renova access token (Clerk)
-
-**Request:**
-```json
-  "refreshToken": "refresh_token_aqui"
-}
-```
-
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "message": "Refresh via Clerk OAuth necessário"
-  }
-}
-```
-
----
-
-> **Protegido:** as rotas de `/users`, `/wallets`, `/finance` e `/bets` utilizam o middleware `protectedRoute`, que exige o cabeçalho `Authorization: Bearer <token>` validado pelo Clerk.
-
-## Usuários (`/users`) - Em Desenvolvimento
-
-### `GET /users/me`
-Perfil do usuário autenticado
-
-**Headers:**
-```
-Authorization: Bearer
-```
-
-### `PATCH /users/me`
-Atualizar perfil
-
-### `PATCH /users/me/email`
-Alterar email
-
----
-
-## Carteiras (`/wallets`) - Em Desenvolvimento
-
-### `GET /wallets/me`
-Saldo da carteira do usuário
-
-**Exemplo de histórico de transações (GET /wallets/history):**
-
-```json
-  "success": true,
-  "data": {
-    "transactions": [
-      {
-        "id": "a1b2c3d4-...",
-        "type": "DEPOSIT",
-        "amount": 100.0,
-        "currency": "BRL",
-        "description": "Depósito via cartão",
-        "createdAt": "2025-11-14T12:00:00.000Z"
-      }
-    ],
-    "total": 1
-  }
-}
-```
-
-### `POST /wallets/deposit`
-Depositar fundos
-
-**Request:**
-```json
-  "amount": 100.5,
-  "currency": "BRL",
-  "description": "Depósito via cartão"
-}
-```
-
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "message": "Depósito realizado com sucesso",
-    "transaction": {
-      "id": "a1b2c3d4-...",
-      "type": "DEPOSIT",
-      "amount": 100.5,
-      "currency": "BRL",
-      "description": "Depósito via cartão",
-      "createdAt": "2025-11-14T12:00:00.000Z"
-    }
-  },
-  "meta": { "timestamp": "2025-11-14T12:00:00.000Z" }
-}
-```
-
-### `POST /wallets/withdraw`
-Sacar fundos
-
-**Request:**
-```json
-  "amount": 50.0,
-  "currency": "BRL",
-  "description": "Saque para conta bancária"
-}
-```
-
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "message": "Saque realizado com sucesso",
-    "transaction": {
-      "id": "d4c3b2a1-...",
-      "type": "WITHDRAW",
-      "amount": 50.0,
-      "currency": "BRL",
-      "description": "Saque para conta bancária",
-      "createdAt": "2025-11-14T13:00:00.000Z"
-    }
-  },
-  "meta": { "timestamp": "2025-11-14T13:00:00.000Z" }
-}
-```
-
-### `GET /wallets/history`
-Histórico de transações
-
----
-
-## Finanças (`/finance`)
-
-> **Propósito:** permite que usuários adquiram pacotes de crédito e façam/acompanhem solicitações de saque. O `FinanceController` usa os DTOs definidos em `FinanceDTOs` e todas as rotas exigem autenticação via `protectedRoute`.
-
-### `GET /finance/packages`
-Lista os pacotes de crédito ativos.
-
-**Success (200):**
-```json
-  "success": true,
-  "data": [
-    {
-      "id": "cp-001",
-      "code": "STARTER",
-      "label": "Pacote Starter",
-      "baseAmount": 100,
-      "bonusAmount": 10,
-      "totalCredits": 110,
-      "currency": "BRL",
-      "price": 100.0,
-      "description": "Bônus de boas-vindas",
-      "isActive": true,
-      "createdAt": "2025-11-14T10:00:00.000Z",
-      "updatedAt": "2025-11-14T10:00:00.000Z"
-    }
-  ]
-}
-```
-
-### `POST /finance/packages/:packageId/purchase`
-Compra um pacote específico e atualiza a carteira do usuário.
-
-**Success (201):**
-```json
-  "success": true,
-  "data": {
-    "message": "Pacote de créditos adquirido com sucesso",
-    "wallet": { "balance": 210.5, "currency": "BRL" },
-    "creditPackage": {
-      "id": "cp-001",
-      "code": "STARTER",
-      "label": "Pacote Starter",
-      "baseAmount": 100,
-      "bonusAmount": 10,
-      "totalCredits": 110,
-      "currency": "BRL",
-      "price": 100.0,
-      "description": "Bônus de boas-vindas",
-      "isActive": true,
-      "createdAt": "2025-11-14T10:00:00.000Z",
-      "updatedAt": "2025-11-14T10:00:00.000Z"
-    }
-  }
-}
-```
-
-### `POST /finance/withdrawal-requests`
-Cria uma solicitação de saque para o usuário autenticado.
-
-**Request:**
-```json
-  "amount": 150.0,
-  "currency": "BRL",
-  "notes": "Saque para conta bancária"
-}
-```
-
-**Success (201):**
-```json
-  "success": true,
-  "data": {
-    "message": "Solicitação de saque criada com sucesso",
-    "withdrawalRequest": {
-      "id": "wr-123",
-      "userId": "user-abc",
-      "amount": 150.0,
-      "currency": "BRL",
-      "status": "PENDING",
-      "requestedAt": "2025-11-14T14:00:00.000Z",
-      "processedAt": null,
-      "notes": "Saque para conta bancária",
-      "approvalLogs": []
-    }
-  }
-}
-```
-
-### `GET /finance/withdrawal-requests`
-Retorna todas as solicitações do usuário (status e logs de aprovação seguem o DTO `WithdrawalRequestResponseDTO`).
-
-### `PATCH /finance/withdrawal-requests/:requestId`
-Atualiza o status de uma solicitação existente (`APPROVED` ou `REJECTED`) e permite notas opcionais.
-
-**Request:**
-```json
-  "action": "APPROVED",
-  "notes": "Aprovado após revisão"
-}
-```
-
----
-
-## Eventos (`/events`) - Em Desenvolvimento
-
-### `GET /events`
-Listar eventos disponíveis
-
-### `GET /events/:id`
-Detalhes do evento
-
-### `GET /events/:id/odds`
-Odds de um evento
-
----
-
-## Apostas (`/bets`) - Em Desenvolvimento
-
-### `GET /bets`
-Listar apostas do usuário
-
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "bets": [
-      {
-        "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
-        "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
-        "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-        "marketId": "market-123",
-        "amount": 50.0,
-        "odds": 1.85,
-        "potentialReturn": 92.5,
-        "status": "PENDING",
-        "type": "SINGLE",
-        "createdAt": "2025-11-14T23:30:00.000Z"
-      }
-    ]
-  },
-  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
-}
-```
-
-### `GET /bets/:id`
-Detalhes da aposta
-
-**Success (200):**
-```json
-  "success": true,
-  "data": {
-    "bet": {
-      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
-      "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
-      "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "marketId": "market-123",
-      "amount": 50.0,
-      "odds": 1.85,
-      "potentialReturn": 92.5,
-      "status": "PENDING",
-      "type": "SINGLE",
-      "createdAt": "2025-11-14T23:30:00.000Z"
-    }
-  },
-  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
-}
-```
-
-### `POST /bets`
-Colocar aposta
-
-**Request:**
-```json
-  "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "marketId": "market-123",
-  "oddId": "odd-456",
-  "amount": 50.0,
-  "type": "SINGLE",
-  "currency": "BRL"
-}
-```
-
-**Success (201):**
-```json
-  "success": true,
-  "data": {
-    "bet": {
-      "id": "7d9f6c2b-1b2a-4a8b-9c0d-123456789abc",
-      "userId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
-      "eventId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "marketId": "market-123",
-      "amount": 50.0,
-      "odds": 1.85,
-      "potentialReturn": 92.5,
-      "status": "PENDING",
-      "type": "SINGLE",
-      "createdAt": "2025-11-14T23:30:00.000Z"
-    }
-  },
-  "meta": { "timestamp": "2025-11-14T23:30:00.000Z" }
-}
-```
-
-### `POST /bets/:id/cancel`
-Cancelar aposta
-
----
-
-## Error Responses
-
-### Padrão de Erro
-
-```json
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Descrição do erro",
-    "details": {
-      "field": "Detalhes específicos"
-    }
-  },
-  "meta": {
-    "timestamp": "2025-11-14T10:30:00.000Z"
-  }
-}
-```
-
-### Códigos de Erro
-
-| Code | Status | Significado |
-|------|--------|-------------|
-| `VALIDATION_ERROR` | 400 | Dados inválidos |
-| `UNAUTHORIZED` | 401 | Autenticação necessária |
-| `FORBIDDEN` | 403 | Acesso negado |
-| `NOT_FOUND` | 404 | Recurso não encontrado |
-| `CONFLICT` | 409 | Conflito (ex: email duplicado) |
-| `INTERNAL_SERVER_ERROR` | 500 | Erro no servidor |
-
----
-
-## Rate Limiting
-
-### Limites Globais
-- **Global:** 1000 requisições/minuto
-- **Por usuário:** 100 requisições/minuto
-
-### Limites por Endpoint
-```
-POST /auth/register    → 5 requisições/hora
-POST /auth/login       → 10 requisições/minuto
-POST /wallets/deposit  → 5 requisições/minuto
-POST /wallets/withdraw → 5 requisições/minuto
-POST /bets            → 10 requisições/minuto
-```
-
-**Headers de Rate Limit:**
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1731489000
-```
-
-**Erro 429 (Too Many Requests):**
-```json
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Limite de requisições atingido",
-    "details": { "retryAfter": 60 }
-  },
-  "meta": { "timestamp": "2025-11-14T10:30:00.000Z" }
-}
-```
-
----
-
-## Autenticação
-
-Todos os endpoints protegidos requerem:
-
-**Header:**
-```
-Authorization: Bearer
-```
-
-**Tokens suportados:**
-- JWT do Clerk (fase atual)
-- JWT próprio (fase 2)
-
----
-
-## Exemplos com cURL
-
-### Registrar usuário
 ```bash
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "Password123!",
-    "username": "testuser",
-    "firstName": "Test",
-    "lastName": "User"
-  }'
+TOKEN="$(curl -s -X POST http://localhost:3000/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"dev@example.com","password":"Password123!"}' | jq -r '.data.accessToken')"
+
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/wallets/me | jq
 ```
 
-### Obter perfil
+### Observabilidade endpoints
+
 ```bash
-  -H "Authorization: Bearer "
+curl http://localhost:3000/health
+curl http://localhost:3000/readiness | jq
+curl -H 'Accept: text/plain' http://localhost:3000/metrics | head
 ```
 
-### Fazer logout
-```bash
-  -H "Authorization: Bearer "
-```
+## Configurações relevantes
+
+- **Cache:** `CACHE_ENABLED`, `REDIS_URL`, `CACHE_USER_BALANCE_TTL_SECONDS`, `CACHE_WALLET_HISTORY_TTL_SECONDS`, `CACHE_ODDS_TTL_SECONDS`.
+- **Persistência Mongo:** `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL` (afetando `/readiness` e os repositórios). 
+- **Tracing:** `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_DIAGNOSTIC_LOG_LEVEL`.
+- **Rate limiting:** `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*`.
+
+Proteja `/health`, `/readiness`, `/metrics` e `/health/cache` via firewall ou reverse proxy em produção caso necessário.
 
 ---
 
-## Exemplos com Postman
+**Última atualização:** 23 de novembro de 2025
 
-1. Importar collection:
-   - File → Import → [API_COLLECTION.json]
-
-2. Configurar ambiente:
-  - Token: `{{ clerk_token }}`
-  - Base URL: `{{ api_url }}`
-
-3. Executar requests com auth automática
-
----
-
-## Versionamento de API
-
-Versão atual: **v1**
-
-Futuro:
-- `GET /v2/events` - Quebras de compatibilidade
-- `GET /v1/events` - Versão legada
-
----
-
-**Última atualização:** 14 de Novembro de 2025
-**Status:** Sprint 1 - Em Desenvolvimento

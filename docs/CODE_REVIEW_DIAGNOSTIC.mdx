@@ -1,136 +1,102 @@
 ---
 title: "Diagnóstico de Revisão"
-description: "Análise técnica da base de código e recomendações de melhoria."
+description: "Checklist de revisão contínua para o back-end BackBet."
 slug: "/docs/code-review"
 ---
 
-# DIAGNÓSTICO DE REVISÃO DE CÓDIGO
+# Diagnóstico de Revisão de Código
 
-## 1. ESTRUTURA & ORGANIZAÇÃO
+Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e pendências prioritárias para manter qualidade, segurança e rastreabilidade.
 
-Pontos Positivos:
-- DDD bem estruturado (domain, application, infrastructure)
-- Controllers + Routes + DTOs organizados
-- Pastas por domínio (user, betting, finance, shared)
+## 1. Estrutura e Organização
 
-### ⚠️ Problemas Encontrados:
-1. **Documentação desnecessária** (16 arquivos .md)
-   - VALIDATION_CHECKLIST.md, PHASE_2_ROADMAP.md, INDEX.md, SESSION_SUMMARY_14_11_2025.md, etc.
-   - Manter apenas: README.md, QUICKSTART.md, API_DOCS.md
+**👍 Já consolidado**
+- DDD modular: `src/core` (domínios), `src/infrastructure`, `src/shared`.
+- Controllers + DTOs + rotas coesos (`infrastructure/api/**`).
+- Documentação viva em `docs/` cobre arquitetura, módulos, API, observabilidade.
 
-2. **Pasta `coverage/` desnecessária**
-   - Remover (gerada por jest --coverage)
+**⚠️ Observações**
+- Garantir que novos módulos sigam a convenção `application/use-cases` (evitar typos antigos como `aplication`).
+- Cobertura de docs: manter apenas arquivos relevantes (as referências legadas foram limpas; revisar periodicamente se novos “notes” surgirem fora do padrão).
 
-3. **Inconsistência de pastas**
-   - `src/core/betting/aplication` (typo: "aplication" vs "application")
-   - `src/core/finance/domain/repositories/` vs `src/core/user/domain/repositories/` (paths OK mas diferentes padrões)
+## 2. Dependências
 
-4. **Imports com caminhos complexos**
-   - Muitos `../../../core/` (9+ níveis de profundidade)
-   - Solução: usar path aliases em `tsconfig.json` (@core/*, @infrastructure/*)
+**Estado atual**
+- Stack em uso: Express 5, Zod, ioredis, mongoose (opcional), Clerk, Jest, ESLint flat config.
+- NestJS/TypeORM/class-validator removidos em favor de implementações próprias.
 
-## 2. DEPENDENCIES & PACKAGES
+**Checklist**
+- [ ] Rodar `npm outdated` a cada release para atualizar libs críticas (express-rate-limit, helmet, clerk SDK) => impacto: méd.
+- [ ] Automatizar `npm audit` no CI (alto).
+- [ ] Validar se pacotes dev-only (`tsx`, `tsc-alias`, `@types/*`) não vazaram para runtime (baixo).
 
-### ⚠️ Problemas:
-1. **NestJS instalado mas não usado**
-   - @nestjs/common, @nestjs/config, @nestjs/core, @nestjs/jwt, @nestjs/passport, @nestjs/swagger, @nestjs/typeorm
-   - Stack: Express (funciona bem), não NestJS
-   - **Ação**: Remover @nestjs/* (exceto @nestjs/testing se necessário)
+## 3. Código & Imports
 
-2. **TypeORM instalado mas não integrado**
-   - Repositórios usam arrays in-memory
-   - **Ação**: Remover ou integrar (por enquanto: remover)
+- `tsconfig.json` já expõe aliases (`@/core/*`, `@/infrastructure/*`, etc.).
+- Linter impede `../..` exagerado; reforçar em PRs.
+- Circular deps não detectados.
 
-3. **class-validator, class-transformer**
-   - Duplica funcionalidade de Zod
-   - **Ação**: Remover se não estiver em uso
+**Ações**
+- [ ] Rodar `npm run lint` em cada PR (CI). (alto)
+- [ ] Adicionar regra eslint `no-restricted-imports` para uso obrigatório de aliases. (méd)
 
-## 3. CÓDIGO & IMPORTS
+## 4. Segurança
 
-### ⚠️ Imports não utilizados:
-- Controllers: alguns imports de types/interfaces não usados
-- Routes: possíveis imports redundantes
+| Item | Situação | Ação |
+|------|----------|------|
+| Clerk obrig. em prod | ✅ `ApiServer` bloqueia boot sem `CLERK_SECRET_KEY` | Revisar `.env.example` se novas variáveis surgirem |
+| Rate limiting | ✅ Global + rotas críticas (`createRouteRateLimiter`) | Monitorar limites por ambiente |
+| Input validation | ✅ Zod DTOs em controllers | Cobrir novos DTOs imediatamente |
+| Secrets | ✅ `.env` no `.gitignore`; config centralizada (`shared/config`) | Validar Git hooks/CI para impedir vazamento |
+| Headers | ✅ helmet + HSTS opcional | auditar CSP ao adicionar novas UIs |
 
-Circular dependencies:
-- **Nenhum detectado** até agora (bom sinal)
+## 5. Observabilidade & Operação
 
-Imports complexos encontrados:
-```
-../../../core/user/domain/services/UserService
-../../../core/finance/domain/services/WalletService
-../../../core/betting/domain/services/BetService
-```
-→ Refatorar com path aliases
+- Metrics Prometheus (`/metrics`), health/readiness/cache endpoints, request context + logging JSON.
+- OTEL tracing configurável via `TRACING_ENABLED` + `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Documentação em `docs/OBSERVABILITY.mdx` e dashboards versionados.
 
-## 4. SEGURANÇA
+**Ações**
+- [ ] Certificar que ambientes expõem `/metrics` apenas internamente (reverse proxy). (alto)
+- [ ] Adicionar testes que validem `X-Request-ID` e `requestContext` (méd).
 
-### ⚠️ Potenciais riscos:
-1. **Clerk fallback em dev**
-   - `sk_test` tokens em NODE_ENV=development (ok para dev, mas documentar)
+## 6. Typescript & Qualidade
 
-2. **Sem rate limiting** (por implementar)
+- `tsconfig.json` com `strict: true`; CI roda `npm run build` para validar tipos.
+- Cobertura atual: 97%+ (statements/fns/lines) com Jest + SWC.
 
-3. **Sem input sanitization** (usar helmet, validações Zod ok)
+**Ações**
+- [ ] Manter badge de cobertura atualizado no README (baixo).
+- [ ] Acompanhar gaps de branches (<90%) nos relatórios e priorizar módulos com menor cobertura (finance/bets). (méd)
 
-4. **Variáveis de ambiente**
-   - .env commitado? (verificar .gitignore)
-   - CLERK_SECRET_KEY, PORT expostos?
+## 7. Testes e CI
 
-## 5. ARQUITETURA & DESIGN
+- `npm run test -- --coverage` cobre auth, wallets, bets, observabilidade.
+- Seminda pipeline GitHub Actions: build + lint + test.
 
-Bom:
-- Separation of concerns (domain/app/infra)
-- DTOs com Zod
-- Middleware de autenticação
+**Próximas melhorias**
+- [ ] Adicionar suíte de carga (k6/Artillery) para `/auth`, `/wallets`, `/bets`. (méd)
+- [ ] Automatizar smoke (`curl /health`, `/readiness`, `/metrics`) pós-deploy. (méd)
 
-### ⚠️ Melhorar:
-1. **BaseController muito genérico**
-   - Métodos: ok(res, data), created(), error(), badRequest(), etc.
-   - Reduzir: pode ser mais simples
+## 8. Backlog de revisão (prioridade)
 
-2. **Métodos longos em controllers**
-   - Ex: BetController.deposit() poderia extrair lógica de validação
+| Prioridade | Item | Status | Notas |
+|------------|------|--------|-------|
+| 🔴 Alta | Garantir CI obrigatório (lint/test/build) em todos os PRs | pendente | Bloqueia regressões silenciosas |
+| 🔴 Alta | Verificar secrets no CI (Clerk, JWT, Redis) antes do deploy | pendente | Use scanners ou validação manual |
+| 🟠 Média | Criar webhook Clerk (user.updated) para sync automático | pendente | Reduz drift entre Clerk e domínio |
+| 🟠 Média | Tests E2E com Clerk real + cache ligado | pendente | Simula produção |
+| 🟢 Baixa | Monitorar duplicação de docs legacy | contínuo | já limpo, manter triagem |
 
-3. **Variáveis de ambiente**
-   - Sem tipagem (usar zod para .env validation)
+## 9. Recomendações gerais
 
-## 6. TYPESCRIPT & TIPOS
-
-### ⚠️ Problemas:
-1. Possíveis `any` types em mocks/tests
-2. Alguns `Promise` quando deveria retornar tipo específico
-3. Tipo `ICreateBetDTO` com `type: BetType` mas DTOs use enum string
-
-## 7. TESTES
-
-Presente:
-- Tests em __tests__ folders
-- jest.config.js configurado
-
-### ⚠️ Cobertura:
-- Não verificada (rodar `npm run test:coverage`)
-
-## SUMÁRIO DE AÇÕES PRIORITÁRIAS
-
-1. **Alta Prioridade:**
-   - [ ] Remover documentação desnecessária (11 .md files)
-   - [ ] Remover dependencies NestJS, TypeORM, class-validator
-   - [ ] Configurar path aliases em tsconfig.json
-   - [ ] Refatorar imports para usar aliases
-
-2. **Média Prioridade:**
-   - [ ] Renomear pasta "aplication" → "application"
-   - [ ] Revisar imports em controllers/routes
-   - [ ] Validar .env não exposto (check .gitignore)
-   - [ ] Consolidar error handling
-
-3. **Baixa Prioridade:**
-   - [ ] Reduzir tamanho de métodos em controllers
-   - [ ] Validar tipos TypeScript (tsc --strict)
-   - [ ] Rodar cobertura de testes
+1. **Revisões enxutas**: validar diffs por domínio (auth/user/wallet/bet) e exigir descrição de testes executados.
+2. **Logs**: nunca logar tokens; revisar PRs que toquem `loggingMiddleware`/`requestContext`.
+3. **Observabilidade**: qualquer rota nova deve expor métricas (latência/contadores) e incluir `requestId` no log.
+4. **Docs**: atualizar `docs/*.mdx` no mesmo PR da mudança (arquitetura, API, quickstart, observabilidade, Clerk, etc.).
+5. **Dependências externas**: toda integração (Redis, Mongo, Clerk, OTLP) precisa de fallback documentado + feature flag.
 
 ---
 
-**Data**: 14/11/2025
-**Total de arquivos TS**: 73
-**Total de pastas**: 38
+**Última revisão:** 23 de novembro de 2025
+**Revisor:** Plataforma BackBet Core Team
