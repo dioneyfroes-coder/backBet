@@ -1,6 +1,5 @@
 import { WalletService } from '../WalletService';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
-import { AppError } from '@/shared/errors/AppError';
 
 describe('WalletService extra scenarios', () => {
   const mockRepo = {

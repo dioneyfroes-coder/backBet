@@ -1,8 +1,38 @@
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
-import { ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
+import { Transaction, ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
 import { AppError } from '@/shared/errors/AppError';
 import { WalletModel, IWalletDocument } from '../schemas/WalletSchema';
+
+const sanitizeUserId = (userId: string): string => {
+  if (typeof userId !== 'string' || userId.trim().length === 0) {
+    throw new AppError('VALIDATION_ERROR', 'Invalid userId', 400);
+  }
+  return userId.trim();
+};
+
+const serializeTransactions = (transactions: Transaction[]): ITransactionDTO[] =>
+  transactions.map((tx) => tx.toDTO());
+
+const parseTransactions = (transactions: any[] = []): Transaction[] =>
+  transactions.map((tx) =>
+    new Transaction(
+      tx.id,
+      tx.userId,
+      tx.type,
+      tx.amount,
+      tx.currency,
+      tx.description,
+      tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
+    ),
+  );
+
+const normalizePagination = (value: number | undefined, fallback: number): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  return fallback;
+};
 
 export class MongooseWalletRepository implements IWalletRepository {
   async save(wallet: Wallet): Promise<Wallet> {
@@ -12,7 +42,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         balance: wallet.balance,
         lockedBalance: wallet.lockedBalance,
         currency: wallet.currency,
-        transactions: [],
+        transactions: serializeTransactions(wallet.getTransactions()),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -42,7 +72,8 @@ export class MongooseWalletRepository implements IWalletRepository {
 
   async findByUserId(userId: string): Promise<Wallet | null> {
     try {
-      const walletData = await WalletModel.findOne({ userId }).lean() as any;
+      const safeUserId = sanitizeUserId(userId);
+      const walletData = await WalletModel.findOne({ userId: safeUserId }).lean() as any;
       if (!walletData) {
         return null;
       }
@@ -62,11 +93,12 @@ export class MongooseWalletRepository implements IWalletRepository {
       const walletData: Partial<IWalletDocument> = {
         balance: wallet.balance,
         lockedBalance: wallet.lockedBalance,
+        transactions: serializeTransactions(wallet.getTransactions()),
         updatedAt: new Date(),
       };
 
       const result = await WalletModel.findOneAndUpdate(
-        { userId: wallet.userId },
+        { userId: sanitizeUserId(wallet.userId) },
         walletData,
         { new: true }
       );
@@ -90,7 +122,7 @@ export class MongooseWalletRepository implements IWalletRepository {
 
   async delete(userId: string): Promise<void> {
     try {
-      await WalletModel.findOneAndDelete({ userId });
+      await WalletModel.findOneAndDelete({ userId: sanitizeUserId(userId) });
     } catch (error: any) {
       throw new AppError(
         'Erro ao deletar carteira',
@@ -103,22 +135,26 @@ export class MongooseWalletRepository implements IWalletRepository {
 
   async getHistory(userId: string, limit?: number, offset?: number): Promise<{ transactions: ITransactionDTO[]; total: number }> {
     try {
-      const wallet = await WalletModel.findOne({ userId }).lean() as any;
+      const safeUserId = sanitizeUserId(userId);
+      const wallet = await WalletModel.findOne({ userId: safeUserId }).lean() as any;
       if (!wallet) {
         throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
       }
 
       const transactions = wallet.transactions || [];
-      const start = offset || 0;
-      const end = limit ? start + limit : transactions.length;
+      const safeOffset = normalizePagination(offset, 0);
+      const safeLimit = normalizePagination(limit, transactions.length);
+      const end = safeLimit ? safeOffset + safeLimit : transactions.length;
 
       return {
-        transactions: transactions.slice(start, end).map((tx: any) => ({
+        transactions: transactions.slice(safeOffset, end).map((tx: any) => ({
           id: tx.id,
           type: tx.type,
           amount: tx.amount,
           description: tx.description,
-          createdAt: tx.createdAt,
+          createdAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
+          userId: tx.userId,
+          currency: tx.currency,
         })),
         total: transactions.length,
       };
@@ -137,11 +173,11 @@ export class MongooseWalletRepository implements IWalletRepository {
 
   private mapToDomain(data: any): Wallet {
     const wallet = new Wallet(data.userId, data.currency);
-    
-    // Restaurar estado da carteira a partir do documento
+
     (wallet as any)._balance = data.balance;
     (wallet as any)._lockedBalance = data.lockedBalance;
-    
+    (wallet as any)._transactions = parseTransactions(data.transactions);
+
     return wallet;
   }
 }

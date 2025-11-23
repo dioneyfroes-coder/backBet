@@ -1,4 +1,4 @@
-export type TransactionType = 'deposit' | 'withdraw';
+export type TransactionType = 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
 
 export interface ITransactionDTO {
   id: string;

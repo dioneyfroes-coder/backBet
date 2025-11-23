@@ -1,106 +1,146 @@
+import { randomUUID } from 'crypto';
 import { IWalletDTO } from '../../types/wallet.types';
-import { Transaction } from './Transaction';
-import { AppError } from '@/shared/errors/AppError';
+import { Transaction, TransactionType } from './Transaction';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Money } from '@/core/shared/domain/value-objects/Money';
+import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 
 export class Wallet {
-  private _balance: number = 0;
-  private _lockedBalance: number = 0;
+  private _balance: Money;
+  private _lockedBalance: Money;
   private _transactions: Transaction[] = [];
 
   constructor(
     private readonly _userId: string,
-    private readonly _currency: string,
-  ) {}
+    currency: Currency,
+  ) {
+    const validatedCurrency = new CurrencyValueObject(currency).toString();
+    this._balance = new Money(0, validatedCurrency);
+    this._lockedBalance = new Money(0, validatedCurrency);
+  }
 
   get userId(): string {
     return this._userId;
   }
 
   get balance(): number {
-    return this._balance;
+    return this._balance.amount;
   }
 
   get lockedBalance(): number {
-    return this._lockedBalance;
+    return this._lockedBalance.amount;
   }
 
-  get currency(): string {
-    return this._currency;
+  get currency(): Currency {
+    return this._balance.currency;
   }
 
-  deposit(amount: number): void {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
-    }
-    this._balance += amount;
-    // registrar transação de depósito
-    try {
-      const tx = new Transaction(crypto.randomUUID(), this._userId, 'deposit', amount, this._currency, undefined, new Date());
-      this._transactions.unshift(tx);
-    } catch (err) {
-      // não bloquear operação principal por erro de logging
-    }
+  deposit(amount: number, description?: string): void {
+    this.ensurePositiveAmount(amount);
+    const money = this.createMoney(amount);
+    this._balance = this._balance.add(money);
+    this.recordTransaction('deposit', money.amount, description);
   }
 
-  withdraw(amount: number): void {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+  withdraw(amount: number, description?: string): void {
+    this.ensurePositiveAmount(amount);
+    const money = this.createMoney(amount);
+    if (this._balance.isLessThan(money)) {
+      throw new DomainError({
+        code: 'WALLET_INSUFFICIENT_FUNDS',
+        message: 'Insufficient funds',
+        details: { userId: this._userId, attempted: amount },
+      });
     }
-    if (this._balance < amount) {
-      throw new AppError('BAD_REQUEST', 'Insufficient funds', 400);
-    }
-    this._balance -= amount;
-    // registrar transação de saque
-    try {
-      const tx = new Transaction(crypto.randomUUID(), this._userId, 'withdraw', amount, this._currency, undefined, new Date());
-      this._transactions.unshift(tx);
-    } catch (err) {
-      // ignorar
-    }
+    this._balance = this._balance.subtract(money);
+    this.recordTransaction('withdraw', money.amount, description);
   }
 
   lock(amount: number): void {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    this.ensurePositiveAmount(amount);
+    const money = this.createMoney(amount);
+    if (this._balance.isLessThan(money)) {
+      throw new DomainError({
+        code: 'WALLET_INSUFFICIENT_FUNDS',
+        message: 'Insufficient funds',
+        details: { userId: this._userId, attempted: amount },
+      });
     }
-    if (this._balance < amount) {
-      throw new AppError('BAD_REQUEST', 'Insufficient funds', 400);
-    }
-    this._balance -= amount;
-    this._lockedBalance += amount;
+    this._balance = this._balance.subtract(money);
+    this._lockedBalance = this._lockedBalance.add(money);
+    this.recordTransaction('lock', money.amount);
   }
 
   unlock(amount: number): void {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    this.ensurePositiveAmount(amount);
+    const money = this.createMoney(amount);
+    if (this._lockedBalance.isLessThan(money)) {
+      throw new DomainError({
+        code: 'WALLET_LOCKED_BALANCE_EXCEEDED',
+        message: 'Amount exceeds locked balance',
+        details: { userId: this._userId, attempted: amount },
+      });
     }
-    if (this._lockedBalance < amount) {
-      throw new AppError('BAD_REQUEST', 'Amount exceeds locked balance', 400);
-    }
-    this._lockedBalance -= amount;
-    this._balance += amount;
+    this._lockedBalance = this._lockedBalance.subtract(money);
+    this._balance = this._balance.add(money);
+    this.recordTransaction('unlock', money.amount);
   }
 
   withdrawLocked(amount: number): void {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    this.ensurePositiveAmount(amount);
+    const money = this.createMoney(amount);
+    if (this._lockedBalance.isLessThan(money)) {
+      throw new DomainError({
+        code: 'WALLET_INSUFFICIENT_LOCKED_FUNDS',
+        message: 'Insufficient locked funds',
+        details: { userId: this._userId, attempted: amount },
+      });
     }
-    if (this._lockedBalance < amount) {
-      throw new AppError('BAD_REQUEST', 'Insufficient locked funds', 400);
-    }
-    this._lockedBalance -= amount;
+    this._lockedBalance = this._lockedBalance.subtract(money);
+    this.recordTransaction('withdraw_locked', money.amount);
   }
 
   toDTO(): IWalletDTO {
     return {
       userId: this._userId,
-      balance: this._balance,
-      lockedBalance: this._lockedBalance,
-      currency: this._currency,
+      balance: this.balance,
+      lockedBalance: this.lockedBalance,
+      currency: this.currency,
     };
   }
 
   getTransactions(): Transaction[] {
     return [...this._transactions];
+  }
+
+  private createMoney(amount: number): Money {
+    return new Money(amount, this.currency);
+  }
+
+  private ensurePositiveAmount(amount: number): void {
+    if (typeof amount !== 'number' || Number.isNaN(amount) || amount <= 0) {
+      throw new DomainError({
+        code: 'WALLET_INVALID_AMOUNT',
+        message: 'Amount must be positive',
+        details: { amount },
+      });
+    }
+  }
+
+  private recordTransaction(type: TransactionType, amount: number, description?: string): void {
+    try {
+      const tx = new Transaction(
+        randomUUID(),
+        this._userId,
+        type,
+        amount,
+        this.currency,
+        description,
+        new Date(),
+      );
+      this._transactions.unshift(tx);
+    } catch (error) {
+      // Do not block wallet operations if logging fails
+    }
   }
 }

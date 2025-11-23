@@ -1,4 +1,4 @@
-import { AppError } from '@/shared/errors/AppError';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export class BetAmount {
   private static readonly SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
@@ -13,25 +13,29 @@ export class BetAmount {
 
   private validate(): void {
     if (typeof this.value !== 'number' || isNaN(this.value)) {
-      throw new AppError('VALIDATION_ERROR', 'Bet amount must be a valid number', 400);
+      throw new DomainError({ code: 'BET_AMOUNT_INVALID_NUMBER', message: 'Bet amount must be a valid number' });
     }
 
     if (this.value <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Bet amount must be greater than 0', 400);
+      throw new DomainError({ code: 'BET_AMOUNT_NON_POSITIVE', message: 'Bet amount must be greater than 0' });
     }
 
     if (typeof this.currency !== 'string' || !this.currency.trim()) {
-      throw new AppError('VALIDATION_ERROR', 'Invalid currency', 400);
+      throw new DomainError({ code: 'BET_AMOUNT_INVALID_CURRENCY', message: 'Invalid currency' });
     }
 
     if (!BetAmount.SUPPORTED_CURRENCIES.includes(this.currency as any)) {
-      throw new AppError('VALIDATION_ERROR', `Unsupported currency: ${this.currency}`, 400);
+      throw new DomainError({
+        code: 'BET_AMOUNT_UNSUPPORTED_CURRENCY',
+        message: `Unsupported currency: ${this.currency}`,
+        details: { currency: this.currency },
+      });
     }
   }
 
   multiply(factor: number): BetAmount {
     if (factor <= 0 || isNaN(factor)) {
-      throw new AppError('VALIDATION_ERROR', 'Invalid multiplier factor', 400);
+      throw new DomainError({ code: 'BET_AMOUNT_INVALID_MULTIPLIER', message: 'Invalid multiplier factor' });
     }
     return new BetAmount(this.value * factor, this.currency);
   }

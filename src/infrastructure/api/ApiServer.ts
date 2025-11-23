@@ -1,7 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { clerkMiddleware, requireAuth } from '@clerk/express';
-import cors from 'cors';
-import helmet from 'helmet';
+import cors, { CorsOptions } from 'cors';
+import helmet, { HelmetOptions } from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from '../config/swagger';
@@ -14,6 +14,11 @@ import {
   httpRequestCounter,
   httpRequestLatency,
 } from '@/infrastructure/observability/metrics';
+import {
+  runWithRequestContext,
+  updateRequestContext,
+  getRequestContext,
+} from '@/shared/observability/requestContext';
 
 export class ApiServer {
   private app: Express;
@@ -22,20 +27,44 @@ export class ApiServer {
   constructor(port: number = 3000) {
     this.port = port;
     this.app = express();
+    this.app.disable('x-powered-by');
     this.setupMiddleware();
   }
 
   private setupMiddleware(): void {
-    // Segurança
-    this.app.use(helmet());
+    const isProduction = appConfig.env === 'production';
 
-    // CORS - Inicialmente aberto, pode ser restringido depois
-    this.app.use(
-      cors({
-        origin: process.env.CORS_ORIGIN || ['http://localhost:3000', 'http://localhost:3001'],
-        credentials: true,
-      })
-    );
+    const helmetOptions: HelmetOptions = {
+      contentSecurityPolicy: isProduction ? undefined : false,
+      crossOriginEmbedderPolicy: false,
+    };
+
+    this.app.use(helmet(helmetOptions));
+
+    if (appConfig.security.enableHsts && isProduction) {
+      this.app.use(helmet.hsts({ maxAge: 15552000, includeSubDomains: true }));
+    }
+
+    this.app.use(helmet.frameguard({ action: 'deny' }));
+    this.app.use(helmet.crossOriginResourcePolicy({ policy: 'same-origin' }));
+
+    const allowedOrigins = new Set(appConfig.cors.allowedOrigins);
+    const allowAllOrigins = allowedOrigins.has('*');
+    const corsOptions: CorsOptions = {
+      origin: (origin, callback) => {
+        if (!origin) {
+          return callback(null, true);
+        }
+        if (allowAllOrigins || allowedOrigins.has(origin)) {
+          return callback(null, true);
+        }
+        console.warn(`Origin ${origin} blocked by CORS policy`);
+        return callback(new Error('Not allowed by CORS'));
+      },
+      credentials: appConfig.cors.allowCredentials,
+    };
+
+    this.app.use(cors(corsOptions));
 
     // Rate limiting (alto para ambiente de desenvolvimento)
     if (appConfig.rateLimit.enabled) {
@@ -65,11 +94,18 @@ export class ApiServer {
     this.app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
     // Clerk authentication middleware - skip in development if not configured
-    const isDevModeWithMockKeys = 
-      process.env.NODE_ENV === 'development' && 
-      process.env.CLERK_SECRET_KEY?.includes('sk_test');
+    const clerkSecret = process.env.CLERK_SECRET_KEY;
+    const hasValidClerkSecret = Boolean(clerkSecret && !clerkSecret.includes('sk_test'));
+    if (appConfig.env === 'production' && !hasValidClerkSecret) {
+      throw new Error('CLERK_SECRET_KEY must be configured in production environments');
+    }
 
-    if (isDevModeWithMockKeys) {
+    const allowDevBypass =
+      appConfig.env === 'test' ||
+      (!hasValidClerkSecret && appConfig.env !== 'production') ||
+      (appConfig.env === 'development' && appConfig.security.allowDevBearerBypass);
+
+    if (allowDevBypass) {
       // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
       this.app.use((req: Request, res: Response, next: NextFunction) => {
         const authHeader = req.headers.authorization;
@@ -133,21 +169,63 @@ export class ApiServer {
   };
 
   private requestIdMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-    const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    (req as any).id = requestId;
-    res.setHeader('X-Request-ID', requestId);
-    next();
+    const requestId =
+      (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
+      `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    const initialiseContext = () => {
+      (req as any).id = requestId;
+      res.setHeader('X-Request-ID', requestId);
+      next();
+    };
+
+    runWithRequestContext({ requestId, userId: undefined }, initialiseContext);
   };
 
   private loggingMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-    const start = Date.now();
-    const original = res.send;
+    const start = process.hrtime();
+    const requestId = (req as any).id;
+    const userId = (req as any).auth?.userId || (req as any).user?.id;
+    const clientIpHeader = req.headers['x-forwarded-for'];
+    const clientIp = Array.isArray(clientIpHeader)
+      ? clientIpHeader[0]
+      : clientIpHeader?.split(',')[0].trim();
+    const ip = clientIp || req.ip;
 
-    res.send = function (data: any) {
-      const duration = Date.now() - start;
-      console.log(`[${(req as any).id}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
-      return original.call(this, data);
+    updateRequestContext({ requestId, userId });
+
+    const baseLog = {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      ip,
+      userId,
     };
+
+    console.log(
+      JSON.stringify({
+        level: 'info',
+        event: 'request_start',
+        timestamp: new Date().toISOString(),
+        ...baseLog,
+      }),
+    );
+
+    res.on('finish', () => {
+      const duration = process.hrtime(start);
+      const elapsedMs = duration[0] * 1000 + duration[1] / 1e6;
+      console.log(
+        JSON.stringify({
+          level: 'info',
+          event: 'request_end',
+          timestamp: new Date().toISOString(),
+          status: res.statusCode,
+          durationMs: Number(elapsedMs.toFixed(2)),
+          contentLength: res.getHeader('content-length'),
+          ...baseLog,
+        }),
+      );
+    });
 
     next();
   };
@@ -206,12 +284,25 @@ export class ApiServer {
   }
 
   public registerErrorHandler(): void {
-    this.app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      console.error('Error:', err);
-
+    this.app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const statusCode = err.statusCode || err.status || 500;
       const code = err.code || 'INTERNAL_SERVER_ERROR';
       const message = err.message || 'Internal Server Error';
+      const timestamp = new Date().toISOString();
+      const ctx = getRequestContext();
+      const requestId = ctx?.requestId || (req as any).id;
+      const logPayload = {
+        level: 'error',
+        event: 'request_error',
+        timestamp,
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode,
+        code,
+        details: err.details,
+      };
+      console.error(JSON.stringify(logPayload));
 
       res.status(statusCode).json({
         success: false,
@@ -221,8 +312,8 @@ export class ApiServer {
           details: err.details,
         },
         meta: {
-          timestamp: new Date().toISOString(),
-          requestId: (_req as any).id,
+          timestamp,
+          requestId,
         },
       });
     });

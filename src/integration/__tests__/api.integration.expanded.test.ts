@@ -1,27 +1,27 @@
 import request from 'supertest';
-import { createApiServer } from '../infrastructure/api/ApiServer';
+import { createApiServer } from '@/infrastructure/api/ApiServer';
 import express, { Router } from 'express';
-import { AuthController } from '../infrastructure/api/controllers/AuthController';
-import { WalletController } from '../infrastructure/api/controllers/WalletController';
-import { BetController } from '../infrastructure/api/controllers/BetController';
-import { UserService } from '../core/user/domain/services/UserService';
-import { WalletService } from '../core/finance/domain/services/WalletService';
-import { BetService } from '../core/betting/domain/services/BetService';
-import { UserRepository } from '../core/user/domain/repositories/UserRepository';
-import { WalletRepository } from '../core/finance/domain/repositories/WalletRepository';
-import { BetRepository } from '../core/betting/domain/repositories/BetRepository';
-import { EventRepository } from '../core/betting/domain/repositories/EventRepository';
-import { RegisterUser } from '../core/user/application/use-cases/RegisterUser';
-import { GetWallet } from '../core/finance/application/use-cases/GetWallet';
-import { Deposit } from '../core/finance/application/use-cases/Deposit';
-import { Withdraw } from '../core/finance/application/use-cases/Withdraw';
-import { GetHistory } from '../core/finance/application/use-cases/GetHistory';
-import { PlaceBetUseCase } from '../core/betting/aplication/use-cases/PlaceBetUseCase';
-import { CancelBetUseCase } from '../core/betting/aplication/use-cases/CancelBetUseCase';
-import { GetUserBetsUseCase } from '../core/betting/aplication/use-cases/GetUserBetsUseCase';
-import { GetEventBetsUseCase } from '../core/betting/aplication/use-cases/GetEventUseCase';
-import { asyncHandler } from '../infrastructure/api/middleware/asyncHandler';
-import { protectedRoute } from '../infrastructure/api/middleware/AuthMiddleware';
+import { AuthController } from '@/infrastructure/api/controllers/AuthController';
+import { WalletController } from '@/infrastructure/api/controllers/WalletController';
+import { BetController } from '@/infrastructure/api/controllers/BetController';
+import { UserService } from '@/core/user/domain/services/UserService';
+import { WalletService } from '@/core/finance/domain/services/WalletService';
+import { BetService } from '@/core/betting/domain/services/BetService';
+import { UserRepository } from '@/core/user/domain/repositories/UserRepository';
+import { WalletRepository } from '@/core/finance/domain/repositories/WalletRepository';
+import { BetRepository } from '@/core/betting/domain/repositories/BetRepository';
+import { EventRepository } from '@/core/betting/domain/repositories/EventRepository';
+import { RegisterUser } from '@/core/user/application/use-cases/RegisterUser';
+import { GetWallet } from '@/core/finance/application/use-cases/GetWallet';
+import { Deposit } from '@/core/finance/application/use-cases/Deposit';
+import { Withdraw } from '@/core/finance/application/use-cases/Withdraw';
+import { GetHistory } from '@/core/finance/application/use-cases/GetHistory';
+import { PlaceBetUseCase } from '@/core/betting/aplication/use-cases/PlaceBetUseCase';
+import { CancelBetUseCase } from '@/core/betting/aplication/use-cases/CancelBetUseCase';
+import { GetUserBetsUseCase } from '@/core/betting/aplication/use-cases/GetUserBetsUseCase';
+import { GetEventBetsUseCase } from '@/core/betting/aplication/use-cases/GetEventUseCase';
+import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
+import { protectedRoute } from '@/infrastructure/api/middleware/AuthMiddleware';
 import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
 
@@ -169,8 +169,8 @@ describe('API expanded integration tests (isolated)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('BAD_REQUEST');
-    expect(res.body.error.message).toMatch(/saldo|Saldo|insuficiente/i);
+    expect(res.body.error.code).toBe('WALLET_INSUFFICIENT_FUNDS');
+    expect(res.body.error.message).toMatch(/saldo|Saldo|insuficiente|Insufficient/i);
   });
 
   test('wallet history returns correct transaction count and total', async () => {

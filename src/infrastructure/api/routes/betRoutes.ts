@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
+import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
+import { cacheEventOddsMiddleware } from '../middleware/cacheMiddleware';
 import { BetController } from '../controllers/BetController';
 import { BetService } from '@core/betting/domain/services/BetService';
 import { createBetRepository, createEventRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
@@ -12,6 +14,7 @@ import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEvent
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { appConfig } from '@/shared/config/appConfig';
 
 export type BetRoutesDeps = {
   betRepository?: IBetRepository;
@@ -37,9 +40,19 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
 
   const betController = new BetController(placeBetUseCase, cancelBetUseCase, getUserBetsUseCase, getEventBetsUseCase);
 
-  router.get('/event/:eventId', asyncHandler((req, res) => betController.getEventBets(req, res)));
-  router.post('/', protectedRoute, asyncHandler((req, res) => betController.placeBet(req, res)));
-  router.post('/:betId/cancel', protectedRoute, asyncHandler((req, res) => betController.cancelBet(req, res)));
+  const placeLimiter = createRouteRateLimiter({
+    ...appConfig.betRateLimit.place,
+    keyPrefix: 'bet-place',
+  });
+
+  const cancelLimiter = createRouteRateLimiter({
+    ...appConfig.betRateLimit.cancel,
+    keyPrefix: 'bet-cancel',
+  });
+
+  router.get('/event/:eventId', cacheEventOddsMiddleware, asyncHandler((req, res) => betController.getEventBets(req, res)));
+  router.post('/', protectedRoute, placeLimiter, asyncHandler((req, res) => betController.placeBet(req, res)));
+  router.post('/:betId/cancel', protectedRoute, cancelLimiter, asyncHandler((req, res) => betController.cancelBet(req, res)));
   router.get('/me', protectedRoute, asyncHandler((req, res) => betController.getMyBets(req, res)));
 
   return router;

@@ -1,8 +1,8 @@
 import { Wallet } from '../entities/Wallet';
 import { IWalletRepository } from '../repositories/IWalletRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
-import { CurrencyValueObject } from '../value-objects/Currency';
-import { AppError } from '@/shared/errors/AppError';
+import { Currency, CurrencyValueObject } from '../value-objects/Currency';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export class WalletService {
   constructor(private walletRepository: IWalletRepository) {}
@@ -10,10 +10,14 @@ export class WalletService {
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {
     const existingWallet = await this.walletRepository.findByUserId(input.userId);
     if (existingWallet) {
-      throw new AppError('CONFLICT', 'Wallet already exists for user', 409);
+      throw new DomainError({
+        code: 'WALLET_ALREADY_EXISTS',
+        message: 'Wallet already exists for user',
+        details: { userId: input.userId },
+      });
     }
 
-    const currency = new CurrencyValueObject(input.currency as 'BRL' | 'USD' | 'EUR');
+    const currency = new CurrencyValueObject((input.currency || 'BRL') as Currency);
     const wallet = new Wallet(input.userId, currency.toString());
     await this.walletRepository.save(wallet);
     return wallet;
@@ -65,7 +69,11 @@ export class WalletService {
   private async ensureWalletExists(userId: string): Promise<Wallet> {
     const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
-      throw new AppError('NOT_FOUND', 'Wallet not found', 404);
+      throw new DomainError({
+        code: 'WALLET_NOT_FOUND',
+        message: 'Wallet not found',
+        details: { userId },
+      });
     }
     return wallet;
   }

@@ -1,16 +1,12 @@
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import { IWalletDTO } from '@/core/finance/types/wallet.types';
-import { AppError } from '@/shared/errors/AppError';
+import { executeWithWalletErrorMapping } from '@/core/finance/application/errors/WalletErrorMapper';
 
 export class WithdrawFunds {
   constructor(private walletService: WalletService) {}
 
   async execute(userId: string, amount: number): Promise<IWalletDTO> {
-    if (amount <= 0) {
-      throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
-    }
-
-    const wallet = await this.walletService.withdraw(userId, amount);
+    const wallet = await executeWithWalletErrorMapping(() => this.walletService.withdraw(userId, amount));
     return wallet.toDTO();
   }
 }

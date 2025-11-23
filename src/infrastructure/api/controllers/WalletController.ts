@@ -133,12 +133,6 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const wallet = await this.getWalletUseCase.execute(userId);
-    if (!wallet) {
-      return this.notFound(res, 'Carteira não encontrada');
-    }
-
-    // Realiza o depósito via serviço (pode lançar se houver erro)
     const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
     await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
 
@@ -215,17 +209,6 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const wallet = await this.getWalletUseCase.execute(userId);
-    if (!wallet) {
-      return this.notFound(res, 'Carteira não encontrada');
-    }
-
-    // Verificar saldo
-    if (wallet.balance < payload.amount) {
-      return this.badRequest(res, 'Saldo insuficiente');
-    }
-
-    // Realiza o saque via serviço (pode lançar se houver erro)
     const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
     await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
 

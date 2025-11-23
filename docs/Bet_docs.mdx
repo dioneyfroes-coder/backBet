@@ -1,0 +1,216 @@
+---
+id: betting-domain
+title: Domínio de Apostas (Betting)
+sidebar_label: Betting
+---
+
+# Visão Geral
+
+O domínio de **apostas** é responsável por todas as operações relacionadas às apostas dos usuários: criação, gerenciamento, resolução, cálculo de odds e pagamentos.
+
+---
+
+## Conceitos Principais
+
+### Aposta (Bet)
+
+- **ID**: Identificador único  
+- **Usuário**: Referência ao autor da aposta  
+- **Valor**: Quantia apostada  
+- **Status**: `PENDING` | `WON` | `LOST` | `CANCELED`  
+- **Criada em**: Timestamp de criação  
+- **Resolvida em**: Timestamp de resolução  
+- **Odds**: Cotação no momento da aposta  
+- **Retorno Potencial**: Valor possível de ganho  
+- **Tipo**: `SINGLE` | `MULTIPLE`
+
+---
+
+### Evento (Event)
+
+- **ID**
+- **Nome**
+- **Data**
+- **Status**: `SCHEDULED` | `LIVE` | `FINISHED` | `CANCELED`
+- **Categoria**: Ex: `FOOTBALL`, `BASKETBALL`
+- **Participantes**
+- **Mercados**
+
+---
+
+### Mercado (Market)
+
+- **ID**
+- **Tipo**: `WIN_DRAW_WIN`, `OVER_UNDER`, etc.  
+- **Status**: `OPEN` | `SUSPENDED` | `CLOSED`  
+- **Odds**  
+- **Resultado**  
+- **Limites de Aposta**
+
+---
+
+### Odd
+
+- **Valor**  
+- **Tipo**: Ex: `HOME_WIN`, `DRAW`, etc.  
+- **Status**: `ACTIVE` | `SUSPENDED`  
+- **Timestamp**
+
+---
+
+## Regras de Negócio
+
+### Criação de Apostas
+
+1. Usuário deve ter saldo suficiente  
+2. Valor deve respeitar limites do mercado  
+3. Odds precisam estar ativas  
+4. Evento não pode ter começado (pré-jogo)
+
+---
+
+### Gerenciamento de Risco
+
+1. Limites por usuário/evento/mercado  
+2. Detecção de padrões suspeitos  
+3. Ajuste automático de odds por volume
+
+---
+
+### Resolução de Apostas
+
+1. Verificação do resultado  
+2. Cálculo de pagamento  
+3. Atualização de saldo  
+4. Registro no histórico
+
+---
+
+### Validações
+
+1. Idade e localização  
+2. Limites de aposta  
+3. Conflitos de interesse  
+4. Odds válidas no momento da aposta
+
+---
+
+## Use Cases
+
+### Fazer Aposta
+
+```ts
+interface PlaceBetDTO {
+  userId: string;
+  eventId: string;
+  marketId: string;
+  oddId: string;
+  amount: number;
+  type: 'SINGLE' | 'MULTIPLE';
+}
+Cancelar Aposta
+ts
+Copiar código
+interface CancelBetDTO {
+  betId: string;
+  reason: string;
+  canceledBy: string;
+}
+Resolver Aposta
+ts
+Copiar código
+interface ResolveBetDTO {
+  betId: string;
+  result: 'WON' | 'LOST';
+  marketResult: string;
+}
+Value Objects
+Odds
+ts
+Copiar código
+class Odds {
+  constructor(
+    public readonly value: number,
+    public readonly type: string
+  ) {
+    this.validate();
+  }
+}
+BetAmount
+ts
+Copiar código
+class BetAmount {
+  constructor(
+    public readonly value: number,
+    public readonly currency: string
+  ) {
+    this.validate();
+  }
+}
+Entidades
+Bet
+ts
+Copiar código
+interface Bet {
+  id: string;
+  userId: string;
+  eventId: string;
+  marketId: string;
+  amount: BetAmount;
+  odds: Odds;
+  status: BetStatus;
+  type: BetType;
+  createdAt: Date;
+  resolvedAt?: Date;
+  potentialReturn: number;
+}
+Event
+ts
+Copiar código
+interface Event {
+  id: string;
+  name: string;
+  startDate: Date;
+  status: EventStatus;
+  category: string;
+  participants: string[];
+  markets: Market[];
+}
+Serviços
+BetService
+Gerencia ciclo de vida da aposta
+
+Aplica regras de negócio
+
+Calcula retorno potencial
+
+Integra pagamentos
+
+OddsService
+Gerencia e atualiza odds
+
+Mantém margens
+
+Ajusta via volume
+
+RiskManagementService
+Avalia risco
+
+Monitora padrões
+
+Ajusta limites
+
+Detecta fraude
+
+Eventos de Domínio
+BetPlaced
+
+BetCanceled
+
+BetResolved
+
+OddsChanged
+
+MarketClosed
+
+EventStarted

@@ -76,3 +76,19 @@ export const cacheWalletHistoryMiddleware = cacheResponse({
   },
   ttlSeconds: cacheTTL.walletHistory,
 });
+
+export const cacheUserProfileMiddleware = cacheResponse({
+  key: (req) => buildAuthenticatedCacheKey(req, cacheKeys.userProfile),
+  ttlSeconds: cacheTTL.userProfile,
+});
+
+export const cacheEventOddsMiddleware = cacheResponse({
+  key: (req) => {
+    const eventId = req.params?.eventId;
+    if (typeof eventId !== 'string' || eventId.length === 0) {
+      return null;
+    }
+    return cacheKeys.oddsForEvent(eventId);
+  },
+  ttlSeconds: cacheTTL.oddsForEvent,
+});

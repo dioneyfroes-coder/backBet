@@ -1,4 +1,4 @@
-import { AppError } from '@/shared/errors/AppError';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export class Odds {
   private static readonly MIN_VALUE = 1.01;
@@ -11,15 +11,23 @@ export class Odds {
 
   private validate(): void {
     if (typeof this.value !== 'number' || isNaN(this.value)) {
-      throw new AppError('VALIDATION_ERROR', 'Odds value must be a valid number', 400);
+      throw new DomainError({ code: 'ODDS_INVALID_NUMBER', message: 'Odds value must be a valid number' });
     }
 
     if (this.value < Odds.MIN_VALUE) {
-      throw new AppError('VALIDATION_ERROR', `Odds must be greater than or equal to ${Odds.MIN_VALUE}`, 400);
+      throw new DomainError({
+        code: 'ODDS_TOO_LOW',
+        message: `Odds must be greater than or equal to ${Odds.MIN_VALUE}`,
+        details: { min: Odds.MIN_VALUE, received: this.value },
+      });
     }
 
     if (this.value > Odds.MAX_VALUE) {
-      throw new AppError('VALIDATION_ERROR', `Odds cannot be greater than ${Odds.MAX_VALUE}`, 400);
+      throw new DomainError({
+        code: 'ODDS_TOO_HIGH',
+        message: `Odds cannot be greater than ${Odds.MAX_VALUE}`,
+        details: { max: Odds.MAX_VALUE, received: this.value },
+      });
     }
   }
 
@@ -30,7 +38,7 @@ export class Odds {
    */
   calculatePotentialReturn(stake: number): number {
     if (typeof stake !== 'number' || stake <= 0 || isNaN(stake)) {
-      throw new AppError('VALIDATION_ERROR', 'Invalid stake amount', 400);
+      throw new DomainError({ code: 'ODDS_INVALID_STAKE', message: 'Invalid stake amount', details: { stake } });
     }
     return Number((this.value * stake).toFixed(2)); // garante precisão de casas decimais
   }

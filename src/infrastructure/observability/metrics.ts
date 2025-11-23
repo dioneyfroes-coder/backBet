@@ -66,7 +66,31 @@ export const updateCacheMetrics = (): void => {
   cacheErrors.set(metrics.errors);
 };
 
-setInterval(updateCacheMetrics, 3000);
+let cacheMetricsInterval: NodeJS.Timeout | null = null;
+
+export const startCacheMetricsPolling = (): void => {
+  if (!cacheConfig.enabled || cacheMetricsInterval) {
+    return;
+  }
+  updateCacheMetrics();
+  cacheMetricsInterval = setInterval(updateCacheMetrics, 3000);
+};
+
+export const stopCacheMetricsPolling = (): void => {
+  if (cacheMetricsInterval) {
+    clearInterval(cacheMetricsInterval);
+    cacheMetricsInterval = null;
+  }
+  if (!cacheConfig.enabled) {
+    updateCacheMetrics();
+  }
+};
+
+if (cacheConfig.enabled) {
+  startCacheMetricsPolling();
+} else {
+  updateCacheMetrics();
+}
 
 export {
   registry as metricsRegistry,

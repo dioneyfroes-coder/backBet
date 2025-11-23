@@ -7,7 +7,7 @@ import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseC
 import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
 import { GetUserBetsUseCase } from '@core/betting/aplication/use-cases/GetUserBetsUseCase';
 import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEventUseCase';
-import { cacheEventOdds, flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
+import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
 
 /**
  * Controller de apostas
@@ -49,12 +49,8 @@ export class BetController extends BaseController {
     const { eventId } = req.params;
     if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
 
-    const response = await cacheEventOdds(eventId, async () => {
-      const bets = await this.getEventBetsUseCase.execute(eventId);
-      return { bets: bets.map((b) => b.toJSON()) };
-    });
-
-    return this.ok(res, response);
+    const bets = await this.getEventBetsUseCase.execute(eventId);
+    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
   }
 
   /**

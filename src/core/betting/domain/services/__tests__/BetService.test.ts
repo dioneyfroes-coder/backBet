@@ -166,7 +166,7 @@ describe('BetService', () => {
       bet.resolve('WON');
       betRepository.findById.mockResolvedValue(bet);
       await expect(service.cancelBet({ betId: bet.id, reason: 'too late', canceledBy: 'admin-1' })).rejects.toThrow(
-        'Bet cannot be canceled',
+        'Only pending bets can be canceled.',
       );
 
       const pendingBet = makeBet();
@@ -208,7 +208,7 @@ describe('BetService', () => {
       betRepository.findById.mockResolvedValue(bet);
       await expect(
         service.resolveBet({ betId: bet.id, result: 'WON', marketResult: 'Team A' }),
-      ).rejects.toThrow('Bet is not pending');
+      ).rejects.toThrow('Only pending bets can be resolved.');
     });
   });
 

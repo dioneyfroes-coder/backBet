@@ -13,7 +13,7 @@ export interface ICreateWalletDTO {
 export interface ITransactionDTO {
   id: string;
   userId: string;
-  type: 'deposit' | 'withdraw';
+  type: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
   amount: number;
   currency: string;
   description?: string;

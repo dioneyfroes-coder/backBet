@@ -1,0 +1,57 @@
+BackBet Refactor + Observabilidade — Mega-Tarefa
+
+Fase 1 – Avaliação do Repositório
+
+Inventariar cada módulo (core/user, core/finance, core/betting, shared, infrastructure) e registrar riscos atuais.
+
+Mapear os fluxos de segurança/autenticação existentes (Clerk + JWT) e identificar pontos fracos.
+
+Capturar gargalos de performance (cache misses, controllers lentos, queries pesadas) para priorizar correções posteriores.
+
+Fase 2 – Endurecimento de Infraestrutura & API
+
+Revisar controllers/middleware para headers de segurança, enforcement de autenticação e consistência de rate-limiting.
+
+Otimizar hooks de cache e o uso do Redis (reutilizar chaves, ajustar TTLs, adicionar cache-busting quando necessário).
+
+Avaliar repositórios de banco (Mongo/Mongoose) quanto à eficiência de queries e sanitização de entrada.
+
+Fase 3 – Melhorias no Core/Domain
+
+Refatorar entidades/objetos de valor do domínio para maior legibilidade; remover lógica duplicada.
+
+Simplificar classes de casos de uso (Cancel/Place/Resolve Bet, ações da Wallet, RegisterUser) garantindo limites claros de validação.
+
+Reorganizar testes unitários em pastas __tests__ próximas dos módulos de domínio.
+
+Fase 4 – Observabilidade & Performance
+
+Confirmar que /metrics, /health, /health/cache expõem dados Prometheus corretos.
+
+Adicionar melhorias de tracing/logging (logs estruturados, IDs de requisição propagados).
+
+Definir dashboards/alertas no Grafana usando snippets PromQL existentes; garantir que a documentação reflita isso.
+
+Fase 5 – Quality Gates
+
+Rodar npm run lint e corrigir problemas de estilo/tipos.
+
+Mover/centralizar todos os testes em pastas __tests__ e rodar npm test --coverage.
+
+Executar npm run build e iniciar o app (npm run dev ou node dist/index.js) para validar em runtime.
+
+Fase 6 – Revisão de Documentação
+
+Atualizar README.mdx, docs/*.mdx e qualquer nota específica de módulo refletindo os novos fluxos.
+
+Documentar explicitamente cache, observabilidade e etapas de deploy.
+
+Conferir se referências Swagger/OpenAPI estão alinhadas com as refatorações.
+
+Fase 7 – Release & Entrega
+
+Revisar o estado do git, stagear mudanças e criar commits significativos por fase.
+
+Fazer push para o GitHub e verificar se o CI passa com o lockfile incluído.
+
+Compartilhar notas de rollout + próximos passos (alertas, futuras refatorações, features pendentes).

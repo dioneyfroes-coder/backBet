@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@/shared/services/JwtService';
-
-console.log('AuthMiddleware module loaded');
+import { appConfig } from '@/shared/config/appConfig';
 
 export interface AuthenticatedRequest extends Request {
   auth?: {
@@ -18,66 +17,66 @@ export interface AuthenticatedRequest extends Request {
 }
 
 const jwtService = new JwtService();
-
 const looksLikeJwt = (token: string): boolean => token.split('.').length === 3;
+const devBypassEnabled =
+  process.env.NODE_ENV === 'development' && appConfig.security.allowDevBearerBypass;
 
-export const protectedRoute = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    let userId = req.auth?.userId;
-    const authHeader = req.headers.authorization;
+const assignAuthFromHeader = (req: AuthenticatedRequest): void => {
+  if (req.auth?.userId) {
+    return;
+  }
 
-    if (!userId && authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7).trim();
-      console.log('protectedRoute token parts', token.split('.').length);
-      if (looksLikeJwt(token)) {
-        const decoded = jwtService.verifyAccessToken(token);
-        console.log('protectedRoute decoded userId', decoded.userId);
-        userId = decoded.userId;
-        req.auth = {
-          userId,
-          sessionId: decoded.sessionId,
-        };
-      }
-    }
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return;
+  }
 
-    if (!userId && process.env.NODE_ENV === 'development') {
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        userId = authHeader.substring(7).trim();
-        if (!req.auth) {
-          req.auth = {
-            userId,
-            sessionId: 'dev-session',
-          };
-        }
-      }
-    }
+  const token = authHeader.substring(7).trim();
 
-    if (!userId) {
-      return res.status(401).json({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Autenticação requerida',
-          statusCode: 401,
-        },
-      });
-    }
+  if (looksLikeJwt(token)) {
+    const decoded = jwtService.verifyAccessToken(token);
+    req.auth = {
+      userId: decoded.userId,
+      sessionId: decoded.sessionId,
+    };
+    return;
+  }
 
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      error: {
-        code: 'UNAUTHORIZED',
-        message: 'Token inválido',
-        statusCode: 401,
-      },
-    });
+  if (devBypassEnabled) {
+    req.auth = {
+      userId: token,
+      sessionId: 'dev-session',
+    };
   }
 };
 
-export const optionalAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+const unauthorizedResponse = (res: Response) =>
+  res.status(401).json({
+    error: {
+      code: 'UNAUTHORIZED',
+      message: 'Autenticação requerida',
+      statusCode: 401,
+    },
+  });
+
+export const protectedRoute = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    next();
-  } catch (error) {
+    assignAuthFromHeader(req);
+  } catch (_error) {
+    return unauthorizedResponse(res);
+  }
+
+  if (!req.auth?.userId) {
+    return unauthorizedResponse(res);
+  }
+
+  return next();
+};
+
+export const optionalAuth = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
+  try {
+    assignAuthFromHeader(req);
+  } finally {
     next();
   }
 };

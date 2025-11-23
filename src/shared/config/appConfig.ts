@@ -1,4 +1,4 @@
-import './env';
+import { env } from './env';
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
 	const parsed = Number.parseInt(value ?? '', 10);
@@ -15,6 +15,16 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
 	return value.toLowerCase() === 'true';
 };
 
+const parseList = (value: string | undefined, fallback: string[]): string[] => {
+	if (!value) {
+		return fallback;
+	}
+	return value
+		.split(',')
+		.map((item) => item.trim())
+		.filter((item) => item.length > 0);
+};
+
 /**
  * CONFIGURAÇÃO CENTRALIZADA DA APLICAÇÃO
  *
@@ -23,45 +33,85 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
  */
 
 export const appConfig = {
-	env: process.env.NODE_ENV || 'development',
+	env: env.NODE_ENV || 'development',
 	server: {
-		port: parsePositiveInt(process.env.PORT, 3000),
+		port: parsePositiveInt(env.PORT, 3000),
+	},
+	security: {
+		allowDevBearerBypass: parseBoolean(env.ALLOW_DEV_BEARER_BYPASS, false),
+		enableHsts: parseBoolean(env.ENABLE_HSTS, env.NODE_ENV === 'production'),
+	},
+	cors: {
+		allowedOrigins: parseList(env.CORS_ALLOWED_ORIGINS, ['http://localhost:3000', 'http://localhost:3001']),
+		allowCredentials: parseBoolean(env.CORS_ALLOW_CREDENTIALS, true),
 	},
 	rateLimit: {
-		windowMs: parsePositiveInt(process.env.RATE_LIMIT_WINDOW_MS, 600000), // 10 minutos
-		max: parsePositiveInt(process.env.RATE_LIMIT_MAX, 5000), // alto para ambiente dev
+		windowMs: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 600000), // 10 minutos
+		max: parsePositiveInt(env.RATE_LIMIT_MAX, 5000), // alto para ambiente dev
 		message:
-			process.env.RATE_LIMIT_MESSAGE ||
+			env.RATE_LIMIT_MESSAGE ||
 			'Você excedeu o limite de requisições. Aguarde alguns instantes antes de tentar novamente.',
-		enabled: parseBoolean(process.env.RATE_LIMIT_ENABLED, true),
+		enabled: parseBoolean(env.RATE_LIMIT_ENABLED, true),
 	},
 	authRateLimit: {
 		register: {
-			windowMs: parsePositiveInt(process.env.AUTH_REGISTER_RATE_LIMIT_WINDOW_MS, 60_000),
-			max: parsePositiveInt(process.env.AUTH_REGISTER_RATE_LIMIT_MAX, 10),
+			windowMs: parsePositiveInt(env.AUTH_REGISTER_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.AUTH_REGISTER_RATE_LIMIT_MAX, 10),
 			message:
-				process.env.AUTH_REGISTER_RATE_LIMIT_MESSAGE ||
+				env.AUTH_REGISTER_RATE_LIMIT_MESSAGE ||
 				'Muitas tentativas de registro. Tente novamente em alguns segundos.',
 		},
 		login: {
-			windowMs: parsePositiveInt(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS, 60_000),
-			max: parsePositiveInt(process.env.AUTH_LOGIN_RATE_LIMIT_MAX, 15),
+			windowMs: parsePositiveInt(env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.AUTH_LOGIN_RATE_LIMIT_MAX, 15),
 			message:
-				process.env.AUTH_LOGIN_RATE_LIMIT_MESSAGE ||
+				env.AUTH_LOGIN_RATE_LIMIT_MESSAGE ||
 				'Muitas tentativas de login. Aguarde alguns segundos antes de tentar novamente.',
 		},
 		refresh: {
-			windowMs: parsePositiveInt(process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS, 60_000),
-			max: parsePositiveInt(process.env.AUTH_REFRESH_RATE_LIMIT_MAX, 30),
+			windowMs: parsePositiveInt(env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.AUTH_REFRESH_RATE_LIMIT_MAX, 30),
 			message:
-				process.env.AUTH_REFRESH_RATE_LIMIT_MESSAGE ||
+				env.AUTH_REFRESH_RATE_LIMIT_MESSAGE ||
 				'Você excedeu o limite de refresh tokens. Tente novamente em breve.',
 		},
 	},
+	walletRateLimit: {
+		deposit: {
+			windowMs: parsePositiveInt(env.WALLET_DEPOSIT_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.WALLET_DEPOSIT_RATE_LIMIT_MAX, 20),
+			message:
+				env.WALLET_DEPOSIT_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de depósito. Aguarde um momento e tente novamente.',
+		},
+		withdraw: {
+			windowMs: parsePositiveInt(env.WALLET_WITHDRAW_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.WALLET_WITHDRAW_RATE_LIMIT_MAX, 10),
+			message:
+				env.WALLET_WITHDRAW_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de saque. Aguarde um momento e tente novamente.',
+		},
+	},
+	betRateLimit: {
+		place: {
+			windowMs: parsePositiveInt(env.BET_PLACE_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.BET_PLACE_RATE_LIMIT_MAX, 30),
+			message:
+				env.BET_PLACE_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de criar apostas. Reduza a frequência.',
+		},
+		cancel: {
+			windowMs: parsePositiveInt(env.BET_CANCEL_RATE_LIMIT_WINDOW_MS, 60_000),
+			max: parsePositiveInt(env.BET_CANCEL_RATE_LIMIT_MAX, 10),
+			message:
+				env.BET_CANCEL_RATE_LIMIT_MESSAGE ||
+				'Muitas tentativas de cancelamento. Aguarde e tente novamente.',
+		},
+	},
 	jwt: {
-		secret: process.env.JWT_SECRET || 'backbet-secret',
-		issuer: process.env.JWT_ISSUER || 'backbet',
-		accessTokenExpiration: process.env.JWT_EXPIRATION || '15m',
-		refreshTokenExpiration: process.env.JWT_REFRESH_EXPIRATION || '7d',
+		secret: env.JWT_SECRET as string,
+		issuer: env.JWT_ISSUER || 'backbet',
+		accessTokenExpiration: env.JWT_EXPIRATION || '15m',
+		refreshTokenExpiration: env.JWT_REFRESH_EXPIRATION || '7d',
 	},
 };

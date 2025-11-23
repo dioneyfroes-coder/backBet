@@ -81,6 +81,34 @@ Fornece um payload rápido com o estado do cache:
 
 Use esse endpoint para alertas simples (por exemplo, reduzir o cache quando `enabled` for `false`) ou para dashboards de status.
 
+## Contexto de requisição e logs estruturados
+
+Cada requisição recebe um `X-Request-ID` logo no início do pipeline (`requestIdMiddleware`). O ID é armazenado em um `AsyncLocalStorage` (`shared/observability/requestContext.ts`), o que permite recuperá-lo em qualquer camada (controllers, use cases, serviços) sem repassar o valor manualmente. O `loggingMiddleware` e o `registerErrorHandler` usam esse contexto para emitir logs JSON com campos consistentes (`event`, `requestId`, `method`, `path`, `statusCode`, `userId`).
+
+Exemplo de log:
+
+```json
+{
+  "level": "error",
+  "event": "request_error",
+  "requestId": "req-1763853600899-duclu2g9e",
+  "method": "POST",
+  "path": "/api/auth/register",
+  "statusCode": 409,
+  "code": "CONFLICT",
+  "timestamp": "2025-11-22T23:20:01.365Z"
+}
+```
+
+Para logs customizados, importe `getRequestContext()` e acrescente `requestId`/`userId` ao payload:
+
+```ts
+import { getRequestContext } from '@/shared/observability/requestContext';
+
+const ctx = getRequestContext();
+console.log(JSON.stringify({ level: 'info', requestId: ctx?.requestId, event: 'bet_resolved' }));
+```
+
 ## Configuração ambiental relevante
 
 | Variável | Descrição |
@@ -106,6 +134,25 @@ Ao desligar o cache (`CACHE_ENABLED=false`), as métricas continuam presentes, m
 3. **Alertas rápidos**
    - Alertar se `backbet_cache_errors_total` aumentar rapidamente ou se `backbet_http_request_duration_ms_bucket` mostrar picos.
    - Sinalizar quando `/health/cache` retorna `enabled: false` para guiar a investigação de disponibilidade do Redis.
+
+### Snippets de alertas PromQL
+
+- **Erro no cache** – dispara quando há pelo menos 1 erro em 5 minutos:
+
+```promql
+increase(backbet_cache_errors_total[5m]) > 0
+```
+
+- **Latência P95 acima de 1s** por rota:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le)
+) > 1000
+```
+
+Associe as expressões a painéis do Grafana e configure alertas (Slack, PagerDuty) para receber notificações automáticas.
 
 ## Próximos passos sugeridos
 

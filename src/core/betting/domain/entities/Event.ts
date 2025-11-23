@@ -1,6 +1,6 @@
 import { EventStatus, MarketStatus } from '../../types/bet.types';
 import { Odds } from '../value-objects/Odds';
-import { AppError } from '@/shared/errors/AppError';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 // ---------- MARKET ----------
 export class Market {
@@ -30,24 +30,34 @@ export class Market {
 
   // Domain methods
   suspend(): void {
-    if (this._status === 'CLOSED') throw new AppError('BAD_REQUEST', 'Market is already closed', 400);
-    if (this._status === 'SUSPENDED') throw new AppError('BAD_REQUEST', 'Market is already suspended', 400);
+    if (this._status === 'CLOSED') {
+      throw new DomainError({ code: 'MARKET_CLOSED', message: 'Market is already closed' });
+    }
+    if (this._status === 'SUSPENDED') {
+      throw new DomainError({ code: 'MARKET_SUSPENDED', message: 'Market is already suspended' });
+    }
     this._status = 'SUSPENDED';
   }
 
   open(): void {
-    if (this._status === 'CLOSED') throw new AppError('BAD_REQUEST', 'Market is already closed', 400);
+    if (this._status === 'CLOSED') {
+      throw new DomainError({ code: 'MARKET_CLOSED', message: 'Market is already closed' });
+    }
     this._status = 'OPEN';
   }
 
   close(result?: string): void {
-    if (this._status === 'CLOSED') throw new AppError('BAD_REQUEST', 'Market is already closed', 400);
+    if (this._status === 'CLOSED') {
+      throw new DomainError({ code: 'MARKET_CLOSED', message: 'Market is already closed' });
+    }
     this._status = 'CLOSED';
     if (result) this._result = result;
   }
 
   updateOdd(key: string, value: number): void {
-    if (this._status !== 'OPEN') throw new AppError('BAD_REQUEST', 'Cannot update odds on non-open market', 400);
+    if (this._status !== 'OPEN') {
+      throw new DomainError({ code: 'MARKET_NOT_OPEN', message: 'Cannot update odds on non-open market' });
+    }
     this.odds.set(key, new Odds(value));
   }
 
@@ -56,9 +66,15 @@ export class Market {
     const isNonEmptyString = (val: any): val is string =>
       typeof val === 'string' && val.trim().length > 0;
 
-    if (!isNonEmptyString(this.id)) throw new AppError('VALIDATION_ERROR', 'Invalid market ID', 400);
-    if (!isNonEmptyString(this.name)) throw new AppError('VALIDATION_ERROR', 'Invalid market name', 400);
-    if (!(this.odds instanceof Map)) throw new AppError('VALIDATION_ERROR', 'Invalid odds', 400);
+    if (!isNonEmptyString(this.id)) {
+      throw new DomainError({ code: 'MARKET_INVALID_ID', message: 'Invalid market ID' });
+    }
+    if (!isNonEmptyString(this.name)) {
+      throw new DomainError({ code: 'MARKET_INVALID_NAME', message: 'Invalid market name' });
+    }
+    if (!(this.odds instanceof Map)) {
+      throw new DomainError({ code: 'MARKET_INVALID_ODDS', message: 'Invalid odds' });
+    }
   }
 
   // Optional utility
@@ -99,23 +115,33 @@ export class Event {
 
   // Domain methods
   start(): void {
-    if (this._status !== 'SCHEDULED') throw new AppError('BAD_REQUEST', 'Event is not scheduled', 400);
+    if (this._status !== 'SCHEDULED') {
+      throw new DomainError({ code: 'EVENT_NOT_SCHEDULED', message: 'Event is not scheduled' });
+    }
     this._status = 'LIVE';
   }
 
   finish(): void {
-    if (this._status !== 'LIVE') throw new AppError('BAD_REQUEST', 'Event is not live', 400);
+    if (this._status !== 'LIVE') {
+      throw new DomainError({ code: 'EVENT_NOT_LIVE', message: 'Event is not live' });
+    }
     this._status = 'FINISHED';
   }
 
   cancel(): void {
-    if (this._status === 'FINISHED') throw new AppError('BAD_REQUEST', 'Cannot cancel finished event', 400);
-    if (this._status === 'CANCELED') throw new AppError('BAD_REQUEST', 'Event is already canceled', 400);
+    if (this._status === 'FINISHED') {
+      throw new DomainError({ code: 'EVENT_FINISHED', message: 'Cannot cancel finished event' });
+    }
+    if (this._status === 'CANCELED') {
+      throw new DomainError({ code: 'EVENT_ALREADY_CANCELED', message: 'Event is already canceled' });
+    }
     this._status = 'CANCELED';
   }
 
   addMarket(market: Market): void {
-    if (this._status !== 'SCHEDULED') throw new AppError('BAD_REQUEST', 'Cannot add markets to non-scheduled event', 400);
+    if (this._status !== 'SCHEDULED') {
+      throw new DomainError({ code: 'EVENT_NOT_SCHEDULED', message: 'Cannot add markets to non-scheduled event' });
+    }
     this.markets.set(market.id, market);
   }
 
@@ -124,13 +150,24 @@ export class Event {
     const isNonEmptyString = (val: any): val is string =>
       typeof val === 'string' && val.trim().length > 0;
 
-    if (!isNonEmptyString(this.id)) throw new AppError('VALIDATION_ERROR', 'Invalid event ID', 400);
-    if (!isNonEmptyString(this.name)) throw new AppError('VALIDATION_ERROR', 'Invalid event name', 400);
-    if (!(this.startDate instanceof Date)) throw new AppError('VALIDATION_ERROR', 'Invalid start date', 400);
-    if (!isNonEmptyString(this.category)) throw new AppError('VALIDATION_ERROR', 'Invalid category', 400);
-    if (!Array.isArray(this.participants) || this.participants.length < 2)
-      throw new AppError('VALIDATION_ERROR', 'Invalid participants', 400);
-    if (!(this.markets instanceof Map)) throw new AppError('VALIDATION_ERROR', 'Invalid markets', 400);
+    if (!isNonEmptyString(this.id)) {
+      throw new DomainError({ code: 'EVENT_INVALID_ID', message: 'Invalid event ID' });
+    }
+    if (!isNonEmptyString(this.name)) {
+      throw new DomainError({ code: 'EVENT_INVALID_NAME', message: 'Invalid event name' });
+    }
+    if (!(this.startDate instanceof Date)) {
+      throw new DomainError({ code: 'EVENT_INVALID_START_DATE', message: 'Invalid start date' });
+    }
+    if (!isNonEmptyString(this.category)) {
+      throw new DomainError({ code: 'EVENT_INVALID_CATEGORY', message: 'Invalid category' });
+    }
+    if (!Array.isArray(this.participants) || this.participants.length < 2) {
+      throw new DomainError({ code: 'EVENT_INVALID_PARTICIPANTS', message: 'Invalid participants' });
+    }
+    if (!(this.markets instanceof Map)) {
+      throw new DomainError({ code: 'EVENT_INVALID_MARKETS', message: 'Invalid markets' });
+    }
   }
 
   toJSON(): Record<string, any> {

@@ -13,6 +13,7 @@ import { PurchaseCreditPackage } from '@/core/finance/application/use-cases/Purc
 import { RequestWithdrawal } from '@/core/finance/application/use-cases/RequestWithdrawal';
 import { GetWithdrawalRequests } from '@/core/finance/application/use-cases/GetWithdrawalRequests';
 import { ProcessWithdrawalRequest } from '@/core/finance/application/use-cases/ProcessWithdrawalRequest';
+import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
 
 export class FinanceController extends BaseController {
   constructor(
@@ -51,6 +52,7 @@ export class FinanceController extends BaseController {
     }
 
     const { creditPackage, wallet } = await this.purchaseCreditPackage.execute(userId, payload.packageId);
+    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache after purchase', error));
 
     return this.created(res, {
       message: 'Pacote de créditos adquirido com sucesso',
@@ -75,6 +77,7 @@ export class FinanceController extends BaseController {
     }
 
     const request = await this.requestWithdrawal.execute(userId, payload.amount, payload.currency, payload.notes);
+    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache after withdrawal request', error));
 
     return this.created(res, {
       message: 'Solicitação de saque criada com sucesso',
@@ -124,6 +127,7 @@ export class FinanceController extends BaseController {
     }
 
     const processed = await this.processWithdrawalRequest.execute(req.params.requestId, userId, payload.action, payload.notes);
+    await flushWalletCache(processed.userId).catch((error) => console.warn('Failed to flush wallet cache after withdrawal processing', error));
 
     return this.ok(res, {
       message: 'Solicitação atualizada',

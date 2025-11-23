@@ -8,8 +8,10 @@ export interface IWalletDocument extends Document {
   currency: string;
   transactions: Array<{
     id: string;
-    type: 'DEPOSIT' | 'WITHDRAW' | 'LOCK' | 'UNLOCK';
+    type: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
     amount: number;
+    currency: string;
+    userId: string;
     description?: string;
     createdAt: Date;
   }>;
@@ -45,8 +47,10 @@ const walletSchema = new Schema<IWalletDocument>(
     transactions: [
       {
         id: String,
-        type: { type: String, enum: ['DEPOSIT', 'WITHDRAW', 'LOCK', 'UNLOCK'] },
+        type: { type: String, enum: ['deposit', 'withdraw', 'lock', 'unlock', 'withdraw_locked'], lowercase: true },
         amount: Number,
+        currency: String,
+        userId: String,
         description: String,
         createdAt: { type: Date, default: Date.now },
       },

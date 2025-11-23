@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
+import { cacheUserProfileMiddleware } from '../middleware/cacheMiddleware';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '@core/user/domain/services/UserService';
 import { createUserRepository } from '@/infrastructure/persistence/factory';
@@ -34,7 +35,7 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   );
 
   // Rotas protegidas
-  router.get('/me', protectedRoute, asyncHandler((req, res) => userController.getMe(req, res)));
+  router.get('/me', protectedRoute, cacheUserProfileMiddleware, asyncHandler((req, res) => userController.getMe(req, res)));
 
   router.patch('/me', protectedRoute, asyncHandler((req, res) => userController.updateProfile(req, res)));
 
