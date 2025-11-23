@@ -88,6 +88,19 @@ export class RedisClient {
   getMetrics(): CacheMetrics {
     return { ...this.metrics };
   }
+
+  async ping(): Promise<string | null> {
+    const client = this.getRedis();
+    if (!client) {
+      return null;
+    }
+    try {
+      return await client.ping();
+    } catch (error) {
+      this.metrics.errors += 1;
+      throw error;
+    }
+  }
 }
 
 export const redisClient = new RedisClient();

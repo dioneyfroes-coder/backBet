@@ -4,6 +4,7 @@ import cors, { CorsOptions } from 'cors';
 import helmet, { HelmetOptions } from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
+import mongoose from 'mongoose';
 import { swaggerSpec } from '../config/swagger';
 import { AppError } from '@/shared/errors/AppError';
 import { appConfig } from '@/shared/config/appConfig';
@@ -13,6 +14,10 @@ import {
   metricsRegistry,
   httpRequestCounter,
   httpRequestLatency,
+  httpRequestLatencySeconds,
+  httpErrorCounter,
+  httpActiveRequests,
+  dependencyHealthGauge,
 } from '@/infrastructure/observability/metrics';
 import {
   runWithRequestContext,
@@ -151,19 +156,45 @@ export class ApiServer {
       return next();
     }
 
+    const getRouteLabel = () =>
+      (req.route && (req.route as any).path) || req.path || req.originalUrl;
+    const method = req.method;
     const start = process.hrtime();
+    httpActiveRequests.labels(method, getRouteLabel()).inc();
+
+    let inFlightClosed = false;
+    const finalizeActiveRequest = () => {
+      if (inFlightClosed) {
+        return getRouteLabel();
+      }
+      inFlightClosed = true;
+      const routeLabel = getRouteLabel();
+      httpActiveRequests.labels(method, routeLabel).dec();
+      return routeLabel;
+    };
+
     res.on('finish', () => {
-      const route = (req.route && (req.route as any).path) || req.path || req.originalUrl;
+      const route = finalizeActiveRequest();
       const labels = {
-        method: req.method,
+        method,
         route,
         status: res.statusCode.toString(),
       };
+      const statusClass = `${Math.floor(res.statusCode / 100)}xx`;
       httpRequestCounter.inc(labels);
       const duration = process.hrtime(start);
       const elapsedMs = duration[0] * 1000 + duration[1] / 1e6;
       httpRequestLatency.observe(labels, elapsedMs);
+      httpRequestLatencySeconds.observe(
+        { method, route, status_class: statusClass },
+        elapsedMs / 1000,
+      );
+      if (res.statusCode >= 500) {
+        httpErrorCounter.inc(labels);
+      }
     });
+
+    res.on('close', finalizeActiveRequest);
 
     next();
   };
@@ -255,10 +286,7 @@ export class ApiServer {
       });
     });
 
-    this.app.get('/readiness', (_req: Request, res: Response) => {
-      // Adicionar validações de dependências aqui depois
-      res.status(200).json({ ready: true });
-    });
+    this.app.get('/readiness', this.readinessHandler);
 
     this.app.get('/health/cache', (_req: Request, res: Response) => {
       res.status(200).json({
@@ -329,6 +357,104 @@ export class ApiServer {
         },
       });
     });
+  }
+
+  private readinessHandler = async (_req: Request, res: Response): Promise<void> => {
+    const checks: Record<string, any> = {};
+    let ready = true;
+    const timestamp = new Date().toISOString();
+
+    if (cacheConfig.enabled) {
+      const start = Date.now();
+      try {
+        await redisClient.ping();
+        checks.redis = {
+          status: 'up',
+          latencyMs: Date.now() - start,
+        };
+        this.setDependencyHealthMetric('redis', 1);
+      } catch (error: any) {
+        ready = false;
+        checks.redis = {
+          status: 'down',
+          error: error?.message ?? 'Redis ping failed',
+        };
+        this.setDependencyHealthMetric('redis', 0);
+      }
+    } else {
+      checks.redis = {
+        status: 'skipped',
+        reason: 'cache_disabled',
+      };
+      this.setDependencyHealthMetric('redis', -1);
+    }
+
+    const mongoEnabled = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
+    if (mongoEnabled) {
+      const state = mongoose.connection.readyState;
+      const mappedState = this.describeMongoState(state);
+      if (state !== 1) {
+        ready = false;
+        checks.mongo = {
+          status: 'down',
+          state: mappedState,
+        };
+        this.setDependencyHealthMetric('mongo', 0);
+      } else {
+        const start = Date.now();
+        try {
+          await this.pingMongo();
+          checks.mongo = {
+            status: 'up',
+            state: mappedState,
+            latencyMs: Date.now() - start,
+          };
+          this.setDependencyHealthMetric('mongo', 1);
+        } catch (error: any) {
+          ready = false;
+          checks.mongo = {
+            status: 'down',
+            state: mappedState,
+            error: error?.message ?? 'Mongo ping failed',
+          };
+          this.setDependencyHealthMetric('mongo', 0);
+        }
+      }
+    } else {
+      checks.mongo = {
+        status: 'skipped',
+        reason: 'mongoose_disabled',
+      };
+      this.setDependencyHealthMetric('mongo', -1);
+    }
+
+    res.status(ready ? 200 : 503).json({
+      ready,
+      timestamp,
+      checks,
+    });
+  };
+
+  private describeMongoState(state: number): string {
+    const states: Record<number, string> = {
+      0: 'disconnected',
+      1: 'connected',
+      2: 'connecting',
+      3: 'disconnecting',
+    };
+    return states[state] ?? 'unknown';
+  }
+
+  private setDependencyHealthMetric(dependency: 'redis' | 'mongo', value: number): void {
+    dependencyHealthGauge.labels(dependency).set(value);
+  }
+
+  private async pingMongo(): Promise<void> {
+    const db = mongoose.connection.db;
+    if (!db) {
+      throw new Error('MongoDB connection not initialised');
+    }
+    await db.admin().ping();
   }
 }
 

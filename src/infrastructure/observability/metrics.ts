@@ -26,6 +26,28 @@ const httpRequestLatency = new Histogram({
   registers: [registry],
 });
 
+const httpRequestLatencySeconds = new Histogram({
+  name: 'backbet_http_request_duration_seconds',
+  help: 'Duração das requisições HTTP em segundos (para dashboards Prometheus)',
+  labelNames: ['method', 'route', 'status_class'],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+const httpErrorCounter = new Counter({
+  name: 'backbet_http_errors_total',
+  help: 'Número de respostas HTTP com status >= 500',
+  labelNames: ['method', 'route', 'status'],
+  registers: [registry],
+});
+
+const httpActiveRequests = new Gauge({
+  name: 'backbet_http_in_flight',
+  help: 'Quantidade de requisições HTTP em processamento',
+  labelNames: ['method', 'route'],
+  registers: [registry],
+});
+
 const cacheHits = new Gauge({
   name: 'backbet_cache_hits_total',
   help: 'Número de leituras atendidas pelo Redis',
@@ -47,6 +69,13 @@ const cacheWrites = new Gauge({
 const cacheErrors = new Gauge({
   name: 'backbet_cache_errors_total',
   help: 'Número de erros observados na camada de cache',
+  registers: [registry],
+});
+
+const dependencyHealthGauge = new Gauge({
+  name: 'backbet_dependency_health',
+  help: 'Estado reportado pelo readiness para cada dependência externa',
+  labelNames: ['dependency'],
   registers: [registry],
 });
 
@@ -96,4 +125,12 @@ export {
   registry as metricsRegistry,
   httpRequestCounter,
   httpRequestLatency,
+  httpRequestLatencySeconds,
+  httpErrorCounter,
+  httpActiveRequests,
+  cacheHits,
+  cacheMisses,
+  cacheWrites,
+  cacheErrors,
+  dependencyHealthGauge,
 };

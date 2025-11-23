@@ -1,0 +1,49 @@
+groups:
+  - name: backbet-phase4
+    interval: 1m
+    rules:
+      - alert: BackBetHttpLatencyP95High
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(backbet_http_request_duration_seconds_bucket[5m])) by (route, le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: backbet-api
+        annotations:
+          summary: "Latência P95 acima de 1s em {{ $labels.route }}"
+          description: |
+            A rota {{ $labels.route }} está entregando respostas lentas (P95 > 1s) há pelo menos 5 minutos.
+            Verifique o painel Grafana backbet-phase4 e correlacione com o tráfego e logs de erro.
+          runbook: "docs/OBSERVABILITY.mdx#metricas-http"
+
+      - alert: BackBetHttpErrorRate
+        expr: |
+          sum(rate(backbet_http_errors_total[10m])) by (route)
+            / sum(rate(backbet_http_requests_total[10m])) by (route)
+            > 0.02
+        for: 10m
+        labels:
+          severity: critical
+          service: backbet-api
+        annotations:
+          summary: "Erro 5xx > 2% em {{ $labels.route }}"
+          description: |
+            A taxa de erros 5xx ultrapassou 2% na rota {{ $labels.route }}. Verifique deploys recentes,
+            dependências externas e logs estruturados com requestId.
+          runbook: "docs/OBSERVABILITY.mdx#debug-rapido"
+
+      - alert: BackBetCacheErrors
+        expr: increase(backbet_cache_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: backbet-cache
+        annotations:
+          summary: "Erros no Redis detectados"
+          description: |
+            O contador backbet_cache_errors_total aumentou nos últimos 5 minutos. Cheque /health/cache e o readiness
+            para confirmar se o Redis continua disponível. Considere reiniciar a conexão ou falhar para o modo sem cache.
+          runbook: "docs/OBSERVABILITY.mdx#endpoint-healthcache"

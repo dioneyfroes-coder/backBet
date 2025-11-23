@@ -61,6 +61,11 @@ type AppEnv = NodeJS.ProcessEnv & {
 	CLERK_API_URL?: string;
 	MONGODB_URI?: string;
 	REDIS_URL?: string;
+	TRACING_ENABLED?: string;
+	OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+	OTEL_EXPORTER_OTLP_HEADERS?: string;
+	OTEL_SERVICE_NAME?: string;
+	OTEL_DIAGNOSTIC_LOG_LEVEL?: string;
 };
 
 export const env = process.env as AppEnv;

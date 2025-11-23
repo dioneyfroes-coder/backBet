@@ -25,6 +25,20 @@ const parseList = (value: string | undefined, fallback: string[]): string[] => {
 		.filter((item) => item.length > 0);
 };
 
+const parseHeaders = (value: string | undefined): Record<string, string> => {
+	if (!value) {
+		return {};
+	}
+	return value.split(/[;,]/).reduce<Record<string, string>>((acc, chunk) => {
+		const [key, ...rest] = chunk.split('=').map((item) => item.trim());
+		if (!key || rest.length === 0) {
+			return acc;
+		}
+		acc[key.toLowerCase()] = rest.join('=');
+		return acc;
+	}, {});
+};
+
 /**
  * CONFIGURAÇÃO CENTRALIZADA DA APLICAÇÃO
  *
@@ -113,5 +127,12 @@ export const appConfig = {
 		issuer: env.JWT_ISSUER || 'backbet',
 		accessTokenExpiration: env.JWT_EXPIRATION || '15m',
 		refreshTokenExpiration: env.JWT_REFRESH_EXPIRATION || '7d',
+	},
+	tracing: {
+		enabled: parseBoolean(env.TRACING_ENABLED, false) && env.NODE_ENV !== 'test',
+		exporterUrl: env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+		exporterHeaders: parseHeaders(env.OTEL_EXPORTER_OTLP_HEADERS),
+		serviceName: env.OTEL_SERVICE_NAME || 'backbet-api',
+		diagLogLevel: (env.OTEL_DIAGNOSTIC_LOG_LEVEL || 'error').toLowerCase(),
 	},
 };
