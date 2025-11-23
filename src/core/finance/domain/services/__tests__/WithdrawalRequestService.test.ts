@@ -45,6 +45,19 @@ describe('WithdrawalRequestService', () => {
     expect(walletService.lock).not.toHaveBeenCalled();
   });
 
+  it('validates amount and wallet existence before creating request', async () => {
+    const service = new WithdrawalRequestService(repository, walletService);
+
+    await expect(service.createRequest('user-1', 0, 'BRL' as Currency)).rejects.toThrow(
+      'Amount must be positive',
+    );
+
+    (walletService.findByUserId as jest.Mock).mockResolvedValue(null);
+    await expect(service.createRequest('user-1', 10, 'BRL' as Currency)).rejects.toThrow(
+      'Wallet not found',
+    );
+  });
+
   it('approves a pending request', async () => {
     const request = new WithdrawalRequest('req-1', 'user-1', 100, 'BRL');
     (repository.findById as jest.Mock).mockResolvedValue(request);
@@ -87,5 +100,22 @@ describe('WithdrawalRequestService', () => {
 
     const response = await service.listPending(5, 0);
     expect(response).toEqual(pending);
+  });
+
+  it('validates request existence and status before processing', async () => {
+    (repository.findById as jest.Mock).mockResolvedValue(null);
+    const service = new WithdrawalRequestService(repository, walletService);
+
+    await expect(service.processRequest('missing', 'admin', 'APPROVED')).rejects.toThrow(
+      'Withdrawal request not found',
+    );
+
+    const processed = new WithdrawalRequest('req-5', 'user', 10, 'BRL');
+    processed.approve('admin');
+    (repository.findById as jest.Mock).mockResolvedValue(processed);
+
+    await expect(service.processRequest('req-5', 'admin', 'APPROVED')).rejects.toThrow(
+      'Withdrawal request already processed',
+    );
   });
 });

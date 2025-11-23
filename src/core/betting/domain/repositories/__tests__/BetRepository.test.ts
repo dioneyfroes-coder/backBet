@@ -44,4 +44,13 @@ describe('BetRepository in-memory', () => {
     expect(await repo.findByEventId('none')).toEqual([]);
     expect(await repo.findByUserId('none')).toEqual([]);
   });
+
+  it('ignores updates for unknown bets', async () => {
+    await expect(repo.update(bet)).resolves.toBeUndefined();
+    expect(await repo.findById(bet.id)).toBeNull();
+  });
+
+  it('stub findByStatus helper returns empty array', async () => {
+    expect(await repo.findByStatus()).toEqual([]);
+  });
 });

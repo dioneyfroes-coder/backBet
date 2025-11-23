@@ -40,6 +40,17 @@ Mover/centralizar todos os testes em pastas __tests__ e rodar npm test --coverag
 
 Executar npm run build e iniciar o app (npm run dev ou node dist/index.js) para validar em runtime.
 
+Fase 5/2 - 100% tests passando
+
+Os testes existentes devem ser corrigidos para garantir que todos passem com sucesso.
+Os testes falhados devem ser revisados e ajustados conforme necessário para refletir as mudanças feitas nas fases anteriores.
+Os testes novos ou adicionais podem ser escritos conforme necessário para cobrir áreas que foram modificadas ou refatoradas.
+Os testes devem ser executados novamente para confirmar que todos passam com sucesso.
+Os testes devem cobrir 100% do código refatorado, garantindo que todas as funcionalidades estejam devidamente testadas.
+Os testes devem ser executados novamente para confirmar que todos passam com sucesso.
+build e start
+ git add, git commit e git push
+
 Fase 6 – Revisão de Documentação
 
 Atualizar README.mdx, docs/*.mdx e qualquer nota específica de módulo refletindo os novos fluxos.

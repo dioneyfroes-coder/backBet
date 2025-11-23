@@ -3,6 +3,7 @@ import { User } from '../../entities/User';
 import { IUserRepository } from '../../repositories/IUserRepository';
 import { Email } from '../../value-objects/Email';
 import { UserStatus } from '../../../types/user.types';
+import bcrypt from 'bcryptjs';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -88,6 +89,14 @@ describe('UserService', () => {
       expect(result.updatedAt).toEqual(now);
 
       jest.useRealTimers();
+    });
+
+    it('enforces minimum password length', async () => {
+      mockUserRepository.findByEmail.mockResolvedValue(null);
+
+      await expect(
+        userService.registerUser({ ...mockCreateUserInput, password: '1' }),
+      ).rejects.toThrow('Senha deve ter pelo menos');
     });
   });
 
@@ -369,6 +378,24 @@ describe('UserService', () => {
       const result = await userService.findByEmail('non-existent@example.com');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('comparePassword', () => {
+    it('delegates to bcrypt compare', async () => {
+      const password = 'Password123!';
+      const hash = await bcrypt.hash(password, 1);
+      const user = new User(
+        'user',
+        new Email('hash@example.com'),
+        'user',
+        hash,
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+      );
+
+      await expect(userService.comparePassword(user, password)).resolves.toBe(true);
     });
   });
 });

@@ -3,6 +3,8 @@ import { Express } from 'express';
 import { createApiServer } from '@/infrastructure/api/ApiServer';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
+import { metricsRegistry } from '@/infrastructure/observability/metrics';
+import * as requestContext from '@/shared/observability/requestContext';
 import {
   MongoMockHandle,
   mockMongoConnected,
@@ -123,5 +125,43 @@ describe('Observability endpoints', () => {
     expect(res.body.ready).toBe(false);
     expect(res.body.checks.mongo.status).toBe('down');
     expect(res.body.checks.mongo.state).toBe('disconnected');
+  });
+
+  it('GET /metrics surfaces exporter errors', async () => {
+    jest.spyOn(metricsRegistry, 'metrics').mockRejectedValueOnce(new Error('exporter down'));
+
+    const res = await request(app).get('/metrics');
+
+    expect(res.status).toBe(500);
+    expect(res.text).toBe('Erro ao gerar métricas');
+  });
+
+  it('registerErrorHandler serializes failures with request ids', async () => {
+    const server = createApiServer(0);
+    const localApp = server.getExpressApp();
+    localApp.get('/explode', () => {
+      const err: any = new Error('explode');
+      err.code = 'BOOM';
+      err.statusCode = 418;
+      throw err;
+    });
+    server.registerErrorHandler();
+    jest.spyOn(requestContext, 'getRequestContext').mockReturnValue({ requestId: 'ctx-1' });
+
+    const res = await request(localApp).get('/explode');
+
+    expect(res.status).toBe(418);
+    expect(res.body.error).toMatchObject({ code: 'BOOM', message: 'explode' });
+    expect(res.body.meta.requestId).toBe('ctx-1');
+  });
+
+  it('get404Handler returns structured not found payloads', async () => {
+    const server = createApiServer(0);
+    server.get404Handler();
+
+    const res = await request(server.getExpressApp()).get('/totally-missing');
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatchObject({ code: 'NOT_FOUND' });
   });
 });
