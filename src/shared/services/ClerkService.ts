@@ -1,5 +1,5 @@
-import { createClerkClient } from '@clerk/clerk-sdk-node';
-import type { ClerkClient, User as ClerkUser } from '@clerk/clerk-sdk-node';
+import { createClerkClient } from '@clerk/backend';
+import type { ClerkClient, User as ClerkUser } from '@clerk/backend';
 import { env } from '@/shared/config/env';
 
 export type ClerkCreateUserParams = {

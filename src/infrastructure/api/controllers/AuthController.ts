@@ -7,7 +7,7 @@ import { UserService } from '@core/user/domain/services/UserService';
 import { User } from '@core/user/domain/entities/User';
 import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
-import type { User as ClerkUser } from '@clerk/clerk-sdk-node';
+import type { User as ClerkUser } from '@clerk/backend';
 import { randomUUID } from 'crypto';
 
 /**
