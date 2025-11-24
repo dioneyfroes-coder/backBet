@@ -39,4 +39,41 @@ describe('CircuitBreaker helper', () => {
       jest.useRealTimers();
     }
   });
+
+  it('sets nextAttempt, reports open state, and closes once the timeout expires', async () => {
+    const breaker = new CircuitBreaker({
+      name: 'time-aware',
+      failureThreshold: 1,
+      successThreshold: 1,
+      resetTimeoutMs: 100,
+    });
+
+    await expect(breaker.execute(() => Promise.reject(new Error('fail')))).rejects.toThrow('fail');
+    expect(breaker.isOpen()).toBe(true);
+    const nextAttempt = breaker.getNextAttempt();
+    expect(typeof nextAttempt).toBe('number');
+
+    await expect(breaker.execute(() => Promise.resolve('ok'))).rejects.toThrow(CircuitOpenError);
+
+    const future = (nextAttempt ?? Date.now()) + 200;
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(future);
+    await expect(breaker.execute(() => Promise.resolve('ok'))).resolves.toBe('ok');
+    expect(breaker.getState()).toBe('CLOSED');
+    expect(breaker.getNextAttempt()).toBeNull();
+    nowSpy.mockRestore();
+  });
+});
+
+describe('CircuitOpenError', () => {
+  it('shows the dependency and next attempt when provided', () => {
+    const timestamp = 1672531200000;
+    const error = new CircuitOpenError('redis', timestamp);
+    expect(error.message).toContain('redis circuit open until');
+    expect(error.message).toContain(new Date(timestamp).toISOString());
+  });
+
+  it('falls back to a short message when next attempt is null', () => {
+    const error = new CircuitOpenError('redis', null);
+    expect(error.message).toBe('redis circuit is open');
+  });
 });
