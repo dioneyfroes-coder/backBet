@@ -1,5 +1,11 @@
 import Redis from 'ioredis';
+import { retryWithBackoff } from '@/shared/resilience/retryPolicy';
 import { cacheConfig } from '@/shared/config/cacheConfig';
+import { redisCircuitBreaker } from '@/shared/resilience/dependencyCircuitBreakers';
+import {
+  recordRetryAttempt,
+  recordRetryFailure,
+} from '@/infrastructure/observability/resilienceMetrics';
 
 export interface CacheMetrics {
   hits: number;
@@ -7,6 +13,20 @@ export interface CacheMetrics {
   writes: number;
   errors: number;
 }
+
+const CACHE_RETRY_OPTIONS = {
+  maxAttempts: 3,
+  baseDelayMs: 100,
+  factor: 2,
+  jitter: 0.2,
+  onRetry: (error: unknown, attempt: number, delayMs: number) => {
+    recordRetryAttempt('redis');
+    console.warn(
+      `Redis operation failed (attempt ${attempt}), retrying after ${Math.round(delayMs)}ms`,
+      { error },
+    );
+  },
+};
 
 export class RedisClient {
   private client: Redis | null = null;
@@ -27,13 +47,17 @@ export class RedisClient {
     return this.client;
   }
 
+  private async runWithBreaker<T>(operation: () => Promise<T>): Promise<T> {
+    return redisCircuitBreaker.execute(() => retryWithBackoff(operation, CACHE_RETRY_OPTIONS));
+  }
+
   async get<T>(key: string): Promise<T | null> {
     try {
       const client = this.getRedis();
       if (!client) {
         return null;
       }
-      const data = await client.get(key);
+      const data = await this.runWithBreaker(() => client.get(key));
       if (data === null) {
         this.metrics.misses += 1;
         return null;
@@ -41,6 +65,7 @@ export class RedisClient {
       this.metrics.hits += 1;
       return JSON.parse(data) as T;
     } catch (error) {
+      recordRetryFailure('redis');
       this.metrics.errors += 1;
       console.warn('Cache read failed', key, error);
       return null;
@@ -53,9 +78,10 @@ export class RedisClient {
       if (!client) {
         return;
       }
-      await client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+      await this.runWithBreaker(() => client.set(key, JSON.stringify(value), 'EX', ttlSeconds));
       this.metrics.writes += 1;
     } catch (error) {
+      recordRetryFailure('redis');
       this.metrics.errors += 1;
       console.warn('Cache write failed', key, error);
     }
@@ -67,8 +93,9 @@ export class RedisClient {
       if (!client) {
         return;
       }
-      await client.del(key);
+      await this.runWithBreaker(() => client.del(key));
     } catch (error) {
+      recordRetryFailure('redis');
       this.metrics.errors += 1;
       console.warn('Cache delete failed', key, error);
     }
@@ -95,8 +122,9 @@ export class RedisClient {
       return null;
     }
     try {
-      return await client.ping();
+      return await this.runWithBreaker(() => client.ping());
     } catch (error) {
+      recordRetryFailure('redis');
       this.metrics.errors += 1;
       throw error;
     }

@@ -5,6 +5,7 @@ import helmet, { HelmetOptions } from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import mongoose from 'mongoose';
+import { retryWithBackoff } from '@/shared/resilience/retryPolicy';
 import { swaggerSpec } from '../config/swagger';
 import { AppError } from '@/shared/errors/AppError';
 import { appConfig } from '@/shared/config/appConfig';
@@ -24,6 +25,22 @@ import {
   updateRequestContext,
   getRequestContext,
 } from '@/shared/observability/requestContext';
+import {
+  mongoCircuitBreaker,
+  redisCircuitBreaker,
+} from '@/shared/resilience/dependencyCircuitBreakers';
+import {
+  recordRetryAttempt,
+  recordRetryFailure,
+} from '@/infrastructure/observability/resilienceMetrics';
+
+const MONGO_PING_RETRY_OPTIONS = {
+  maxAttempts: 2,
+  baseDelayMs: 150,
+  factor: 2,
+  jitter: 0.2,
+  onRetry: () => recordRetryAttempt('mongo'),
+};
 
 export class ApiServer {
   private app: Express;
@@ -365,21 +382,35 @@ export class ApiServer {
     const timestamp = new Date().toISOString();
 
     if (cacheConfig.enabled) {
-      const start = Date.now();
-      try {
-        await redisClient.ping();
-        checks.redis = {
-          status: 'up',
-          latencyMs: Date.now() - start,
-        };
-        this.setDependencyHealthMetric('redis', 1);
-      } catch (error: any) {
+      const redisNextAttempt = redisCircuitBreaker.getNextAttempt();
+      if (redisCircuitBreaker.isOpen() && redisNextAttempt && Date.now() < redisNextAttempt) {
         ready = false;
         checks.redis = {
           status: 'down',
-          error: error?.message ?? 'Redis ping failed',
+          reason: 'circuit_open',
+          nextAttempt: new Date(redisNextAttempt).toISOString(),
+          breakerState: redisCircuitBreaker.getState(),
         };
         this.setDependencyHealthMetric('redis', 0);
+      } else {
+        const start = Date.now();
+        try {
+          await redisClient.ping();
+          checks.redis = {
+            status: 'up',
+            latencyMs: Date.now() - start,
+            breakerState: redisCircuitBreaker.getState(),
+          };
+          this.setDependencyHealthMetric('redis', 1);
+        } catch (error: any) {
+          ready = false;
+          checks.redis = {
+            status: 'down',
+            error: error?.message ?? 'Redis ping failed',
+            breakerState: redisCircuitBreaker.getState(),
+          };
+          this.setDependencyHealthMetric('redis', 0);
+        }
       }
     } else {
       checks.redis = {
@@ -401,23 +432,38 @@ export class ApiServer {
         };
         this.setDependencyHealthMetric('mongo', 0);
       } else {
-        const start = Date.now();
-        try {
-          await this.pingMongo();
-          checks.mongo = {
-            status: 'up',
-            state: mappedState,
-            latencyMs: Date.now() - start,
-          };
-          this.setDependencyHealthMetric('mongo', 1);
-        } catch (error: any) {
+        const mongoNextAttempt = mongoCircuitBreaker.getNextAttempt();
+        if (mongoCircuitBreaker.isOpen() && mongoNextAttempt && Date.now() < mongoNextAttempt) {
           ready = false;
           checks.mongo = {
             status: 'down',
             state: mappedState,
-            error: error?.message ?? 'Mongo ping failed',
+            reason: 'circuit_open',
+            nextAttempt: new Date(mongoNextAttempt).toISOString(),
+            breakerState: mongoCircuitBreaker.getState(),
           };
           this.setDependencyHealthMetric('mongo', 0);
+        } else {
+          const start = Date.now();
+          try {
+            await this.pingMongo();
+            checks.mongo = {
+              status: 'up',
+              state: mappedState,
+              latencyMs: Date.now() - start,
+              breakerState: mongoCircuitBreaker.getState(),
+            };
+            this.setDependencyHealthMetric('mongo', 1);
+          } catch (error: any) {
+            ready = false;
+            checks.mongo = {
+              status: 'down',
+              state: mappedState,
+              error: error?.message ?? 'Mongo ping failed',
+              breakerState: mongoCircuitBreaker.getState(),
+            };
+            this.setDependencyHealthMetric('mongo', 0);
+          }
         }
       }
     } else {
@@ -454,7 +500,14 @@ export class ApiServer {
     if (!db) {
       throw new Error('MongoDB connection not initialised');
     }
-    await db.admin().ping();
+    try {
+      await mongoCircuitBreaker.execute(() =>
+        retryWithBackoff(() => db.admin().ping(), MONGO_PING_RETRY_OPTIONS),
+      );
+    } catch (error) {
+      recordRetryFailure('mongo');
+      throw error;
+    }
   }
 }
 

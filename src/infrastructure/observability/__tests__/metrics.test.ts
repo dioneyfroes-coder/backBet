@@ -24,18 +24,18 @@ describe('metrics helpers', () => {
     await jest.isolateModulesAsync(async () => {
       const { cacheConfig } = await import('@/shared/config/cacheConfig');
       const { redisClient } = await import('@/infrastructure/cache/RedisClient');
-      const metricsModule = await import('../metrics');
+      const cacheMetrics = await import('../cacheMetrics');
       const metricsMock = redisClient.getMetrics as jest.Mock;
       const initialCalls = metricsMock.mock.calls.length;
 
-      metricsModule.updateCacheMetrics();
+      cacheMetrics.updateCacheMetrics();
       expect(metricsMock).toHaveBeenCalledTimes(initialCalls + 1);
 
       cacheConfig.enabled = false;
-      metricsModule.updateCacheMetrics();
+      cacheMetrics.updateCacheMetrics();
       expect(metricsMock).toHaveBeenCalledTimes(initialCalls + 1);
 
-      metricsModule.stopCacheMetricsPolling();
+      cacheMetrics.stopCacheMetricsPolling();
     });
   });
 
@@ -44,16 +44,16 @@ describe('metrics helpers', () => {
 
     await jest.isolateModulesAsync(async () => {
       const { cacheConfig } = await import('@/shared/config/cacheConfig');
-      const metrics = await import('../metrics');
+      const cacheMetrics = await import('../cacheMetrics');
 
       cacheConfig.enabled = true;
-      metrics.stopCacheMetricsPolling();
-      metrics.startCacheMetricsPolling();
-      metrics.startCacheMetricsPolling();
+      cacheMetrics.stopCacheMetricsPolling();
+      cacheMetrics.startCacheMetricsPolling();
+      cacheMetrics.startCacheMetricsPolling();
       jest.advanceTimersByTime(0);
-      metrics.stopCacheMetricsPolling();
+      cacheMetrics.stopCacheMetricsPolling();
       cacheConfig.enabled = false;
-      metrics.stopCacheMetricsPolling();
+      cacheMetrics.stopCacheMetricsPolling();
     });
 
     jest.useRealTimers();
