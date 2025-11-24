@@ -36,7 +36,7 @@ export abstract class BaseController {
     code: string,
     message: string,
     statusCode: number = 400,
-    details?: Record<string, any>
+    details?: Record<string, any>,
   ): Response {
     return res.status(statusCode).json({
       success: false,
@@ -86,7 +86,7 @@ export abstract class BaseController {
             acc[path] = err.message;
             return acc;
           },
-          {}
+          {},
         );
         throw new AppError('VALIDATION_ERROR', 'Dados inválidos', 400, details);
       }
@@ -112,7 +112,7 @@ export abstract class BaseController {
           acc[path] = err.message;
           return acc;
         },
-        {}
+        {},
       );
       return this.badRequest(res, 'Validação falhou', details);
     }

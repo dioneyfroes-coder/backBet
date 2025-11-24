@@ -18,7 +18,7 @@ export class Transaction {
     public readonly amount: number,
     public readonly currency: string,
     public readonly description: string | undefined,
-    public readonly createdAt: Date
+    public readonly createdAt: Date,
   ) {}
 
   toDTO(): ITransactionDTO {

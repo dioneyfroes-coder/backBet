@@ -1,6 +1,6 @@
 /**
  * Interface base para agregados (Aggregate Roots).
- * 
+ *
  * Agregados são conjuntos de entidades tratadas como uma unidade em transações.
  * Exemplos:
  * - User + Wallet = agregado de usuário

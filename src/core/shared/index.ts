@@ -1,6 +1,6 @@
 /**
  * Shared Domain - Exports
- * 
+ *
  * Agregue todas as abstrações e tipos compartilhados aqui para facilitar imports.
  * Exemplo: import { IRepository, Money, UniqueId } from '@/core/shared';
  */

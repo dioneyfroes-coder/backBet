@@ -1,5 +1,9 @@
 import 'dotenv/config';
-import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
+import {
+  connectMongoDB,
+  disconnectMongoDB,
+  getMongoDBConfig,
+} from '@/infrastructure/persistence/mongoose/config';
 import { MigrationRunner } from '@/infrastructure/database/migrations/MigrationRunner';
 import { ensureIndexesMigration } from '@/infrastructure/database/migrations/0001-create-indexes';
 

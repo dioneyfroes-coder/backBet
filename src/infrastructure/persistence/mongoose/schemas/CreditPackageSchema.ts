@@ -55,7 +55,10 @@ const creditPackageSchema = new Schema<ICreditPackageDocument>(
       default: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const CreditPackageModel = mongoose.model<ICreditPackageDocument>('CreditPackage', creditPackageSchema);
+export const CreditPackageModel = mongoose.model<ICreditPackageDocument>(
+  'CreditPackage',
+  creditPackageSchema,
+);

@@ -3,7 +3,7 @@ import { IWalletRepository } from '../../domain/repositories/IWalletRepository';
 import { Wallet } from '../../domain/entities/Wallet';
 
 export class WalletRepository implements IWalletRepository {
-private wallets: Wallet[] = [];
+  private wallets: Wallet[] = [];
 
   async findByUserId(userId: string): Promise<Wallet | null> {
     return this.wallets.find((w) => w.userId === userId) || null;
@@ -24,7 +24,11 @@ private wallets: Wallet[] = [];
     this.wallets = this.wallets.filter((w) => w.userId !== userId);
   }
 
-  async getHistory(userId: string, limit = 10, offset = 0): Promise<{ transactions: import('../entities/Transaction').ITransactionDTO[]; total: number }> {
+  async getHistory(
+    userId: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<{ transactions: import('../entities/Transaction').ITransactionDTO[]; total: number }> {
     const wallet = this.wallets.find((w) => w.userId === userId) || null;
     if (!wallet) return { transactions: [], total: 0 };
     const all = wallet.getTransactions();

@@ -31,15 +31,28 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   const userController = new UserController(
     getUserProfileUseCase,
     updateProfileUseCase,
-    changeEmailUseCase
+    changeEmailUseCase,
   );
 
   // Rotas protegidas
-  router.get('/me', protectedRoute, cacheUserProfileMiddleware, asyncHandler((req, res) => userController.getMe(req, res)));
+  router.get(
+    '/me',
+    protectedRoute,
+    cacheUserProfileMiddleware,
+    asyncHandler((req, res) => userController.getMe(req, res)),
+  );
 
-  router.patch('/me', protectedRoute, asyncHandler((req, res) => userController.updateProfile(req, res)));
+  router.patch(
+    '/me',
+    protectedRoute,
+    asyncHandler((req, res) => userController.updateProfile(req, res)),
+  );
 
-  router.patch('/me/email', protectedRoute, asyncHandler((req, res) => userController.changeEmail(req, res)));
+  router.patch(
+    '/me/email',
+    protectedRoute,
+    asyncHandler((req, res) => userController.changeEmail(req, res)),
+  );
 
   return router;
 }

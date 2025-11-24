@@ -14,11 +14,7 @@ const walletRepository = new WalletRepository();
 const walletService = new WalletService(walletRepository);
 
 // Serviço principal
-export const betService = new BetService(
-  betRepository,
-  eventRepository,
-  walletService
-);
+export const betService = new BetService(betRepository, eventRepository, walletService);
 
 // Casos de uso (injeção de dependência)
 import { PlaceBetUseCase } from '../aplication/use-cases/PlaceBetUseCase';

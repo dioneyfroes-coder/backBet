@@ -17,7 +17,7 @@ export class WalletController extends BaseController {
     private getWalletUseCase: GetWallet,
     private depositUseCase: Deposit,
     private withdrawUseCase: Withdraw,
-    private getHistoryUseCase: GetHistory
+    private getHistoryUseCase: GetHistory,
   ) {
     super();
   }
@@ -134,7 +134,9 @@ export class WalletController extends BaseController {
     }
 
     const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
-    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
+    await flushWalletCache(userId).catch((error) =>
+      console.warn('Failed to flush wallet cache', error),
+    );
 
     return this.created(res, {
       message: 'Depósito realizado com sucesso',
@@ -210,7 +212,9 @@ export class WalletController extends BaseController {
     }
 
     const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
-    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache', error));
+    await flushWalletCache(userId).catch((error) =>
+      console.warn('Failed to flush wallet cache', error),
+    );
 
     return this.created(res, {
       message: 'Saque realizado com sucesso',

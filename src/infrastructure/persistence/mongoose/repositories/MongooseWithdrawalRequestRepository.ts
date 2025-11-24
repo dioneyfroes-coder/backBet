@@ -1,6 +1,9 @@
 import { WithdrawalRequest } from '@/core/finance/domain/entities/WithdrawalRequest';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
-import { IWithdrawalRequestDocument, WithdrawalRequestModel } from '../schemas/WithdrawalRequestSchema';
+import {
+  IWithdrawalRequestDocument,
+  WithdrawalRequestModel,
+} from '../schemas/WithdrawalRequestSchema';
 
 export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRepository {
   private toDomain(doc: IWithdrawalRequestDocument): WithdrawalRequest {
@@ -41,7 +44,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
         processedAt: request.processedAt,
         approvalLogs: request.approvalLogs,
       },
-      { new: true }
+      { new: true },
     ).lean<IWithdrawalRequestDocument>();
 
     if (!updated) {
@@ -52,7 +55,9 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
   }
 
   async findById(id: string): Promise<WithdrawalRequest | null> {
-    const doc = await WithdrawalRequestModel.findOne({ requestId: id }).lean<IWithdrawalRequestDocument>();
+    const doc = await WithdrawalRequestModel.findOne({
+      requestId: id,
+    }).lean<IWithdrawalRequestDocument>();
     if (!doc) {
       return null;
     }
@@ -60,7 +65,9 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
   }
 
   async findByUserId(userId: string): Promise<WithdrawalRequest[]> {
-    const docs = await WithdrawalRequestModel.find({ userId }).sort({ requestedAt: -1 }).lean<IWithdrawalRequestDocument[]>();
+    const docs = await WithdrawalRequestModel.find({ userId })
+      .sort({ requestedAt: -1 })
+      .lean<IWithdrawalRequestDocument[]>();
     return docs.map((doc) => this.toDomain(doc as IWithdrawalRequestDocument));
   }
 

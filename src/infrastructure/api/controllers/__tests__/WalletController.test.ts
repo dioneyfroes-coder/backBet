@@ -27,14 +27,15 @@ const createResponse = (): MockResponse => {
   return res as MockResponse;
 };
 
-const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest => ({
-  headers: {},
-  body: {},
-  query: {},
-  params: {},
-  auth: { userId: 'user-1', sessionId: 'sess-1' },
-  ...overrides,
-}) as AuthenticatedRequest;
+const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest =>
+  ({
+    headers: {},
+    body: {},
+    query: {},
+    params: {},
+    auth: { userId: 'user-1', sessionId: 'sess-1' },
+    ...overrides,
+  }) as AuthenticatedRequest;
 
 describe('WalletController', () => {
   const getWalletUseCase = { execute: jest.fn() };

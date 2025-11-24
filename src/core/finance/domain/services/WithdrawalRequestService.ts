@@ -8,10 +8,15 @@ import { WalletService } from './WalletService';
 export class WithdrawalRequestService {
   constructor(
     private readonly withdrawalRequestRepository: IWithdrawalRequestRepository,
-    private readonly walletService: WalletService
+    private readonly walletService: WalletService,
   ) {}
 
-  async createRequest(userId: string, amount: number, currency: Currency, notes?: string): Promise<WithdrawalRequest> {
+  async createRequest(
+    userId: string,
+    amount: number,
+    currency: Currency,
+    notes?: string,
+  ): Promise<WithdrawalRequest> {
     if (amount <= 0) {
       throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
     }
@@ -35,13 +40,18 @@ export class WithdrawalRequestService {
       new Date(),
       'PENDING',
       undefined,
-      notes
+      notes,
     );
 
     return this.withdrawalRequestRepository.create(request);
   }
 
-  async processRequest(requestId: string, adminId: string, action: ApprovalAction, notes?: string): Promise<WithdrawalRequest> {
+  async processRequest(
+    requestId: string,
+    adminId: string,
+    action: ApprovalAction,
+    notes?: string,
+  ): Promise<WithdrawalRequest> {
     const request = await this.withdrawalRequestRepository.findById(requestId);
     if (!request) {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);

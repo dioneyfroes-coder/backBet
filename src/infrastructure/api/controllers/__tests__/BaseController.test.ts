@@ -159,7 +159,11 @@ describe('BaseController helpers', () => {
 
   it('handleError maps validation error objects', async () => {
     const res = createResponse();
-    await controller.handle(res, { code: 'VALIDATION_ERROR', message: 'invalid', details: { email: 'invalid' } });
+    await controller.handle(res, {
+      code: 'VALIDATION_ERROR',
+      message: 'invalid',
+      details: { email: 'invalid' },
+    });
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.body?.error).toEqual({

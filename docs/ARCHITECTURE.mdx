@@ -30,8 +30,8 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 ## Camadas em Detalhe
 
 ### 1. API Layer (`src/infrastructure/api`)
-- **`ApiServer.ts`** monta Express 5 com `helmet`, CORS dinâmico, `express-rate-limit`, parsers, Swagger UI (`/api/docs`) e endpoints de saúde/metrics.
-- Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware`, métricas Prometheus e handlers de erro padronizados.
+- **`ApiServer.ts`** monta Express 5 com `helmet`, CORS dinâmico, `express-rate-limit`, parsers, Swagger UI (`/api/docs`) e endpoints de saúde.
+- Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware` e handlers de erro padronizados.
 - Autenticação:
   - Produção: Clerk (`@clerk/express` + `requireAuth`).
   - Dev/Test: bypass opcional (`ALLOW_DEV_BEARER_BYPASS`) que aceita `Authorization: Bearer <userId>` sem JWT.
@@ -51,7 +51,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 - **Persistência (`src/infrastructure/persistence`)**: factories (`factory.ts`) escolhem Mongoose (`persistence/mongoose/*`) ou adaptadores in-memory.
 - **Cache (`src/infrastructure/cache`)**: `RedisClient` (ioredis), métricas internas e hooks declarativos. TTLs configurados em `shared/config/cacheConfig.ts`.
 - **Autenticação (`src/infrastructure/auth`)**: `JwtService`, helpers Clerk e middlewares complementares.
-- **Observabilidade (`src/infrastructure/observability`)**: métricas Prometheus (`metrics.ts`) e tracing OpenTelemetry (`tracing.ts`).
+- **Observabilidade (`src/infrastructure/observability`)**: snapshots (cache/resiliência/dependências) e tracing OpenTelemetry (`tracing.ts`).
 - **Config (`src/shared/config/*.ts`)**: single source of truth para envs, rate limit, CORS, security, cache e OTLP.
 
 ### 5. Shared Layer (`src/shared`)
@@ -60,7 +60,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 
 ## Fluxo de Requisição
 
-1. **Entrada HTTP** – `ApiServer` aplica middlewares (helmet, CORS, rate-limit, request-id, logging, metrics).
+1. **Entrada HTTP** – `ApiServer` aplica middlewares (helmet, CORS, rate-limit, request-id, logging).
 2. **Autenticação** – Clerk ou bypass preenche `req.auth.userId`; rotas críticas usam `protectedRoute` para validar token.
 3. **Controller/DTO** – Envelopes `BaseController` + Zod validam input e produzem resposta uniforme.
 4. **Use Case** – Execução de `RegisterUser`, `DepositFunds`, `PlaceBet`, etc., orquestrando domínios e cache.
@@ -88,14 +88,15 @@ Factories `create<User|Wallet|Bet|Event>Repository()` leem `USE_MONGOOSE_PERSIST
 - **Rate limiting**:
   - Global (`express-rate-limit`) configurável por `RATE_LIMIT_*`.
   - Por rota via `createRouteRateLimiter` com variáveis dedicadas (`AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_*`).
-- **Request Context**: `AsyncLocalStorage` propaga `requestId/userId` para logs, métricas e handlers de erro.
-- **Health/Readiness**: `/health`, `/readiness`, `/health/cache` e `/metrics` expostos pelo `ApiServer`. Gauges `backbet_dependency_health{dependency="redis|mongo"}` sinalizam status.
+- **Request Context**: `AsyncLocalStorage` propaga `requestId/userId` para logs, snapshots e handlers de erro.
+- **Health/Readiness**: `/health`, `/readiness`, `/health/cache` expostos pelo `ApiServer`. `dependencyHealthSnapshot` sinaliza status e será consumido por PM2 WebUI/alertas.
 
 ## Observabilidade
 
-- **Métricas**: `httpRequestCounter`, `httpRequestLatency`, `httpActiveRequests`, contadores de erros, métricas de cache e dependências expostas no endpoint `/metrics`.
+- **Snapshots**: `cacheMetricsSnapshot`, `resilienceMetricsSnapshot` e `dependencyHealthSnapshot` guardam o estado mais recente e são devolvidos via `/health/cache` e `/readiness`. Eles substituem os gauges Prometheus e alimentarão PM2 WebUI/alertas de e-mail.
 - **Tracing**: `src/infrastructure/observability/tracing.ts` inicializa OpenTelemetry (Express, Mongoose, ioredis instrumentations) quando `TRACING_ENABLED=true`.
 - **Logging estruturado**: middleware escreve JSON com `request_start`, `request_end` e `request_error`, sempre incluindo `requestId`, método, rota e duração.
+- **Endpoint `/metrics`**: mantido apenas por compatibilidade; retorna `410 Gone` até que `OBS_ENABLE_PROMETHEUS=true` durante transições.
 
 ## Fluxos Críticos
 
@@ -164,7 +165,7 @@ src/
 2. **Persistência única (Mongo)** – remover fallback in-memory em produção e habilitar migrações automáticas.
 3. **Feature Flags** – mover toggles críticos (bypass auth, cache) para um provider dedicado.
 4. **Escala Horizontal** – preparar `ApiServer` para múltiplas instâncias atrás de um ingress e externalizar sessões Clerk.
-5. **Observabilidade avançada** – dashboards oficiais + alertas para `httpRequestLatency` e `dependencyHealthGauge`.
+5. **Observabilidade avançada** – completar integração PM2 WebUI + alertas por e-mail usando os snapshots operacionais.
 
 ---
 

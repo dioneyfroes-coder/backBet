@@ -21,53 +21,39 @@ export class MongooseUserRepository implements IUserRepository {
     } catch (error: any) {
       if (error.code === 11000) {
         const field = Object.keys(error.keyPattern)[0];
-        throw new AppError(
-          `Um usuário com este ${field} já existe`,
-          'CONFLICT',
-          409,
-          { field }
-        );
+        throw new AppError(`Um usuário com este ${field} já existe`, 'CONFLICT', 409, { field });
       }
-      throw new AppError(
-        'Erro ao salvar usuário',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao salvar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findById(id: string): Promise<User | null> {
     try {
-      const userData = await UserModel.findById(id).lean() as IUserDocument | null;
+      const userData = (await UserModel.findById(id).lean()) as IUserDocument | null;
       if (!userData) {
         return null;
       }
       return this.mapToDomain(userData);
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar usuário',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findByEmail(email: string): Promise<User | null> {
     try {
-      const userData = await UserModel.findOne({ email }).lean() as IUserDocument | null;
+      const userData = (await UserModel.findOne({ email }).lean()) as IUserDocument | null;
       if (!userData) {
         return null;
       }
       return this.mapToDomain(userData);
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar usuário por email',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar usuário por email', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -87,12 +73,9 @@ export class MongooseUserRepository implements IUserRepository {
       if (error instanceof AppError) {
         throw error;
       }
-      throw new AppError(
-        'Erro ao atualizar usuário',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao atualizar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -104,7 +87,7 @@ export class MongooseUserRepository implements IUserRepository {
       data.passwordHash,
       data.status,
       data.createdAt,
-      data.updatedAt
+      data.updatedAt,
     );
   }
 }

@@ -13,11 +13,17 @@ export class BetAmount {
 
   private validate(): void {
     if (typeof this.value !== 'number' || isNaN(this.value)) {
-      throw new DomainError({ code: 'BET_AMOUNT_INVALID_NUMBER', message: 'Bet amount must be a valid number' });
+      throw new DomainError({
+        code: 'BET_AMOUNT_INVALID_NUMBER',
+        message: 'Bet amount must be a valid number',
+      });
     }
 
     if (this.value <= 0) {
-      throw new DomainError({ code: 'BET_AMOUNT_NON_POSITIVE', message: 'Bet amount must be greater than 0' });
+      throw new DomainError({
+        code: 'BET_AMOUNT_NON_POSITIVE',
+        message: 'Bet amount must be greater than 0',
+      });
     }
 
     if (typeof this.currency !== 'string' || !this.currency.trim()) {
@@ -35,7 +41,10 @@ export class BetAmount {
 
   multiply(factor: number): BetAmount {
     if (factor <= 0 || isNaN(factor)) {
-      throw new DomainError({ code: 'BET_AMOUNT_INVALID_MULTIPLIER', message: 'Invalid multiplier factor' });
+      throw new DomainError({
+        code: 'BET_AMOUNT_INVALID_MULTIPLIER',
+        message: 'Invalid multiplier factor',
+      });
     }
     return new BetAmount(this.value * factor, this.currency);
   }

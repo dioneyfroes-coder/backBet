@@ -19,7 +19,7 @@ export class AuthController extends BaseController {
     private registerUserUseCase: RegisterUser,
     private userService: UserService,
     private clerkService: ClerkService,
-    private jwtService: JwtService
+    private jwtService: JwtService,
   ) {
     super();
   }

@@ -78,7 +78,7 @@ const betSchema = new Schema<IBetDocument>(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const BetModel = mongoose.model<IBetDocument>('Bet', betSchema);

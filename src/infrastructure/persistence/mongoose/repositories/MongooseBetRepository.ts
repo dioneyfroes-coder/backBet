@@ -28,12 +28,9 @@ export class MongooseBetRepository implements IBetRepository {
       const newBet = new BetModel(betData);
       await newBet.save();
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao criar aposta',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao criar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -54,90 +51,76 @@ export class MongooseBetRepository implements IBetRepository {
       if (error instanceof AppError) {
         throw error;
       }
-      throw new AppError(
-        'Erro ao atualizar aposta',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao atualizar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findById(id: string): Promise<Bet | null> {
     try {
-      const betData = await BetModel.findById(id).lean() as IBetDocument | null;
+      const betData = (await BetModel.findById(id).lean()) as IBetDocument | null;
       if (!betData) {
         return null;
       }
       return this.mapToDomain(betData);
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar aposta',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findByUserId(userId: string): Promise<Bet[]> {
     try {
-      const betsData = await BetModel.find({ userId }).lean() as any[];
-      return betsData.map(betData => this.mapToDomain(betData));
+      const betsData = (await BetModel.find({ userId }).lean()) as any[];
+      return betsData.map((betData) => this.mapToDomain(betData));
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar apostas do usuário',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar apostas do usuário', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findByEventId(eventId: string): Promise<Bet[]> {
     try {
-      const betsData = await BetModel.find({ eventId }).lean() as any[];
-      return betsData.map(betData => this.mapToDomain(betData));
+      const betsData = (await BetModel.find({ eventId }).lean()) as any[];
+      return betsData.map((betData) => this.mapToDomain(betData));
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar apostas do evento',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar apostas do evento', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findByStatus(status: BetStatus): Promise<Bet[]> {
     try {
-      const betsData = await BetModel.find({ status }).lean() as any[];
-      return betsData.map(betData => this.mapToDomain(betData));
+      const betsData = (await BetModel.find({ status }).lean()) as any[];
+      return betsData.map((betData) => this.mapToDomain(betData));
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar apostas por status',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar apostas por status', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
-  async findAll(filter?: { userId?: string; eventId?: string; status?: BetStatus }): Promise<Bet[]> {
+  async findAll(filter?: {
+    userId?: string;
+    eventId?: string;
+    status?: BetStatus;
+  }): Promise<Bet[]> {
     try {
       const query: any = {};
       if (filter?.userId) query.userId = filter.userId;
       if (filter?.eventId) query.eventId = filter.eventId;
       if (filter?.status) query.status = filter.status;
 
-      const betsData = await BetModel.find(query).lean() as any[];
-      return betsData.map(betData => this.mapToDomain(betData));
+      const betsData = (await BetModel.find(query).lean()) as any[];
+      return betsData.map((betData) => this.mapToDomain(betData));
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao listar apostas',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao listar apostas', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -146,12 +129,9 @@ export class MongooseBetRepository implements IBetRepository {
       const bet = await BetModel.findById(id).lean();
       return !!bet;
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao verificar aposta',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao verificar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -160,12 +140,9 @@ export class MongooseBetRepository implements IBetRepository {
       const result = await BetModel.findByIdAndDelete(id);
       return !!result;
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao deletar aposta',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao deletar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -181,7 +158,7 @@ export class MongooseBetRepository implements IBetRepository {
       data.type as BetType,
       data.createdAt,
       data.resolvedAt || new Date(0),
-      data.cancellationReason || ''
+      data.cancellationReason || '',
     );
   }
 }

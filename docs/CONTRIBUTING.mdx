@@ -34,7 +34,7 @@ npm run build
 npm run format
 ```
 
-- `npm run dev` deve subir sem erros, expondo `/health`, `/readiness` e `/metrics`.
+- `npm run dev` deve subir sem erros, expondo `/health`, `/readiness` e `/health/cache`. O `/metrics` responde `410 Gone` a menos que `OBS_ENABLE_PROMETHEUS=true` (use apenas se precisar exercitar o `prom-client`).
 - Novas migrations, seeds ou scripts precisam estar documentados em `docs/` e referenciados no README/Quickstart.
 - Se o cache ou tracing estiverem envolvidos, mencione como validar (`CACHE_ENABLED`, `TRACING_ENABLED`).
 
@@ -49,7 +49,7 @@ npm run format
 
 - Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_DOCS`, `docs/OBSERVABILITY`, `docs/QUICKSTART`).
 - Mantenha exemplos de payloads e env vars consistentes (ex.: `CACHE_ENABLED`, `TRACING_ENABLED`, `RATE_LIMIT_*`).
-- Adicione métricas/logs/traços quando implementar novos fluxos críticos. Documente brevemente no PR onde encontrar esses sinais.
+- Adicione logs/snapshots/traces quando implementar novos fluxos críticos. Documente brevemente no PR onde encontrar esses sinais.
 
 ## Segurança e Compliance
 

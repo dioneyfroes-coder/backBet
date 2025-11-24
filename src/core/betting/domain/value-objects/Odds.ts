@@ -11,7 +11,10 @@ export class Odds {
 
   private validate(): void {
     if (typeof this.value !== 'number' || isNaN(this.value)) {
-      throw new DomainError({ code: 'ODDS_INVALID_NUMBER', message: 'Odds value must be a valid number' });
+      throw new DomainError({
+        code: 'ODDS_INVALID_NUMBER',
+        message: 'Odds value must be a valid number',
+      });
     }
 
     if (this.value < Odds.MIN_VALUE) {
@@ -38,7 +41,11 @@ export class Odds {
    */
   calculatePotentialReturn(stake: number): number {
     if (typeof stake !== 'number' || stake <= 0 || isNaN(stake)) {
-      throw new DomainError({ code: 'ODDS_INVALID_STAKE', message: 'Invalid stake amount', details: { stake } });
+      throw new DomainError({
+        code: 'ODDS_INVALID_STAKE',
+        message: 'Invalid stake amount',
+        details: { stake },
+      });
     }
     return Number((this.value * stake).toFixed(2)); // garante precisão de casas decimais
   }

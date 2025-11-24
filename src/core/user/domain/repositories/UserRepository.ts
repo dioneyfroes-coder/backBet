@@ -26,7 +26,11 @@ export class UserRepository implements IUserRepository {
 
   async update(user: User): Promise<void> {
     if (!this.users.has(user.id)) {
-      throw new (await import('@shared/errors/AppError')).AppError('NOT_FOUND', 'User not found', 404);
+      throw new (await import('@shared/errors/AppError')).AppError(
+        'NOT_FOUND',
+        'User not found',
+        404,
+      );
     }
     this.users.set(user.id, user);
   }

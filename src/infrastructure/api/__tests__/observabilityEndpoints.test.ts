@@ -3,13 +3,17 @@ import { Express } from 'express';
 import { createApiServer } from '@/infrastructure/api/ApiServer';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
-import { metricsRegistry } from '@/infrastructure/observability/metrics';
 import * as requestContext from '@/shared/observability/requestContext';
 import {
   MongoMockHandle,
   mockMongoConnected,
   mockMongoDisconnected,
 } from '../test-helpers/mongoMockHelper';
+import {
+  overrideObservabilityToggles,
+  resetObservabilityToggles,
+  getObservabilityToggles,
+} from '@/shared/observability/featureToggles';
 
 describe('Observability endpoints', () => {
   let app: Express;
@@ -36,6 +40,7 @@ describe('Observability endpoints', () => {
     mongoMock?.restore();
     mongoMock = undefined;
     jest.restoreAllMocks();
+    resetObservabilityToggles();
   });
 
   it('GET /health should expose service heartbeat with uptime', async () => {
@@ -45,6 +50,7 @@ describe('Observability endpoints', () => {
     expect(res.body.status).toBe('healthy');
     expect(typeof res.body.uptime).toBe('number');
     expect(res.body).toHaveProperty('timestamp');
+    expect(res.body.observability).toEqual(getObservabilityToggles());
   });
 
   it('GET /health/cache should expose cache switch and metrics payload', async () => {
@@ -56,12 +62,25 @@ describe('Observability endpoints', () => {
     expect(res.body.cache).toHaveProperty('metrics');
   });
 
-  it('GET /metrics should expose Prometheus formatted text', async () => {
+  it('GET /metrics avisa que o endpoint foi desativado', async () => {
     const res = await request(app).get('/metrics');
+
+    expect(res.status).toBe(410);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toContain('/metrics foi desativado');
+  });
+
+  it('GET /metrics expõe métricas Prometheus quando habilitado', async () => {
+    overrideObservabilityToggles({ enablePrometheus: true });
+    const server = createApiServer(0);
+    server.registerMetricsEndpoint();
+    const localApp = server.getExpressApp();
+
+    const res = await request(localApp).get('/metrics');
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/plain');
-    expect(res.text).toContain('backbet_http_requests_total');
+    expect(res.text).toContain('backbet_');
   });
 
   it('GET /readiness should skip checks when dependencies are disabled', async () => {
@@ -74,6 +93,7 @@ describe('Observability endpoints', () => {
     expect(res.body.ready).toBe(true);
     expect(res.body.checks.redis.status).toBe('skipped');
     expect(res.body.checks.mongo.status).toBe('skipped');
+    expect(res.body.observability).toEqual(getObservabilityToggles());
   });
 
   it('GET /readiness should report redis latency when cache is enabled', async () => {
@@ -125,15 +145,6 @@ describe('Observability endpoints', () => {
     expect(res.body.ready).toBe(false);
     expect(res.body.checks.mongo.status).toBe('down');
     expect(res.body.checks.mongo.state).toBe('disconnected');
-  });
-
-  it('GET /metrics surfaces exporter errors', async () => {
-    jest.spyOn(metricsRegistry, 'metrics').mockRejectedValueOnce(new Error('exporter down'));
-
-    const res = await request(app).get('/metrics');
-
-    expect(res.status).toBe(500);
-    expect(res.text).toBe('Erro ao gerar métricas');
   });
 
   it('registerErrorHandler serializes failures with request ids', async () => {

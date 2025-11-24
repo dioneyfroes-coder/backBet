@@ -45,6 +45,6 @@ export const WithdrawalRequestResponseDTO = z.object({
       action: z.enum(['APPROVED', 'REJECTED']),
       notes: z.string().nullable().optional(),
       createdAt: z.string(),
-    })
+    }),
   ),
 });

@@ -26,7 +26,9 @@ describe('WithdrawalRequestService', () => {
   it('creates a withdrawal request and locks the amount', async () => {
     const wallet = { balance: 500 } as any;
     (walletService.findByUserId as jest.Mock).mockResolvedValue(wallet);
-    (repository.create as jest.Mock).mockImplementation((req: WithdrawalRequest) => Promise.resolve(req));
+    (repository.create as jest.Mock).mockImplementation((req: WithdrawalRequest) =>
+      Promise.resolve(req),
+    );
 
     const service = new WithdrawalRequestService(repository, walletService);
     const request = await service.createRequest('user-1', 200, 'BRL' as Currency, 'test');
@@ -41,7 +43,9 @@ describe('WithdrawalRequestService', () => {
     (walletService.findByUserId as jest.Mock).mockResolvedValue(wallet);
     const service = new WithdrawalRequestService(repository, walletService);
 
-    await expect(service.createRequest('user-1', 100, 'BRL' as Currency)).rejects.toThrow('Saldo insuficiente');
+    await expect(service.createRequest('user-1', 100, 'BRL' as Currency)).rejects.toThrow(
+      'Saldo insuficiente',
+    );
     expect(walletService.lock).not.toHaveBeenCalled();
   });
 
@@ -61,10 +65,17 @@ describe('WithdrawalRequestService', () => {
   it('approves a pending request', async () => {
     const request = new WithdrawalRequest('req-1', 'user-1', 100, 'BRL');
     (repository.findById as jest.Mock).mockResolvedValue(request);
-    (repository.update as jest.Mock).mockImplementation((req: WithdrawalRequest) => Promise.resolve(req));
+    (repository.update as jest.Mock).mockImplementation((req: WithdrawalRequest) =>
+      Promise.resolve(req),
+    );
 
     const service = new WithdrawalRequestService(repository, walletService);
-    const result = await service.processRequest('req-1', 'admin', 'APPROVED' as ApprovalAction, 'ok');
+    const result = await service.processRequest(
+      'req-1',
+      'admin',
+      'APPROVED' as ApprovalAction,
+      'ok',
+    );
 
     expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-1', 100);
     expect(result.status).toBe('APPROVED');
@@ -74,10 +85,17 @@ describe('WithdrawalRequestService', () => {
   it('rejects a pending request', async () => {
     const request = new WithdrawalRequest('req-2', 'user-1', 150, 'BRL');
     (repository.findById as jest.Mock).mockResolvedValue(request);
-    (repository.update as jest.Mock).mockImplementation((req: WithdrawalRequest) => Promise.resolve(req));
+    (repository.update as jest.Mock).mockImplementation((req: WithdrawalRequest) =>
+      Promise.resolve(req),
+    );
 
     const service = new WithdrawalRequestService(repository, walletService);
-    const result = await service.processRequest('req-2', 'admin', 'REJECTED' as ApprovalAction, 'bloqueado');
+    const result = await service.processRequest(
+      'req-2',
+      'admin',
+      'REJECTED' as ApprovalAction,
+      'bloqueado',
+    );
 
     expect(walletService.unlock).toHaveBeenCalledWith('user-1', 150);
     expect(result.status).toBe('REJECTED');

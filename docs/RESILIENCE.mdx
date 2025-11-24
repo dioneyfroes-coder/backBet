@@ -6,46 +6,64 @@ slug: "/docs/resilience"
 
 # Resiliência operando em camadas
 
-> O BackBet foi pensado para sobreviver a falhas externas (Clerk, Redis, Mongo), picos de autenticação e indisponibilidade parcial. Esta página explica como as camadas de API, cache, persistência e observabilidade trabalham juntas para evitar downtime.
+:::note Visão geral
+O BackBet é projetado para sobreviver a falhas externas (Clerk, Redis, Mongo), picos de autenticação e indisponibilidade parcial. A seguir detalhamos como API, cache, persistência e observabilidade se combinam para evitar downtime e acelerar a recuperação.
+:::
 
 ## 1. API e experiência do cliente
 
-- **Rate limiting** global e por rota impede spikes de tráfego (ver `rateLimit` e `createRouteRateLimiter` em `src/shared/config/appConfig.ts`). Picos em `POST /auth/login`, `/wallets/deposit` ou `/bets` são tratados com mensagens (`RateLimit-*` headers).  
-- **Fallback de autenticação** permite usar JWT local ou `Bearer <userId>` em dev (`ALLOW_DEV_BEARER_BYPASS=true`), mantendo endpoints protegidos mesmo sem Clerk.  
-- **Timeouts e abort signals** (via middleware e `walletService`, `betService`) são pensados para retornar rapidamente quando dependências lentas ameaçam o tempo de resposta. Documente motivos adicionais no README quando adicionar novos SDKs.
- - **Retries/circuit breakers** adicionados em Redis/Mongo (ver `src/shared/resilience/*` e `src/infrastructure/observability/resilienceMetrics.ts`) garantem que falhas transitórias sejam atenuadas e que dependências problemáticas sejam isoladas antes de impactar os consumidores.
+| Proteção | Resultado | Onde configurar |
+|----------|-----------|-----------------|
+| Rate limiting global/por rota | Contém spikes em `POST /auth/login`, `/wallets/deposit`, `/bets` e propaga `RateLimit-*` headers para o cliente | `rateLimit` e `createRouteRateLimiter` em `src/shared/config/appConfig.ts` |
+| Fallback de autenticação | Permite JWT local ou `Bearer <userId>` em dev quando Clerk está indisponível | `ALLOW_DEV_BEARER_BYPASS=true` |
+| Timeouts + abort signals | Respostas rápidas mesmo quando serviços externos degradam; adicione notas no README ao incluir novos SDKs | Middlewares + `walletService`/`betService` |
+| Retries / circuit breakers | Isola Redis/Mongo quando instáveis antes que afetem usuários | `src/shared/resilience/*`, `src/infrastructure/observability/resilienceMetrics.ts` |
+
+### Operação diária
+
+- Monitore `request_start`, `request_end` e `request_error` para validar tempo de resposta por rota.
+- Documente qualquer alteração em limites ou SDKs no README para manter o histórico operacional.
 
 ## 2. Cache e desacoplamento
 
-- Redis atua como amortecedor em `/users/me`, `/wallets/me` e `/bets`. Mesmo se o Redis cair, as rotas continuam funcionando via leitura direta; `cacheConfig.enabled` controla o comportamento e a flag `CACHE_ENABLED` permite desligar o cache em emergência.  
-- `cacheHooks` expõem métricas (`backbet_cache_*`) e ajudam a detectar cache misses recorrentes antes que o banco seja afetado.  
-- `updateCacheMetrics()` (observability) e o readiness handler garantem que uma queda de cache pisca os gauges e retorna `status: down` para alertas.  
+| Componente | Como ajuda | Ações recomendadas |
+|------------|------------|--------------------|
+| Redis em `/users/me`, `/wallets/me`, `/bets` | Serve respostas rápidas; se cair, o código faz fallback para leitura direta | `cacheConfig.enabled` + flag `CACHE_ENABLED` para desligar em emergência |
+| `cacheHooks` + `cacheMetricsSnapshot` | Expõe hits, misses, writes e errors para detectar desvios antes de afetar o Mongo | Consulte o painel ou `/health/cache` para ajustes proativos |
+| Readiness handler | Replica o estado do cache e devolve `status: down` quando o ping falha | Use alertas baseados no retorno de `/health/cache` |
+
+:::tip Load balancer
+Provedores como Nginx/ALB podem usar `/health/cache` e `/readiness` para retirar instâncias problemáticas do pool antes que clientes percebam.
+:::
 
 ## 3. Persistência e banco de dados
 
-- A fábrica de repositórios (`src/infrastructure/persistence/factory.ts`) permite alternar para implementações in-memory quando o Mongo fica instável. Em produção, `USE_MONGOOSE_PERSISTENCE=true` ativa os repositórios Mongoose, `connectMongoDB()` é obrigatório e cada conexão registra `retryWrites: true` (cidade na `config.ts`).  
-- `ApiServer.readinessHandler` e o gauge `backbet_dependency_health{dependency="mongo"}` monitoram a saúde do Mongo. Caso o ping falhe, o endpoint retorna `503` e `ready=false`, o que impede o load balancer de rotear tráfego.  
-- As migrações e índices são sincronizados com o `schemas` para evitar falhas de constraint duplicadas (guia em `docs/MONGOOSE_REPOSITORIES.mdx`).
+1. **Fábrica de repositórios** (`src/infrastructure/persistence/factory.ts`): alterna para implementações in-memory quando o Mongo oscila.
+2. **Configuração obrigatória**: `USE_MONGOOSE_PERSISTENCE=true` em produção + `connectMongoDB()` com `retryWrites: true` (ver `config.ts`).
+3. **Readiness defensivo**: `ApiServer.readinessHandler` grava o resultado de cada ping em `dependencyHealthSnapshot`; falhas retornam `503` e `ready=false`, evitando tráfego enquanto o cluster se recupera.
+4. **Migrações e índices**: mantenha `schemas` sincronizados (guia em `docs/MONGOOSE_REPOSITORIES.mdx`) para evitar erros de constraint duplicada.
 
 ## 4. Observabilidade e alertas
 
-- Logs estruturados (`request_start`, `request_end`, `request_error`) sempre incluem `requestId`, `userId` e `durationMs`, facilitando correlação com métricas (`backbet_http_in_flight`, `backbet_http_errors_total`). Documentado em `docs/LOGS.mdx`.  
-- Spans OTEL e gauges de dependência (`backbet_dependency_latency_ms`) detectam degradações. O dashboard em `reports/phase4/instrucoes-grafana-prometheus.txt` ou o arquivo reintroduzido na raiz mapeia alertas para `backbet_dependency_health` e `backbet_cache_errors_total`.  
-- Health checks são públicos (`/health`, `/metrics`) e podem ser usados por Uptime robots para failover. Em produção, proteja via reverse proxy para evitar exploração (veja `docs/OBSERVABILITY.mdx`).
-- **Novas métricas de resiliência** (`backbet_retry_*`, `backbet_circuit_breaker_*`) aparecem em `/metrics` e alimentam dashboards e alertas de Grafana/Prometheus conforme o documento `instrucoes-grafana-prometheus.txt` descreve.
+- Logs estruturados incluem `requestId`, `userId` e `durationMs` (documentado em `docs/LOGS.mdx`).
+- Spans OTEL permanecem disponíveis e, junto com `dependencyHealthSnapshot`, indicam degradações. Os painéis antigos (Grafana/Prometheus) foram arquivados; seguimos `docs/PM2-WEBUI-MIGRATION.mdx`.
+- **PM2** mantém reloads sem downtime via `pm2 start ecosystem.config.cjs` (detalhes em `docs/PM2.mdx`).
+- Health checks públicos (`/health`, `/health/cache`, `/readiness`) podem alimentar Uptime Robots; proteja por reverse proxy em produção conforme `docs/OBSERVABILITY.mdx`.
+- `/metrics` responde `410 Gone` enquanto `OBS_ENABLE_PROMETHEUS=false`; o monitoramento migra para PM2 WebUI + alertas por e-mail.
+- `resilienceMetricsSnapshot` agrega retries, aberturas de circuit breaker e falhas; será enviado ao PM2 WebUI/alertas na próxima fase.
 
 ## 5. Estratégias de tolerância a falhas futuras
 
-1. **Retries inteligentes**: implemente bibliotecas como `p-retry` nos adaptadores de terceiros (Clerk/Redis) para tentar novamente com backoff exponencial.  
-2. **Circuit breaker**: adicione um rate limiter/circuit breaker para cada integração externa crítica (visando `Clerk`, `Redis`, `Mongo`).  
-3. ** degradê**: se uma dependência falhar (ex.: Clerk), degrade a resposta (ex.: `auth` retorna `418` com instrução) enquanto o monitor dispara alertas automáticos.  
-4. **Chaos testing**: execute scripts de caos (parar Redis, interromper Mongo) em ambientes de staging e valide `/readiness` e `/health/cache`.  
+1. **Retries inteligentes**: adicione libs como `p-retry` aos adaptadores de Clerk/Redis para backoff exponencial.
+2. **Circuit breaker dedicado**: um por integração crítica (Clerk, Redis, Mongo) com limites ajustados a cada SLA.
+3. **Resposta degradê**: quando Clerk falhar, devolva mensagem orientando o usuário (ex.: `418` com instruções) enquanto o monitor dispara alertas automáticos.
+4. **Chaos testing**: roteiros que derrubam Redis/Mongo em staging e verificam `/readiness` + `/health/cache` garantem confiança nas rotas de fallback.
 
 ## 6. Checklist de resiliência
 
-- [ ] Validar rate limits em testes de carga e garantir `RateLimit-*` headers aparecem no log `request_end`.  
-- [ ] Confirmar que `USE_MONGOOSE_PERSISTENCE` e `MONGODB_URI` são documentados em cada ambiente (DEV/HML/PROD).  
-- [ ] Monitorar `backbet_dependency_*` no Grafana e configurar alertas para `== 0`.  
-- [ ] Simular falhas de Redis/Mongo e garantir que os logs `request_error`/`readiness_dependency` explicam a razão.  
+- [ ] Validar rate limits em testes de carga e garantir `RateLimit-*` nos logs `request_end`.
+- [ ] Documentar `USE_MONGOOSE_PERSISTENCE` e `MONGODB_URI` por ambiente (DEV/HML/PROD).
+- [ ] Monitorar `dependencyHealthSnapshot` (via `/readiness`) e acionar alertas ao detectar `status="down"`.
+- [ ] Simular falhas de Redis/Mongo e garantir que `request_error`/`readiness_dependency` expliquem a causa raiz.
 
-**Referências:** `docs/OBSERVABILITY.mdx`, `docs/LOGS.mdx`, `docs/MONGODB_SETUP.mdx`, `src/infrastructure/api/ApiServer.ts`, `src/shared/config/appConfig.ts`.
+**Referências rápidas:** `docs/OBSERVABILITY.mdx`, `docs/LOGS.mdx`, `docs/MONGODB_SETUP.mdx`, `src/infrastructure/api/ApiServer.ts`, `src/shared/config/appConfig.ts`.

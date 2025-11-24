@@ -27,22 +27,24 @@ const createResponse = (): MockResponse => {
   return res as MockResponse;
 };
 
-const createRequest = (overrides?: Partial<Request>): Request => ({
-  body: {},
-  params: {},
-  query: {},
-  headers: {},
-  ...overrides,
-}) as Request;
+const createRequest = (overrides?: Partial<Request>): Request =>
+  ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    ...overrides,
+  }) as Request;
 
-const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest => ({
-  body: {},
-  params: {},
-  query: {},
-  headers: {},
-  auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
-  ...overrides,
-}) as AuthenticatedRequest;
+const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest =>
+  ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
+    ...overrides,
+  }) as AuthenticatedRequest;
 
 describe('BetController', () => {
   const placeBetUseCase = { execute: jest.fn() };
@@ -74,7 +76,9 @@ describe('BetController', () => {
 
     await controller.getEventBets(req, res);
 
-    expect(getEventBetsUseCase.execute).toHaveBeenCalledWith('3fa85f64-5717-4562-b3fc-2c963f66afa6');
+    expect(getEventBetsUseCase.execute).toHaveBeenCalledWith(
+      '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    );
     expect(res.body?.data).toEqual({ bets: [{ id: 'bet-1' }] });
   });
 
@@ -85,7 +89,10 @@ describe('BetController', () => {
   });
 
   it('places bets, flushes cache, and returns created bet', async () => {
-    const bet = { toJSON: () => ({ id: 'bet-1' }), eventId: '3fa85f64-5717-4562-b3fc-2c963f66afa6' };
+    const bet = {
+      toJSON: () => ({ id: 'bet-1' }),
+      eventId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    };
     placeBetUseCase.execute.mockResolvedValue(bet);
     (flushEventOddsCache as jest.Mock).mockRejectedValueOnce(new Error('cache fail'));
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -123,7 +130,10 @@ describe('BetController', () => {
   });
 
   it('cancels bets and flushes cache', async () => {
-    const bet = { toJSON: () => ({ id: 'bet-1' }), eventId: '3fa85f64-5717-4562-b3fc-2c963f66afa6' };
+    const bet = {
+      toJSON: () => ({ id: 'bet-1' }),
+      eventId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+    };
     cancelBetUseCase.execute.mockResolvedValue(bet);
     const req = createAuthRequest({
       params: { betId: '3fa85f64-5717-4562-b3fc-2c963f66afa6' },
@@ -149,10 +159,7 @@ describe('BetController', () => {
   });
 
   it('lists bets for authenticated user', async () => {
-    const bets = [
-      { toJSON: () => ({ id: 'bet-1' }) },
-      { toJSON: () => ({ id: 'bet-2' }) },
-    ];
+    const bets = [{ toJSON: () => ({ id: 'bet-1' }) }, { toJSON: () => ({ id: 'bet-2' }) }];
     getUserBetsUseCase.execute.mockResolvedValue(bets);
     const res = createResponse();
 

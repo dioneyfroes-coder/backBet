@@ -13,10 +13,7 @@ const makeEvent = (status: 'SCHEDULED' | 'LIVE' | 'FINISHED' = 'SCHEDULED') =>
     'Football',
     ['Team A', 'Team B'],
     new Map([
-      [
-        'market-a',
-        new Market('market-a', 'Winner', 'OPEN', new Map([['odd-a', new Odds(2.4)]])),
-      ],
+      ['market-a', new Market('market-a', 'Winner', 'OPEN', new Map([['odd-a', new Odds(2.4)]]))],
     ]),
   );
 
@@ -154,7 +151,11 @@ describe('BetService', () => {
       betRepository.findById.mockResolvedValue(bet);
       eventRepository.findById.mockResolvedValue(makeEvent());
 
-      const result = await service.cancelBet({ betId: bet.id, reason: 'user requested', canceledBy: 'admin-1' });
+      const result = await service.cancelBet({
+        betId: bet.id,
+        reason: 'user requested',
+        canceledBy: 'admin-1',
+      });
 
       expect(result.status).toBe('CANCELED');
       expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.amount.value);
@@ -165,9 +166,9 @@ describe('BetService', () => {
       const bet = makeBet();
       bet.resolve('WON');
       betRepository.findById.mockResolvedValue(bet);
-      await expect(service.cancelBet({ betId: bet.id, reason: 'too late', canceledBy: 'admin-1' })).rejects.toThrow(
-        'Only pending bets can be canceled.',
-      );
+      await expect(
+        service.cancelBet({ betId: bet.id, reason: 'too late', canceledBy: 'admin-1' }),
+      ).rejects.toThrow('Only pending bets can be canceled.');
 
       const pendingBet = makeBet();
       betRepository.findById.mockResolvedValue(pendingBet);
@@ -182,7 +183,11 @@ describe('BetService', () => {
     it('wins and credits wallet, losses skip deposit', async () => {
       const bet = makeBet();
       betRepository.findById.mockResolvedValue(bet);
-      const result = await service.resolveBet({ betId: bet.id, result: 'WON', marketResult: 'Team A' });
+      const result = await service.resolveBet({
+        betId: bet.id,
+        result: 'WON',
+        marketResult: 'Team A',
+      });
 
       expect(result.status).toBe('WON');
       expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.potentialReturn);
@@ -191,7 +196,11 @@ describe('BetService', () => {
 
       const lostBet = makeBet();
       betRepository.findById.mockResolvedValue(lostBet);
-      const lostResult = await service.resolveBet({ betId: lostBet.id, result: 'LOST', marketResult: 'Team B' });
+      const lostResult = await service.resolveBet({
+        betId: lostBet.id,
+        result: 'LOST',
+        marketResult: 'Team B',
+      });
 
       expect(lostResult.status).toBe('LOST');
       expect(walletService.deposit).not.toHaveBeenCalled();

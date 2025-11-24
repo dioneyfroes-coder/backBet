@@ -59,7 +59,7 @@ async function main() {
       `Pacote automático criado por seed: ${definition.label}`,
       true,
       new Date(),
-      new Date()
+      new Date(),
     );
 
     await repository.save(creditPackage);

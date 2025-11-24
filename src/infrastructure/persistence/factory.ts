@@ -5,7 +5,9 @@ const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 // Lazy imports to avoid loading mongoose models when not needed
 export async function createUserRepository() {
   if (USE_MONGOOSE) {
-    const { MongooseUserRepository } = await import('./mongoose/repositories/MongooseUserRepository');
+    const { MongooseUserRepository } = await import(
+      './mongoose/repositories/MongooseUserRepository'
+    );
     return new MongooseUserRepository();
   }
   const { UserRepository } = await import('@/core/user/domain/repositories/UserRepository');
@@ -14,7 +16,9 @@ export async function createUserRepository() {
 
 export async function createWalletRepository() {
   if (USE_MONGOOSE) {
-    const { MongooseWalletRepository } = await import('./mongoose/repositories/MongooseWalletRepository');
+    const { MongooseWalletRepository } = await import(
+      './mongoose/repositories/MongooseWalletRepository'
+    );
     return new MongooseWalletRepository();
   }
   const { WalletRepository } = await import('@/core/finance/domain/repositories/WalletRepository');
@@ -38,18 +42,26 @@ export async function createEventRepository() {
 
 export async function createCreditPackageRepository() {
   if (USE_MONGOOSE) {
-    const { MongooseCreditPackageRepository } = await import('./mongoose/repositories/MongooseCreditPackageRepository');
+    const { MongooseCreditPackageRepository } = await import(
+      './mongoose/repositories/MongooseCreditPackageRepository'
+    );
     return new MongooseCreditPackageRepository();
   }
-  const { CreditPackageRepository } = await import('@/core/finance/domain/repositories/CreditPackageRepository');
+  const { CreditPackageRepository } = await import(
+    '@/core/finance/domain/repositories/CreditPackageRepository'
+  );
   return new CreditPackageRepository();
 }
 
 export async function createWithdrawalRequestRepository() {
   if (USE_MONGOOSE) {
-    const { MongooseWithdrawalRequestRepository } = await import('./mongoose/repositories/MongooseWithdrawalRequestRepository');
+    const { MongooseWithdrawalRequestRepository } = await import(
+      './mongoose/repositories/MongooseWithdrawalRequestRepository'
+    );
     return new MongooseWithdrawalRequestRepository();
   }
-  const { WithdrawalRequestRepository } = await import('@/core/finance/domain/repositories/WithdrawalRequestRepository');
+  const { WithdrawalRequestRepository } = await import(
+    '@/core/finance/domain/repositories/WithdrawalRequestRepository'
+  );
   return new WithdrawalRequestRepository();
 }

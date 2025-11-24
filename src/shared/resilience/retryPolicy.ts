@@ -33,7 +33,8 @@ export async function retryWithBackoff<T>(
       }
 
       const delayBase = merged.baseDelayMs * Math.pow(merged.factor, attempt - 1);
-      const jitterOffset = (Math.random() * merged.jitter * delayBase * 2) - merged.jitter * delayBase;
+      const jitterOffset =
+        Math.random() * merged.jitter * delayBase * 2 - merged.jitter * delayBase;
       const delayMs = Math.max(0, delayBase + jitterOffset);
 
       merged.onRetry?.(error, attempt, delayMs);

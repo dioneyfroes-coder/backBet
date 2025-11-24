@@ -3,7 +3,11 @@
 import { appConfig } from '@/shared/config/appConfig';
 import { createApiServer } from './infrastructure/api/ApiServer';
 import { createApiRouter } from './infrastructure/api/routes';
-import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from './infrastructure/persistence/mongoose/config';
+import {
+  connectMongoDB,
+  disconnectMongoDB,
+  getMongoDBConfig,
+} from './infrastructure/persistence/mongoose/config';
 import '@/infrastructure/observability/cacheMetrics';
 // route creators are loaded dynamically (may be async factories)
 

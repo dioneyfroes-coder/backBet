@@ -63,5 +63,4 @@ export class ClerkService {
       return null;
     }
   }
-
 }

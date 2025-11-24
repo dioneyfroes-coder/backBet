@@ -1,47 +1,33 @@
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
-import { Gauge } from 'prom-client';
-import { metricsRegistry } from './metrics';
 
-const cacheHits = new Gauge({
-  name: 'backbet_cache_hits_total',
-  help: 'Número de leituras atendidas pelo Redis',
-  registers: [metricsRegistry],
-});
+type CacheSnapshot = {
+  hits: number;
+  misses: number;
+  writes: number;
+  errors: number;
+};
 
-const cacheMisses = new Gauge({
-  name: 'backbet_cache_misses_total',
-  help: 'Número de leituras que precisaram ser recarregadas',
-  registers: [metricsRegistry],
-});
+const zeroSnapshot = (): CacheSnapshot => ({ hits: 0, misses: 0, writes: 0, errors: 0 });
 
-const cacheWrites = new Gauge({
-  name: 'backbet_cache_writes_total',
-  help: 'Número de escritas realizadas no Redis',
-  registers: [metricsRegistry],
-});
-
-const cacheErrors = new Gauge({
-  name: 'backbet_cache_errors_total',
-  help: 'Número de erros observados na camada de cache',
-  registers: [metricsRegistry],
-});
+let cacheSnapshot: CacheSnapshot = zeroSnapshot();
 
 export const updateCacheMetrics = (): void => {
   if (!cacheConfig.enabled) {
-    cacheHits.set(0);
-    cacheMisses.set(0);
-    cacheWrites.set(0);
-    cacheErrors.set(0);
+    cacheSnapshot = zeroSnapshot();
     return;
   }
 
   const metrics = redisClient.getMetrics();
-  cacheHits.set(metrics.hits);
-  cacheMisses.set(metrics.misses);
-  cacheWrites.set(metrics.writes);
-  cacheErrors.set(metrics.errors);
+  cacheSnapshot = {
+    hits: metrics.hits,
+    misses: metrics.misses,
+    writes: metrics.writes,
+    errors: metrics.errors,
+  };
 };
+
+export const getCacheMetricsSnapshot = (): CacheSnapshot => ({ ...cacheSnapshot });
 
 let cacheMetricsInterval: NodeJS.Timeout | null = null;
 

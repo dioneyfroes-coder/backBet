@@ -26,9 +26,7 @@ export interface DomainError {
 /**
  * Resultado de operação (para aplicações usando Result pattern).
  */
-export type Result<T> = 
-  | { isSuccess: true; value: T }
-  | { isSuccess: false; error: DomainError };
+export type Result<T> = { isSuccess: true; value: T } | { isSuccess: false; error: DomainError };
 
 /**
  * DTO base para todas as respostas paginadas.

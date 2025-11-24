@@ -10,7 +10,11 @@ type SetupOptions = {
 
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
-const loadMiddleware = ({ env = 'test', allowDevBypass = false, verifyImpl }: SetupOptions = {}) => {
+const loadMiddleware = ({
+  env = 'test',
+  allowDevBypass = false,
+  verifyImpl,
+}: SetupOptions = {}) => {
   jest.resetModules();
   process.env.NODE_ENV = env;
   const verifyAccessToken = verifyImpl ?? jest.fn();
@@ -41,10 +45,11 @@ const createResponse = () => {
   return res;
 };
 
-const createRequest = (overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest => ({
-  headers: {},
-  ...overrides,
-}) as AuthenticatedRequest;
+const createRequest = (overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest =>
+  ({
+    headers: {},
+    ...overrides,
+  }) as AuthenticatedRequest;
 
 describe('AuthMiddleware', () => {
   afterAll(() => {
@@ -103,7 +108,10 @@ describe('AuthMiddleware', () => {
   });
 
   it('allows dev bypass tokens when enabled', () => {
-    const { protectedRoute, verifyAccessToken } = loadMiddleware({ env: 'development', allowDevBypass: true });
+    const { protectedRoute, verifyAccessToken } = loadMiddleware({
+      env: 'development',
+      allowDevBypass: true,
+    });
     const req = createRequest({ headers: { authorization: 'Bearer dev-user' } });
     const res = createResponse();
     const next = jest.fn();

@@ -92,7 +92,7 @@ const swaggerOptions = {
               properties: {
                 amount: {
                   type: 'number',
-                  example: 1000.00,
+                  example: 1000.0,
                 },
                 currency: {
                   type: 'string',
@@ -209,10 +209,7 @@ const swaggerOptions = {
                   example: 'Dados inválidos',
                 },
                 details: {
-                  oneOf: [
-                    { $ref: '#/components/schemas/ValidationError' },
-                    { type: 'object' }
-                  ],
+                  oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { type: 'object' }],
                 },
               },
             },
@@ -362,7 +359,9 @@ const swaggerOptions = {
           properties: {
             code: { type: 'string', example: 'BAD_REQUEST' },
             message: { type: 'string', example: 'Mensagem de erro' },
-            details: { oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { type: 'object' }] },
+            details: {
+              oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { type: 'object' }],
+            },
           },
         },
         Transaction: {
@@ -373,15 +372,15 @@ const swaggerOptions = {
             amount: { type: 'number', example: 100.5 },
             currency: { type: 'string', example: 'BRL' },
             description: { type: 'string', example: 'Depósito via cartão' },
-            createdAt: { type: 'string', format: 'date-time' }
-          }
+            createdAt: { type: 'string', format: 'date-time' },
+          },
         },
         TransactionHistory: {
           type: 'object',
           properties: {
             transactions: { type: 'array', items: { $ref: '#/components/schemas/Transaction' } },
-            total: { type: 'integer', example: 42 }
-          }
+            total: { type: 'integer', example: 42 },
+          },
         },
         UnauthorizedError: {
           type: 'object',
@@ -414,7 +413,11 @@ const swaggerOptions = {
         PlaceBetRequest: {
           type: 'object',
           properties: {
-            eventId: { type: 'string', format: 'uuid', example: '3fa85f64-5717-4562-b3fc-2c963f66afa6' },
+            eventId: {
+              type: 'string',
+              format: 'uuid',
+              example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+            },
             marketId: { type: 'string', example: 'market-123' },
             oddId: { type: 'string', example: 'odd-456' },
             amount: { type: 'number', example: 50.0, minimum: 0.01 },
@@ -426,7 +429,11 @@ const swaggerOptions = {
         CancelBetRequest: {
           type: 'object',
           properties: {
-            betId: { type: 'string', format: 'uuid', example: '7d9f6c2b-1b2a-4a8b-9c0d-123456789abc' },
+            betId: {
+              type: 'string',
+              format: 'uuid',
+              example: '7d9f6c2b-1b2a-4a8b-9c0d-123456789abc',
+            },
             reason: { type: 'string', example: 'Erro no mercado' },
           },
           required: ['betId'],
@@ -435,13 +442,25 @@ const swaggerOptions = {
           type: 'object',
           properties: {
             id: { type: 'string', format: 'uuid', example: '7d9f6c2b-1b2a-4a8b-9c0d-123456789abc' },
-            userId: { type: 'string', format: 'uuid', example: 'cadaeb28-c7f7-425b-91f7-73a27141ae49' },
-            eventId: { type: 'string', format: 'uuid', example: '3fa85f64-5717-4562-b3fc-2c963f66afa6' },
+            userId: {
+              type: 'string',
+              format: 'uuid',
+              example: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
+            },
+            eventId: {
+              type: 'string',
+              format: 'uuid',
+              example: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+            },
             marketId: { type: 'string', example: 'market-123' },
             amount: { type: 'number', example: 50.0 },
             odds: { type: 'number', example: 1.85 },
             potentialReturn: { type: 'number', example: 92.5 },
-            status: { type: 'string', enum: ['PENDING', 'WON', 'LOST', 'CANCELED'], example: 'PENDING' },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'WON', 'LOST', 'CANCELED'],
+              example: 'PENDING',
+            },
             type: { type: 'string', example: 'SINGLE' },
             createdAt: { type: 'string', format: 'date-time', example: '2025-11-14T23:30:00.000Z' },
             resolvedAt: { type: 'string', format: 'date-time', nullable: true },
@@ -482,10 +501,7 @@ const swaggerOptions = {
       },
     ],
   },
-  apis: [
-    './src/infrastructure/api/routes/*.ts',
-    './src/infrastructure/api/controllers/*.ts',
-  ],
+  apis: ['./src/infrastructure/api/routes/*.ts', './src/infrastructure/api/controllers/*.ts'],
 };
 
 /**

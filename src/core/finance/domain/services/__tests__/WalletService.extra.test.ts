@@ -55,7 +55,9 @@ describe('WalletService extra scenarios', () => {
     wallet.lock(70);
     mockRepo.findByUserId.mockResolvedValue(wallet);
 
-    await expect(walletService.unlock(wallet.userId, 120)).rejects.toThrow('Amount exceeds locked balance');
+    await expect(walletService.unlock(wallet.userId, 120)).rejects.toThrow(
+      'Amount exceeds locked balance',
+    );
     expect(mockRepo.update).not.toHaveBeenCalled();
   });
 
@@ -75,7 +77,9 @@ describe('WalletService extra scenarios', () => {
     wallet.lock(50);
     mockRepo.findByUserId.mockResolvedValue(wallet);
 
-    await expect(walletService.withdrawLocked(wallet.userId, 100)).rejects.toThrow('Insufficient locked funds');
+    await expect(walletService.withdrawLocked(wallet.userId, 100)).rejects.toThrow(
+      'Insufficient locked funds',
+    );
     expect(mockRepo.update).not.toHaveBeenCalled();
   });
 

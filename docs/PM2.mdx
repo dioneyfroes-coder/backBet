@@ -1,0 +1,88 @@
+---
+title: "Processos com PM2"
+description: "Como usar PM2 para manter o BackBet atualizado e reiniciável com tolerância a falhas."
+slug: "/docs/pm2"
+---
+
+# Executando BackBet com PM2
+
+O BackBet gera `dist/index.js` via `npm run build`. Para rodar em produção com tolerância a falhas use o fluxo abaixo.
+
+## Fluxo base
+
+1. Compile o projeto:
+   ```bash
+   npm run build
+   ```
+2. Suba o cluster com o ecossistema incluso:
+   ```bash
+   pm2 start ecosystem.config.cjs --env production
+   ```
+3. Para zero downtime, prefira `pm2 reload backbet --env production`. Use `pm2 restart backbet` apenas quando for aceitável derrubar as instâncias.
+
+## O que o `ecosystem.config.cjs` cobre
+
+- Modo `cluster` com `instances = PM2_INSTANCES || (cpus - 1)`.
+- Reinício automático por memória (`max_memory_restart: 512M`).
+- Logs combinados e `error_file/out_file` já roteados para `logs/`.
+- Blocos `env`, `env_development` e `env_production` para alternar `NODE_ENV` sem duplicar comandos.
+
+:::tip Preferência de ambiente lógico
+O runtime utiliza `BACKBET_RUNTIME_ENV` (definido no `.env`) para decidir se habilita chaves live. Deixe `development` quando quiser chaves sandbox mesmo com `NODE_ENV=production`.
+:::
+
+:::info Identidades separadas
+`APP_NAME` é o nome do produto e `SERVICE_NAME` identifica a instância operacional. `SERVICE_NAME` alimenta `OTEL_SERVICE_NAME` e métricas; `NEW_RELIC_APP_NAME` herda `APP_NAME` por padrão. Ajuste todos no `.env` antes de iniciar o PM2.
+:::
+
+### Containers ou scripts de deploy
+
+```bash
+pm2-runtime ecosystem.config.cjs --env production
+```
+
+- Exponha `/health`, `/health/cache` e `/readiness` para o load balancer.
+- O endpoint `/metrics` atualmente responde `410 Gone`, pois o plano é centralizar o monitoramento na PM2 WebUI.
+
+## PM2 WebUI
+
+Scripts principais:
+
+| Ação | Comando | Observações |
+|------|---------|-------------|
+| Start | `npm run pm2:webui:start` | Usa `PM2_WEB_PORT` (default `9615`) e registra o painel como processo `pm2-webui`. |
+| Stop | `npm run pm2:webui:stop` | Executa `pm2 delete pm2-webui`; libere a porta ao encerrar. |
+| Status | `npm run pm2:webui:status` | Mostra PID, uptime e uso de recursos. |
+| Logs | `npm run pm2:webui:logs` | Complementa o monitoramento com a saída do painel. |
+
+### Configuração segura
+
+```bash
+PM2_WEB_PORT=9615
+PM2_WEB_USERNAME=backbet
+PM2_WEB_PASSWORD=change-me-now
+```
+
+- Restrinja o acesso via túnel SSH, VPN ou proxy autenticado. Não exponha o painel publicamente.
+- Quando não houver acesso remoto, utilize `pm2 monit` como fallback para leitura local de CPU/memória.
+
+### Checklist rápido
+
+1. Acesse `http://localhost:9615` (ou host configurado) e faça login.
+2. Garanta que o app `backbet` está **Online** com consumo de CPU/memória estável e sem restarts em cascata.
+3. Valide `pm2 logs backbet` em busca de erros e confirme que `/health`/`/readiness` seguem respondendo.
+4. Ao finalizar, rode `npm run pm2:webui:stop` para desligar o painel.
+
+## Processo `health-monitor`
+
+| Ação | Comando | Para que serve |
+|------|---------|----------------|
+| Start | `npm run pm2:health:start` | Cria o processo `health-monitor` que executa `scripts/health-monitor.cjs` em loop. |
+| Stop | `npm run pm2:health:stop` | Remove o processo ao terminar sessões pontuais. |
+| Status/Logs | `npm run pm2:health:status` / `npm run pm2:health:logs` | Inspeciona latências e falhas de envio. |
+
+Variáveis relevantes:
+
+- `HEALTH_MONITOR_BASE_URL`, `HEALTH_MONITOR_INTERVAL`, `HEALTH_MONITOR_TIMEOUT`, `HEALTH_MONITOR_RECIPIENTS`.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` (use App Password no Gmail).
+- `HEALTH_MONITOR_DRY_RUN=true` evita envio real; `HEALTH_MONITOR_RUN_ONCE=true npm run health-monitor:start` executa uma única rodada fora do PM2.

@@ -58,21 +58,52 @@ describe('API expanded integration tests (isolated)', () => {
 
     const clerkService = new ClerkService();
     const jwtService = new JwtService();
-    const authController = new AuthController(registerUserUseCase, userService, clerkService, jwtService);
+    const authController = new AuthController(
+      registerUserUseCase,
+      userService,
+      clerkService,
+      jwtService,
+    );
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
     const router = Router();
 
-    router.post('/auth/register', asyncHandler((req, res) => authController.register(req, res)));
-    router.post('/auth/login', asyncHandler((req, res) => authController.login(req, res)));
-    router.get('/auth/me', protectedRoute, asyncHandler((req, res) => authController.me(req as any, res)));
+    router.post(
+      '/auth/register',
+      asyncHandler((req, res) => authController.register(req, res)),
+    );
+    router.post(
+      '/auth/login',
+      asyncHandler((req, res) => authController.login(req, res)),
+    );
+    router.get(
+      '/auth/me',
+      protectedRoute,
+      asyncHandler((req, res) => authController.me(req as any, res)),
+    );
 
-    router.post('/wallets/deposit', protectedRoute, asyncHandler((req, res) => walletController.deposit(req as any, res)));
-    router.post('/wallets/withdraw', protectedRoute, asyncHandler((req, res) => walletController.withdraw(req as any, res)));
-    router.get('/wallets/history', protectedRoute, asyncHandler((req, res) => walletController.getHistory(req as any, res)));
+    router.post(
+      '/wallets/deposit',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.deposit(req as any, res)),
+    );
+    router.post(
+      '/wallets/withdraw',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.withdraw(req as any, res)),
+    );
+    router.get(
+      '/wallets/history',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.getHistory(req as any, res)),
+    );
 
-    router.post('/bets', protectedRoute, asyncHandler((req, res) => betController.placeBet(req as any, res)));
+    router.post(
+      '/bets',
+      protectedRoute,
+      asyncHandler((req, res) => betController.placeBet(req as any, res)),
+    );
 
     server.registerHealthCheck();
     server.registerRoutes(router, '');
@@ -155,7 +186,9 @@ describe('API expanded integration tests (isolated)', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.error).toBeDefined();
     // validate schema throws VALIDATION_ERROR via AppError
-    expect(res.body.error.code === 'VALIDATION_ERROR' || res.body.error.code === 'BAD_REQUEST').toBe(true);
+    expect(
+      res.body.error.code === 'VALIDATION_ERROR' || res.body.error.code === 'BAD_REQUEST',
+    ).toBe(true);
   });
 
   test('withdraw with insufficient funds returns 400 BAD_REQUEST and message', async () => {
@@ -192,14 +225,14 @@ describe('API expanded integration tests (isolated)', () => {
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .query({ limit: 10, offset: 0 });
 
-  expect(res.status).toBe(200);
-  expect(res.body.success).toBe(true);
-  expect(res.body.data).toBeDefined();
-  // transactions may be at data.transactions and total may be at data.total or data.pagination.total
-  expect(Array.isArray(res.body.data.transactions)).toBe(true);
-  expect(res.body.data.transactions.length).toBeGreaterThanOrEqual(2);
-  const total = res.body.data.total ?? res.body.data.pagination?.total;
-  expect(typeof total === 'number').toBe(true);
-  expect(total).toBeGreaterThanOrEqual(2);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toBeDefined();
+    // transactions may be at data.transactions and total may be at data.total or data.pagination.total
+    expect(Array.isArray(res.body.data.transactions)).toBe(true);
+    expect(res.body.data.transactions.length).toBeGreaterThanOrEqual(2);
+    const total = res.body.data.total ?? res.body.data.pagination?.total;
+    expect(typeof total === 'number').toBe(true);
+    expect(total).toBeGreaterThanOrEqual(2);
   });
 });

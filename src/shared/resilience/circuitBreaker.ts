@@ -9,7 +9,10 @@ export interface CircuitBreakerOptions {
 }
 
 export class CircuitOpenError extends Error {
-  constructor(public readonly dependency: string, public readonly nextAttempt: number | null) {
+  constructor(
+    public readonly dependency: string,
+    public readonly nextAttempt: number | null,
+  ) {
     super(
       nextAttempt
         ? `${dependency} circuit open until ${new Date(nextAttempt).toISOString()}`

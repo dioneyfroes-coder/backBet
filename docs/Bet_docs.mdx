@@ -134,8 +134,8 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 ## Observabilidade e operação
 
 - **Logs**: `ApiServer` injeta `requestId` e `userId` (quando autenticado) via `AsyncLocalStorage`; erros são estruturados em JSON.
-- **Métricas**: `httpRequestCounter`, `httpRequestLatency`, `httpErrorCounter` e `dependencyHealthGauge` rotulam rota/método/status. `/metrics` expõe os dados para Prometheus.
-- **Health checks**: `/health`, `/readiness`, `/health/cache` validam Redis/Mongo — críticos para endpoints de aposta.
+- **Snapshots**: `cacheMetricsSnapshot` e `dependencyHealthSnapshot` fornecem visibilidade rápida de Redis/Mongo e são devolvidos pelos endpoints de health; o PM2 WebUI/alertas de e-mail lerão esses dados.
+- **Health checks**: `/health`, `/readiness`, `/health/cache` validam Redis/Mongo — críticos para endpoints de aposta; `/metrics` responde `410 Gone` até que `OBS_ENABLE_PROMETHEUS=true` (compatibilidade Prometheus).
 - **Tracing**: habilitado por `TRACING_ENABLED` e `OTEL_*` (detalhes em `docs/OBSERVABILITY.mdx`), permitindo seguir `BetController → UseCase → BetService → WalletService`.
 
 ## Testes e qualidade

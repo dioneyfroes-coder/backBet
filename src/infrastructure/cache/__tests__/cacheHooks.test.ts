@@ -1,4 +1,12 @@
-import { cacheWalletBalance, cacheWalletHistory, cacheUserProfile, cacheEventOdds, flushWalletCache, flushUserProfileCache, flushEventOddsCache } from '../cacheHooks';
+import {
+  cacheWalletBalance,
+  cacheWalletHistory,
+  cacheUserProfile,
+  cacheEventOdds,
+  flushWalletCache,
+  flushUserProfileCache,
+  flushEventOddsCache,
+} from '../cacheHooks';
 import { cacheTTL } from '../cacheKeys';
 import { redisClient } from '../RedisClient';
 
@@ -22,10 +30,18 @@ describe('cache hooks', () => {
 
   it('caches wallet balance/history/profile/event odds with proper TTLs', async () => {
     await cacheWalletBalance('user-1', loader);
-    expect(cachedMock).toHaveBeenCalledWith('wallet:balance:user-1', cacheTTL.walletBalance, loader);
+    expect(cachedMock).toHaveBeenCalledWith(
+      'wallet:balance:user-1',
+      cacheTTL.walletBalance,
+      loader,
+    );
 
     await cacheWalletHistory('user-1', loader);
-    expect(cachedMock).toHaveBeenCalledWith('wallet:history:user-1', cacheTTL.walletHistory, loader);
+    expect(cachedMock).toHaveBeenCalledWith(
+      'wallet:history:user-1',
+      cacheTTL.walletHistory,
+      loader,
+    );
 
     await cacheUserProfile('user-1', loader);
     expect(cachedMock).toHaveBeenCalledWith('user:profile:user-1', cacheTTL.userProfile, loader);

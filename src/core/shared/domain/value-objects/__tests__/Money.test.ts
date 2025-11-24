@@ -10,7 +10,7 @@ describe('Money Value Object', () => {
 
     it('should support all valid currencies', () => {
       const currencies: Array<'BRL' | 'USD' | 'EUR'> = ['BRL', 'USD', 'EUR'];
-      currencies.forEach(currency => {
+      currencies.forEach((currency) => {
         const money = new Money(50, currency);
         expect(money.currency).toBe(currency);
       });
@@ -88,7 +88,9 @@ describe('Money Value Object', () => {
     it('should throw error when subtracting different currencies', () => {
       const money1 = new Money(100, 'BRL');
       const money2 = new Money(50, 'USD');
-      expect(() => money1.subtract(money2)).toThrow('Cannot subtract money with different currencies');
+      expect(() => money1.subtract(money2)).toThrow(
+        'Cannot subtract money with different currencies',
+      );
     });
 
     it('should allow subtracting exact amount', () => {
@@ -167,8 +169,12 @@ describe('Money Value Object', () => {
       const money1 = new Money(100, 'BRL');
       const money2 = new Money(50, 'USD');
 
-      expect(() => money1.isGreaterThan(money2)).toThrow('Cannot compare money with different currencies');
-      expect(() => money1.isLessThan(money2)).toThrow('Cannot compare money with different currencies');
+      expect(() => money1.isGreaterThan(money2)).toThrow(
+        'Cannot compare money with different currencies',
+      );
+      expect(() => money1.isLessThan(money2)).toThrow(
+        'Cannot compare money with different currencies',
+      );
     });
   });
 
@@ -197,7 +203,7 @@ describe('Money Value Object', () => {
 
   describe('toString method', () => {
     it('should format Money as string with currency and amount', () => {
-      const money = new Money(100.50, 'BRL');
+      const money = new Money(100.5, 'BRL');
       expect(money.toString()).toBe('BRL 100.50');
     });
 

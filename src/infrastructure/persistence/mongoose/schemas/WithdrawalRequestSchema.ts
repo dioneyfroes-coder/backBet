@@ -63,10 +63,10 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const WithdrawalRequestModel = mongoose.model<IWithdrawalRequestDocument>(
   'WithdrawalRequest',
-  withdrawalRequestSchema
+  withdrawalRequestSchema,
 );

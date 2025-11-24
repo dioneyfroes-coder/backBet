@@ -92,7 +92,9 @@ export class BetController extends BaseController {
       amount: payload.amount,
       type: payload.type as any,
     });
-    await flushEventOddsCache(payload.eventId).catch((error) => console.warn('Failed to flush event cache', error));
+    await flushEventOddsCache(payload.eventId).catch((error) =>
+      console.warn('Failed to flush event cache', error),
+    );
     return this.created(res, bet.toJSON());
   }
 
@@ -132,9 +134,18 @@ export class BetController extends BaseController {
     const userId = req.auth?.userId;
     if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
-    const payload = this.validateSchema(CancelBetDTO, { betId: req.params.betId, ...(req.body || {}) }) as CancelBetDTOType;
-    const bet = await this.cancelBetUseCase.execute({ betId: payload.betId, reason: payload.reason ?? '', canceledBy: userId });
-    await flushEventOddsCache(bet.eventId).catch((error) => console.warn('Failed to flush event cache', error));
+    const payload = this.validateSchema(CancelBetDTO, {
+      betId: req.params.betId,
+      ...(req.body || {}),
+    }) as CancelBetDTOType;
+    const bet = await this.cancelBetUseCase.execute({
+      betId: payload.betId,
+      reason: payload.reason ?? '',
+      canceledBy: userId,
+    });
+    await flushEventOddsCache(bet.eventId).catch((error) =>
+      console.warn('Failed to flush event cache', error),
+    );
     return this.ok(res, bet.toJSON());
   }
 

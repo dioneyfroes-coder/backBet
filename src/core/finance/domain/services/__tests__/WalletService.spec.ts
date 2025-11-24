@@ -42,7 +42,7 @@ describe('WalletService', () => {
 
       const result = await walletService.createWallet({
         ...createWalletDTO,
-        currency: 'USD'
+        currency: 'USD',
       });
 
       expect(result.currency).toBe('USD');

@@ -47,7 +47,11 @@ const walletSchema = new Schema<IWalletDocument>(
     transactions: [
       {
         id: String,
-        type: { type: String, enum: ['deposit', 'withdraw', 'lock', 'unlock', 'withdraw_locked'], lowercase: true },
+        type: {
+          type: String,
+          enum: ['deposit', 'withdraw', 'lock', 'unlock', 'withdraw_locked'],
+          lowercase: true,
+        },
         amount: Number,
         currency: String,
         userId: String,
@@ -56,7 +60,7 @@ const walletSchema = new Schema<IWalletDocument>(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const WalletModel = mongoose.model<IWalletDocument>('Wallet', walletSchema);

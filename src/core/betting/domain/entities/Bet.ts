@@ -49,7 +49,10 @@ export class Bet {
   // ---------- Domain Methods ----------
   resolve(result: 'WON' | 'LOST'): void {
     if (this._status !== 'PENDING') {
-      throw new DomainError({ code: 'BET_NOT_PENDING', message: 'Only pending bets can be resolved.' });
+      throw new DomainError({
+        code: 'BET_NOT_PENDING',
+        message: 'Only pending bets can be resolved.',
+      });
     }
 
     this._status = result;
@@ -58,7 +61,10 @@ export class Bet {
 
   cancel(reason: string): void {
     if (this._status !== 'PENDING') {
-      throw new DomainError({ code: 'BET_NOT_PENDING', message: 'Only pending bets can be canceled.' });
+      throw new DomainError({
+        code: 'BET_NOT_PENDING',
+        message: 'Only pending bets can be canceled.',
+      });
     }
 
     this._status = 'CANCELED';
@@ -89,7 +95,10 @@ export class Bet {
     }
 
     if (this._resolvedAt && !(this._resolvedAt instanceof Date)) {
-      throw new DomainError({ code: 'BET_INVALID_RESOLVED_AT', message: 'Invalid resolution date' });
+      throw new DomainError({
+        code: 'BET_INVALID_RESOLVED_AT',
+        message: 'Invalid resolution date',
+      });
     }
   }
 

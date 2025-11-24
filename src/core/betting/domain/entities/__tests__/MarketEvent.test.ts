@@ -39,16 +39,25 @@ describe('Market domain behavior', () => {
   it('validates constructor inputs', () => {
     expect(() => new Market('', 'Winner', 'OPEN', new Map())).toThrow('Invalid market ID');
     expect(() => new Market('market-1', '', 'OPEN', new Map())).toThrow('Invalid market name');
-    expect(() => new Market('market-1', 'Winner', 'OPEN', {} as unknown as Map<string, Odds>)).toThrow(
-      'Invalid odds',
-    );
+    expect(
+      () => new Market('market-1', 'Winner', 'OPEN', {} as unknown as Map<string, Odds>),
+    ).toThrow('Invalid odds');
   });
 });
 
 describe('Event domain behavior', () => {
-  const makeMarket = () => new Market('market-1', 'Winner', 'OPEN', new Map([['odd-1', new Odds(1.5)]]));
+  const makeMarket = () =>
+    new Market('market-1', 'Winner', 'OPEN', new Map([['odd-1', new Odds(1.5)]]));
   const createEvent = (status: 'SCHEDULED' | 'LIVE' | 'FINISHED' | 'CANCELED' = 'SCHEDULED') =>
-    new Event('event-1', 'Championship', new Date(), status, 'Football', ['Team A', 'Team B'], new Map([['market-1', makeMarket()]]));
+    new Event(
+      'event-1',
+      'Championship',
+      new Date(),
+      status,
+      'Football',
+      ['Team A', 'Team B'],
+      new Map([['market-1', makeMarket()]]),
+    );
 
   it('starts and finishes an event', () => {
     const event = createEvent();
@@ -80,19 +89,39 @@ describe('Event domain behavior', () => {
     event.cancel();
     expect(() => event.cancel()).toThrow('Event is already canceled');
     const liveEvent = createEvent('LIVE');
-    expect(() => liveEvent.addMarket(makeMarket())).toThrow('Cannot add markets to non-scheduled event');
+    expect(() => liveEvent.addMarket(makeMarket())).toThrow(
+      'Cannot add markets to non-scheduled event',
+    );
   });
 
   it('validates constructor inputs', () => {
     expect(
       () =>
-        new Event('event-1', '', new Date(), 'SCHEDULED', 'Football', ['Team A', 'Team B'], new Map()),
+        new Event(
+          'event-1',
+          '',
+          new Date(),
+          'SCHEDULED',
+          'Football',
+          ['Team A', 'Team B'],
+          new Map(),
+        ),
     ).toThrow('Invalid event name');
     expect(
-      () => new Event('event-1', 'Match', 'not-date' as unknown as Date, 'SCHEDULED', 'Football', ['Team A'], new Map()),
+      () =>
+        new Event(
+          'event-1',
+          'Match',
+          'not-date' as unknown as Date,
+          'SCHEDULED',
+          'Football',
+          ['Team A'],
+          new Map(),
+        ),
     ).toThrow('Invalid start date');
     expect(
-      () => new Event('event-1', 'Match', new Date(), 'SCHEDULED', '', ['Team A', 'Team B'], new Map()),
+      () =>
+        new Event('event-1', 'Match', new Date(), 'SCHEDULED', '', ['Team A', 'Team B'], new Map()),
     ).toThrow('Invalid category');
     expect(
       () =>
@@ -100,7 +129,15 @@ describe('Event domain behavior', () => {
     ).toThrow('Invalid participants');
     expect(
       () =>
-        new Event('event-1', 'Match', new Date(), 'SCHEDULED', 'Football', ['Team A', 'Team B'], {} as unknown as Map<string, Market>),
+        new Event(
+          'event-1',
+          'Match',
+          new Date(),
+          'SCHEDULED',
+          'Football',
+          ['Team A', 'Team B'],
+          {} as unknown as Map<string, Market>,
+        ),
     ).toThrow('Invalid markets');
   });
 

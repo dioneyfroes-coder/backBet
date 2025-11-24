@@ -1,7 +1,7 @@
 /**
  * Interface base para repositórios genéricos.
  * Define um contrato padrão para operações CRUD em qualquer entidade.
- * 
+ *
  * Padrão: todos os repos devem implementar save, update, findById, delete.
  * Métodos opcionais podem ser estendidos conforme necessário.
  */

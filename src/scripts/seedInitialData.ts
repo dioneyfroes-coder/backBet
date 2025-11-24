@@ -1,5 +1,9 @@
 import 'dotenv/config';
-import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
+import {
+  connectMongoDB,
+  disconnectMongoDB,
+  getMongoDBConfig,
+} from '@/infrastructure/persistence/mongoose/config';
 import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
 import { UserService } from '@/core/user/domain/services/UserService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';

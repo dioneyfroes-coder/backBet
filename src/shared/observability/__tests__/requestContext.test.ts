@@ -1,8 +1,4 @@
-import {
-  runWithRequestContext,
-  getRequestContext,
-  updateRequestContext,
-} from '../requestContext';
+import { runWithRequestContext, getRequestContext, updateRequestContext } from '../requestContext';
 
 describe('requestContext', () => {
   it('exposes context inside run callback and clears afterwards', () => {

@@ -12,9 +12,7 @@ export type RouteRateLimitOptions = {
 export function createRouteRateLimiter(options: RouteRateLimitOptions) {
   const resolveClientIp = (req: Request): string => {
     const forwarded = req.headers['x-forwarded-for'];
-    const forwardedIp = Array.isArray(forwarded)
-      ? forwarded[0]
-      : forwarded?.split(',')[0]?.trim();
+    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]?.trim();
     return forwardedIp || req.ip || req.socket.remoteAddress || '0.0.0.0';
   };
 
@@ -31,12 +29,17 @@ export function createRouteRateLimiter(options: RouteRateLimitOptions) {
       const baseKey = ipKeyGenerator(resolveClientIp(req));
       const key = options.keyPrefix ? `${options.keyPrefix}:${baseKey}` : baseKey;
       next(
-        new AppError('RATE_LIMIT_EXCEEDED', options.message || 'Too many requests for this endpoint', 429, {
-          path: req.path,
-          method: req.method,
-          key,
-          prefix: options.keyPrefix,
-        })
+        new AppError(
+          'RATE_LIMIT_EXCEEDED',
+          options.message || 'Too many requests for this endpoint',
+          429,
+          {
+            path: req.path,
+            method: req.method,
+            key,
+            prefix: options.keyPrefix,
+          },
+        ),
       );
     },
   });

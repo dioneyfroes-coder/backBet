@@ -14,7 +14,11 @@ describe('WithdrawalRequest entity', () => {
     expect(() => request.reject('admin-1')).toThrow(AppError);
 
     const dto = request.toDTO();
-    expect(dto).toMatchObject({ id: 'req-1', status: 'APPROVED', approvalLogs: request.approvalLogs });
+    expect(dto).toMatchObject({
+      id: 'req-1',
+      status: 'APPROVED',
+      approvalLogs: request.approvalLogs,
+    });
   });
 
   it('rejects invalid amounts', () => {

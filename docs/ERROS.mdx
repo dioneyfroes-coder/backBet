@@ -98,7 +98,7 @@ O BackBet utiliza a classe `AppError` para padronizar respostas de falha em toda
 ## Observabilidade
 
 - **Logs estruturados**: cada `AppError` gera um log com `error.code`, `requestId`, `userId?`, `useCase` e `latencyMs`.
-- **Métricas**: `error_total{code="CONFLICT"}` é exposta no endpoint `/metrics` para alertas no Grafana.
+- **Snapshots internos**: `resilienceMetricsSnapshot` registra falhas/erros por código ao longo do tempo; esses dados alimentarão o PM2 WebUI e alertas por e-mail.
 - **Tracing**: o middleware anexa `error.code` e `status` nos spans OTEL, permitindo filtrar sessões problemáticas em segundos.
 
 ## Documentação OpenAPI

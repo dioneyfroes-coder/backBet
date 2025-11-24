@@ -167,7 +167,9 @@ describe('WalletService', () => {
       wallet.lock(40);
       mockWalletRepository.findByUserId.mockResolvedValue(wallet);
 
-      await expect(walletService.unlock(userId, 50)).rejects.toThrow('Amount exceeds locked balance');
+      await expect(walletService.unlock(userId, 50)).rejects.toThrow(
+        'Amount exceeds locked balance',
+      );
       expect(mockWalletRepository.update).not.toHaveBeenCalled();
     });
 

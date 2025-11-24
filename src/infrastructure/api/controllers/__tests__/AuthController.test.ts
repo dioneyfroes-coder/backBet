@@ -29,22 +29,24 @@ const createResponse = (): MockResponse => {
   return res as MockResponse;
 };
 
-const createRequest = (overrides?: Partial<Request>): Request => ({
-  body: {},
-  params: {},
-  query: {},
-  headers: {},
-  ...overrides,
-}) as Request;
+const createRequest = (overrides?: Partial<Request>): Request =>
+  ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    ...overrides,
+  }) as Request;
 
-const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest => ({
-  body: {},
-  params: {},
-  query: {},
-  headers: {},
-  auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
-  ...overrides,
-}) as AuthenticatedRequest;
+const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): AuthenticatedRequest =>
+  ({
+    body: {},
+    params: {},
+    query: {},
+    headers: {},
+    auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
+    ...overrides,
+  }) as AuthenticatedRequest;
 
 const makeUser = (): User =>
   new User(
@@ -163,7 +165,11 @@ describe('AuthController', () => {
     const user = makeUser();
     userService.findByEmail.mockResolvedValue(user);
     userService.comparePassword.mockResolvedValue(true);
-    clerkService.getUser.mockResolvedValue({ username: 'clerkUser', firstName: 'Clerk', lastName: 'User' });
+    clerkService.getUser.mockResolvedValue({
+      username: 'clerkUser',
+      firstName: 'Clerk',
+      lastName: 'User',
+    });
     jwtService.signAccessToken.mockReturnValue('access');
     jwtService.signRefreshToken.mockReturnValue('refresh');
 
@@ -248,7 +254,11 @@ describe('AuthController', () => {
     const res = createResponse();
     const user = makeUser();
     userService.findById.mockResolvedValue(user);
-    clerkService.getUser.mockResolvedValue({ username: 'clerkUser', firstName: 'Clerk', lastName: 'User' });
+    clerkService.getUser.mockResolvedValue({
+      username: 'clerkUser',
+      firstName: 'Clerk',
+      lastName: 'User',
+    });
 
     await controller.me(createAuthRequest(), res);
 

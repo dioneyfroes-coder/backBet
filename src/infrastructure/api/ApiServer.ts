@@ -33,6 +33,8 @@ import {
   recordRetryAttempt,
   recordRetryFailure,
 } from '@/infrastructure/observability/resilienceMetrics';
+import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import { getObservabilityToggles } from '@/shared/observability/featureToggles';
 
 const MONGO_PING_RETRY_OPTIONS = {
   maxAttempts: 2,
@@ -45,6 +47,10 @@ const MONGO_PING_RETRY_OPTIONS = {
 export class ApiServer {
   private app: Express;
   private port: number;
+  private dependencyHealthSnapshot: Record<'redis' | 'mongo', number> = {
+    redis: -1,
+    mongo: -1,
+  };
 
   constructor(port: number = 3000) {
     this.port = port;
@@ -54,7 +60,8 @@ export class ApiServer {
   }
 
   private setupMiddleware(): void {
-    const isProduction = appConfig.env === 'production';
+    const runtimeEnv = appConfig.runtime.env;
+    const isProduction = runtimeEnv === 'production';
 
     const helmetOptions: HelmetOptions = {
       contentSecurityPolicy: isProduction ? undefined : false,
@@ -118,14 +125,14 @@ export class ApiServer {
     // Clerk authentication middleware - skip in development if not configured
     const clerkSecret = process.env.CLERK_SECRET_KEY;
     const hasValidClerkSecret = Boolean(clerkSecret && !clerkSecret.includes('sk_test'));
-    if (appConfig.env === 'production' && !hasValidClerkSecret) {
+    if (isProduction && !hasValidClerkSecret) {
       throw new Error('CLERK_SECRET_KEY must be configured in production environments');
     }
 
     const allowDevBypass =
-      appConfig.env === 'test' ||
-      (!hasValidClerkSecret && appConfig.env !== 'production') ||
-      (appConfig.env === 'development' && appConfig.security.allowDevBearerBypass);
+      runtimeEnv === 'test' ||
+      (!hasValidClerkSecret && !isProduction) ||
+      (runtimeEnv === 'development' && appConfig.security.allowDevBearerBypass);
 
     if (allowDevBypass) {
       // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
@@ -167,6 +174,60 @@ export class ApiServer {
       console.warn('Swagger UI não pôde ser montado:', err);
     }
   }
+
+  private requestIdMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+    const requestId =
+      (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
+      `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    const initialiseContext = () => {
+      (req as any).id = requestId;
+      res.setHeader('X-Request-ID', requestId);
+      next();
+    };
+
+    runWithRequestContext({ requestId, userId: undefined }, initialiseContext);
+  };
+
+  private loggingMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+    const start = process.hrtime();
+    const requestId = (req as any).id;
+    const userId = (req as any).auth?.userId || (req as any).user?.id;
+    const clientIpHeader = req.headers['x-forwarded-for'];
+    const clientIp = Array.isArray(clientIpHeader)
+      ? clientIpHeader[0]
+      : clientIpHeader?.split(',')[0].trim();
+    const ip = clientIp || req.ip;
+
+    updateRequestContext({ requestId, userId });
+
+    const baseLog = {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      ip,
+      userId,
+    };
+
+    writeStructuredLog({
+      event: 'request_start',
+      ...baseLog,
+    });
+
+    res.on('finish', () => {
+      const duration = process.hrtime(start);
+      const elapsedMs = duration[0] * 1000 + duration[1] / 1e6;
+      writeStructuredLog({
+        event: 'request_end',
+        status: res.statusCode,
+        durationMs: Number(elapsedMs.toFixed(2)),
+        contentLength: res.getHeader('content-length'),
+        ...baseLog,
+      });
+    });
+
+    next();
+  };
 
   private metricsMiddleware = (req: Request, res: Response, next: NextFunction): void => {
     if (req.path === '/metrics') {
@@ -216,68 +277,6 @@ export class ApiServer {
     next();
   };
 
-  private requestIdMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-    const requestId =
-      (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
-      `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    const initialiseContext = () => {
-      (req as any).id = requestId;
-      res.setHeader('X-Request-ID', requestId);
-      next();
-    };
-
-    runWithRequestContext({ requestId, userId: undefined }, initialiseContext);
-  };
-
-  private loggingMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-    const start = process.hrtime();
-    const requestId = (req as any).id;
-    const userId = (req as any).auth?.userId || (req as any).user?.id;
-    const clientIpHeader = req.headers['x-forwarded-for'];
-    const clientIp = Array.isArray(clientIpHeader)
-      ? clientIpHeader[0]
-      : clientIpHeader?.split(',')[0].trim();
-    const ip = clientIp || req.ip;
-
-    updateRequestContext({ requestId, userId });
-
-    const baseLog = {
-      requestId,
-      method: req.method,
-      path: req.originalUrl,
-      ip,
-      userId,
-    };
-
-    console.log(
-      JSON.stringify({
-        level: 'info',
-        event: 'request_start',
-        timestamp: new Date().toISOString(),
-        ...baseLog,
-      }),
-    );
-
-    res.on('finish', () => {
-      const duration = process.hrtime(start);
-      const elapsedMs = duration[0] * 1000 + duration[1] / 1e6;
-      console.log(
-        JSON.stringify({
-          level: 'info',
-          event: 'request_end',
-          timestamp: new Date().toISOString(),
-          status: res.statusCode,
-          durationMs: Number(elapsedMs.toFixed(2)),
-          contentLength: res.getHeader('content-length'),
-          ...baseLog,
-        }),
-      );
-    });
-
-    next();
-  };
-
   public getExpressApp(): Express {
     return this.app;
   }
@@ -300,6 +299,7 @@ export class ApiServer {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
+        observability: getObservabilityToggles(),
       });
     });
 
@@ -318,6 +318,15 @@ export class ApiServer {
 
   public registerMetricsEndpoint(): void {
     this.app.get('/metrics', async (_req: Request, res: Response) => {
+      const toggles = getObservabilityToggles();
+      if (!toggles.enablePrometheus) {
+        return res.status(410).json({
+          success: false,
+          message:
+            '/metrics foi desativado; acompanhe a stack via PM2 WebUI ou habilite OBS_ENABLE_PROMETHEUS=true durante a transição.',
+        });
+      }
+
       try {
         res.setHeader('Content-Type', metricsRegistry.contentType);
         res.send(await metricsRegistry.metrics());
@@ -332,22 +341,23 @@ export class ApiServer {
     this.app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const statusCode = err.statusCode || err.status || 500;
       const code = err.code || 'INTERNAL_SERVER_ERROR';
-      const message = err.message || 'Internal Server Error';
+      const requestContextSnapshot = getRequestContext();
+      const requestId = requestContextSnapshot?.requestId || (req as any).id;
       const timestamp = new Date().toISOString();
-      const ctx = getRequestContext();
-      const requestId = ctx?.requestId || (req as any).id;
-      const logPayload = {
-        level: 'error',
-        event: 'request_error',
-        timestamp,
-        requestId,
-        method: req.method,
-        path: req.originalUrl,
-        statusCode,
-        code,
-        details: err.details,
-      };
-      console.error(JSON.stringify(logPayload));
+      const message = err.message || 'Erro interno inesperado';
+
+      writeStructuredLog(
+        {
+          event: 'request_error',
+          path: req.originalUrl,
+          method: req.method,
+          statusCode,
+          code,
+          requestId,
+          details: err.details,
+        },
+        'error',
+      );
 
       res.status(statusCode).json({
         success: false,
@@ -478,6 +488,7 @@ export class ApiServer {
       ready,
       timestamp,
       checks,
+      observability: getObservabilityToggles(),
     });
   };
 
@@ -493,6 +504,11 @@ export class ApiServer {
 
   private setDependencyHealthMetric(dependency: 'redis' | 'mongo', value: number): void {
     dependencyHealthGauge.labels(dependency).set(value);
+    this.dependencyHealthSnapshot[dependency] = value;
+  }
+
+  public getDependencyHealthSnapshot(): Record<'redis' | 'mongo', number> {
+    return { ...this.dependencyHealthSnapshot };
   }
 
   private async pingMongo(): Promise<void> {

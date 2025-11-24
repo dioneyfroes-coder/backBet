@@ -1,6 +1,6 @@
 import { CircuitBreakerState } from '@/shared/resilience/circuitBreaker';
-import { Counter, Gauge } from 'prom-client';
-import { metricsRegistry } from './metrics';
+
+type CounterRecord = Record<string, number>;
 
 const STATE_VALUES: Record<CircuitBreakerState, number> = {
   CLOSED: 0,
@@ -8,46 +8,34 @@ const STATE_VALUES: Record<CircuitBreakerState, number> = {
   OPEN: 2,
 };
 
-const retryAttemptsCounter = new Counter({
-  name: 'backbet_retry_attempts_total',
-  help: 'Tentativas de retry executadas contra dependências externas',
-  labelNames: ['dependency'],
-  registers: [metricsRegistry],
-});
+const retryAttempts: CounterRecord = {};
+const retryFailures: CounterRecord = {};
+const circuitBreakerState: CounterRecord = {};
+const circuitBreakerOpens: CounterRecord = {};
 
-const retryFailuresCounter = new Counter({
-  name: 'backbet_retry_failures_total',
-  help: 'Falhas após todas as tentativas de retry contra dependências externas',
-  labelNames: ['dependency'],
-  registers: [metricsRegistry],
-});
-
-const circuitBreakerStateGauge = new Gauge({
-  name: 'backbet_circuit_breaker_state',
-  help: 'Estado atual do circuit breaker (0=closed, 1=half-open, 2=open)',
-  labelNames: ['dependency'],
-  registers: [metricsRegistry],
-});
-
-const circuitBreakerOpenCounter = new Counter({
-  name: 'backbet_circuit_breaker_open_total',
-  help: 'Quantidade de vezes que o circuit breaker abriu para cada dependência',
-  labelNames: ['dependency'],
-  registers: [metricsRegistry],
-});
+const increment = (target: CounterRecord, key: string): void => {
+  target[key] = (target[key] ?? 0) + 1;
+};
 
 export const recordRetryAttempt = (dependency: string): void => {
-  retryAttemptsCounter.labels(dependency).inc();
+  increment(retryAttempts, dependency);
 };
 
 export const recordRetryFailure = (dependency: string): void => {
-  retryFailuresCounter.labels(dependency).inc();
+  increment(retryFailures, dependency);
 };
 
 export const recordCircuitBreakerState = (dependency: string, state: CircuitBreakerState): void => {
-  circuitBreakerStateGauge.labels(dependency).set(STATE_VALUES[state]);
+  circuitBreakerState[dependency] = STATE_VALUES[state];
 };
 
 export const recordCircuitBreakerOpen = (dependency: string): void => {
-  circuitBreakerOpenCounter.labels(dependency).inc();
+  increment(circuitBreakerOpens, dependency);
 };
+
+export const getResilienceMetricsSnapshot = () => ({
+  retryAttempts: { ...retryAttempts },
+  retryFailures: { ...retryFailures },
+  circuitBreakerState: { ...circuitBreakerState },
+  circuitBreakerOpens: { ...circuitBreakerOpens },
+});

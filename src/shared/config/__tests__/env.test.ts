@@ -83,7 +83,9 @@ describe('env config loader', () => {
     process.env.CLERK_SECRET_KEY = 'sk_live_dummy';
     process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_dummy';
 
-    expect(() => loadModule()).toThrow('CLERK_PUBLISHABLE_KEY deve usar uma chave live em produção');
+    expect(() => loadModule()).toThrow(
+      'CLERK_PUBLISHABLE_KEY deve usar uma chave live em produção',
+    );
 
     process.env.CLERK_PUBLISHABLE_KEY = 'pk_live_dummy';
 

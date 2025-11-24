@@ -21,7 +21,8 @@ const buildUser = ({
   status = 'ACTIVE',
   createdAt = new Date(),
   updatedAt = new Date(),
-}: UserOverrides = {}) => new User(id, new Email(email), username, passwordHash, status, createdAt, updatedAt);
+}: UserOverrides = {}) =>
+  new User(id, new Email(email), username, passwordHash, status, createdAt, updatedAt);
 
 describe('UserRepository', () => {
   let repository: UserRepository;

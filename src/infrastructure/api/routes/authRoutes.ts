@@ -54,38 +54,58 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
     registerUserUseCase,
     userService,
     deps.clerkService ?? new ClerkService(),
-    jwtService
+    jwtService,
   );
 
   /**
    * POST /auth/register
    * Registra novo usuário
    */
-  router.post('/register', registerLimiter, asyncHandler((req: Request, res: Response) => authController.register(req, res)));
+  router.post(
+    '/register',
+    registerLimiter,
+    asyncHandler((req: Request, res: Response) => authController.register(req, res)),
+  );
 
   /**
    * POST /auth/login
    * Autentica usuário (via Clerk OAuth)
    */
-  router.post('/login', loginLimiter, asyncHandler((req: Request, res: Response) => authController.login(req, res)));
+  router.post(
+    '/login',
+    loginLimiter,
+    asyncHandler((req: Request, res: Response) => authController.login(req, res)),
+  );
 
   /**
    * GET /auth/me
    * Retorna dados do usuário autenticado
    */
-  router.get('/me', protectedRoute, asyncHandler((req: Request, res: Response) => authController.me(req as any, res)));
+  router.get(
+    '/me',
+    protectedRoute,
+    asyncHandler((req: Request, res: Response) => authController.me(req as any, res)),
+  );
 
   /**
    * POST /auth/refresh
    * Renova access token
    */
-  router.post('/refresh', refreshLimiter, asyncHandler((req: Request, res: Response) => authController.refreshToken(req, res)));
+  router.post(
+    '/refresh',
+    refreshLimiter,
+    asyncHandler((req: Request, res: Response) => authController.refreshToken(req, res)),
+  );
 
   /**
    * POST /auth/logout
    * Faz logout
    */
-  router.post('/logout', protectedRoute, asyncHandler((req: Request, res: Response) => authController.logout(req as any, res)));
+  router.post(
+    '/logout',
+    protectedRoute,
+    asyncHandler((req: Request, res: Response) => authController.logout(req as any, res)),
+  );
 
   return router;
 }

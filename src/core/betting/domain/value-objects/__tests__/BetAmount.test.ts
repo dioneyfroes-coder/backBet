@@ -16,7 +16,9 @@ describe('BetAmount value object', () => {
 
   it('throws when the amount is not a number or NaN', () => {
     expect(() => new BetAmount('abc' as unknown as number, 'BRL')).toThrow(DomainError);
-    expect(() => new BetAmount('abc' as unknown as number, 'BRL')).toThrow('Bet amount must be a valid number');
+    expect(() => new BetAmount('abc' as unknown as number, 'BRL')).toThrow(
+      'Bet amount must be a valid number',
+    );
     expect(() => new BetAmount(NaN, 'BRL')).toThrow(DomainError);
     expect(() => new BetAmount(NaN, 'BRL')).toThrow('Bet amount must be a valid number');
   });

@@ -14,32 +14,32 @@ jest.mock('@/infrastructure/cache/RedisClient', () => ({
   },
 }));
 
-describe('metrics helpers', () => {
+describe('metrics helpers (modo compatibilidade sem Prometheus)', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
   });
 
-  it('updates cache metrics when cache is enabled or disabled', async () => {
+  it('mantém snapshot do cache mesmo sem registries Prometheus', async () => {
     await jest.isolateModulesAsync(async () => {
       const { cacheConfig } = await import('@/shared/config/cacheConfig');
       const { redisClient } = await import('@/infrastructure/cache/RedisClient');
       const cacheMetrics = await import('../cacheMetrics');
       const metricsMock = redisClient.getMetrics as jest.Mock;
-      const initialCalls = metricsMock.mock.calls.length;
 
       cacheMetrics.updateCacheMetrics();
-      expect(metricsMock).toHaveBeenCalledTimes(initialCalls + 1);
+      expect(metricsMock).toHaveBeenCalled();
+      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({ hits: 1, misses: 2, writes: 3, errors: 4 });
 
       cacheConfig.enabled = false;
       cacheMetrics.updateCacheMetrics();
-      expect(metricsMock).toHaveBeenCalledTimes(initialCalls + 1);
+      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({ hits: 0, misses: 0, writes: 0, errors: 0 });
 
       cacheMetrics.stopCacheMetricsPolling();
     });
   });
 
-  it('manages polling lifecycle respecting flags', async () => {
+  it('continua respeitando ciclo de polling e flags', async () => {
     jest.useFakeTimers();
 
     await jest.isolateModulesAsync(async () => {

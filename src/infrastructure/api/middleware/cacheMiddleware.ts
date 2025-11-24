@@ -49,7 +49,10 @@ export const cacheResponse = ({ key, ttlSeconds, statusCodeOnHit = 200 }: CacheR
   };
 };
 
-const buildAuthenticatedCacheKey = (req: Request, formatter: (userId: string) => string): string | null => {
+const buildAuthenticatedCacheKey = (
+  req: Request,
+  formatter: (userId: string) => string,
+): string | null => {
   const authReq = req as AuthenticatedRequest;
   const userId = authReq.auth?.userId;
   if (!userId) {

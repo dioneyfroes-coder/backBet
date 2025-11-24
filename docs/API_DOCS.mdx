@@ -84,9 +84,9 @@ Headers retornados (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`)
 | Endpoint | Função | Proteção |
 |----------|--------|----------|
 | `GET /health` | Heartbeat (status/uptime). | Público |
-| `GET /readiness` | Ping em Redis/Mongo, atualiza `backbet_dependency_*`. | Público (proteja via proxy) |
+| `GET /readiness` | Ping em Redis/Mongo e atualiza `dependencyHealthSnapshot`. | Público (proteja via proxy) |
 | `GET /health/cache` | Snapshot de `redisClient.getMetrics()`. | Público |
-| `GET /metrics` | Metrics Prometheus do `metricsRegistry`. | Público |
+| `GET /metrics` | Endpoint desativado (410) por padrão — habilite `OBS_ENABLE_PROMETHEUS=true` para reativar o payload do `prom-client`. | Público |
 | `GET /api/docs` | Swagger UI. | Público |
 
 Detalhes completos em `docs/OBSERVABILITY.mdx`.
@@ -191,7 +191,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/wallets/me | jq
 ```bash
 curl http://localhost:3000/health
 curl http://localhost:3000/readiness | jq
-curl -H 'Accept: text/plain' http://localhost:3000/metrics | head
+curl -i http://localhost:3000/metrics
 ```
 
 ## Configurações relevantes
@@ -201,7 +201,7 @@ curl -H 'Accept: text/plain' http://localhost:3000/metrics | head
 - **Tracing:** `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_DIAGNOSTIC_LOG_LEVEL`.
 - **Rate limiting:** `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*`.
 
-Proteja `/health`, `/readiness`, `/metrics` e `/health/cache` via firewall ou reverse proxy em produção caso necessário.
+Proteja `/health`, `/readiness` e `/health/cache` via firewall ou reverse proxy em produção caso necessário (o `/metrics` responde 410 enquanto `OBS_ENABLE_PROMETHEUS=false`).
 
 ---
 

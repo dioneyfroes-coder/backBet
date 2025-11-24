@@ -10,7 +10,11 @@ import { PurchaseCreditPackage } from '@/core/finance/application/use-cases/Purc
 import { RequestWithdrawal } from '@/core/finance/application/use-cases/RequestWithdrawal';
 import { GetWithdrawalRequests } from '@/core/finance/application/use-cases/GetWithdrawalRequests';
 import { ProcessWithdrawalRequest } from '@/core/finance/application/use-cases/ProcessWithdrawalRequest';
-import { createCreditPackageRepository, createWalletRepository, createWithdrawalRequestRepository } from '@/infrastructure/persistence/factory';
+import {
+  createCreditPackageRepository,
+  createWalletRepository,
+  createWithdrawalRequestRepository,
+} from '@/infrastructure/persistence/factory';
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
@@ -27,26 +31,50 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
   const walletRepository = deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository as any);
 
-  const creditPackageRepository = deps.creditPackageRepository ?? (await createCreditPackageRepository());
+  const creditPackageRepository =
+    deps.creditPackageRepository ?? (await createCreditPackageRepository());
   const creditPackageService = new CreditPackageService(creditPackageRepository as any);
 
   const withdrawalRequestRepository =
     deps.withdrawalRequestRepository ?? (await createWithdrawalRequestRepository());
-  const withdrawalRequestService = new WithdrawalRequestService(withdrawalRequestRepository as any, walletService);
+  const withdrawalRequestService = new WithdrawalRequestService(
+    withdrawalRequestRepository as any,
+    walletService,
+  );
 
   const financeController = new FinanceController(
     new ListCreditPackages(creditPackageService),
     new PurchaseCreditPackage(creditPackageService, walletService),
     new RequestWithdrawal(withdrawalRequestService),
     new GetWithdrawalRequests(withdrawalRequestService),
-    new ProcessWithdrawalRequest(withdrawalRequestService)
+    new ProcessWithdrawalRequest(withdrawalRequestService),
   );
 
-  router.get('/packages', protectedRoute, asyncHandler((req, res) => financeController.listPackages(req, res)));
-  router.post('/packages/:packageId/purchase', protectedRoute, asyncHandler((req, res) => financeController.purchasePackage(req, res)));
-  router.post('/withdrawal-requests', protectedRoute, asyncHandler((req, res) => financeController.createWithdrawalRequest(req, res)));
-  router.get('/withdrawal-requests', protectedRoute, asyncHandler((req, res) => financeController.listWithdrawalRequests(req, res)));
-  router.patch('/withdrawal-requests/:requestId', protectedRoute, asyncHandler((req, res) => financeController.processWithdrawal(req, res)));
+  router.get(
+    '/packages',
+    protectedRoute,
+    asyncHandler((req, res) => financeController.listPackages(req, res)),
+  );
+  router.post(
+    '/packages/:packageId/purchase',
+    protectedRoute,
+    asyncHandler((req, res) => financeController.purchasePackage(req, res)),
+  );
+  router.post(
+    '/withdrawal-requests',
+    protectedRoute,
+    asyncHandler((req, res) => financeController.createWithdrawalRequest(req, res)),
+  );
+  router.get(
+    '/withdrawal-requests',
+    protectedRoute,
+    asyncHandler((req, res) => financeController.listWithdrawalRequests(req, res)),
+  );
+  router.patch(
+    '/withdrawal-requests/:requestId',
+    protectedRoute,
+    asyncHandler((req, res) => financeController.processWithdrawal(req, res)),
+  );
 
   return router;
 }

@@ -8,7 +8,10 @@ export const RegisterDTO = z.object({
   password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
   firstName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   lastName: z.string().min(2, 'Sobrenome deve ter pelo menos 2 caracteres'),
-  username: z.string().min(3, 'Username deve ter pelo menos 3 caracteres').regex(/^[a-zA-Z0-9_]+$/, 'Username pode conter apenas letras, números e underscore'),
+  username: z
+    .string()
+    .min(3, 'Username deve ter pelo menos 3 caracteres')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Username pode conter apenas letras, números e underscore'),
 });
 
 export type RegisterDTOType = z.infer<typeof RegisterDTO>;

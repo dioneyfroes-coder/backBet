@@ -82,7 +82,11 @@ export class BetService {
   private async getEventOrThrow(eventId: string): Promise<Event> {
     const event = await this.eventRepository.findById(eventId);
     if (!event) {
-      throw new DomainError({ code: 'EVENT_NOT_FOUND', message: 'Event not found', details: { eventId } });
+      throw new DomainError({
+        code: 'EVENT_NOT_FOUND',
+        message: 'Event not found',
+        details: { eventId },
+      });
     }
     return event;
   }
@@ -114,7 +118,11 @@ export class BetService {
   private async getBetOrThrow(betId: string): Promise<Bet> {
     const bet = await this.betRepository.findById(betId);
     if (!bet) {
-      throw new DomainError({ code: 'BET_NOT_FOUND', message: 'Bet not found', details: { betId } });
+      throw new DomainError({
+        code: 'BET_NOT_FOUND',
+        message: 'Bet not found',
+        details: { betId },
+      });
     }
     return bet;
   }

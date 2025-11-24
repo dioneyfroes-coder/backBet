@@ -31,6 +31,14 @@ npm install
 cp .env.example .env
 ```
 
+
+## 7. Monitoramento diário
+
+- `npm run pm2:webui:start` para abrir o painel na porta `PM2_WEB_PORT` (default `9615`).
+- Acesse via túnel/proxy seguro e acompanhe CPU, memória e restarts do processo `backbet`.
+- Para complementar, rode `npm run pm2:webui:logs` e mantenha Uptime Robots/Synthetics consultando `/health`/`/readiness`.
+- Suba o processo de alertas com `npm run pm2:health:start` (usa `HEALTH_MONITOR_*` + `SMTP_*`) ou execute pontualmente com `HEALTH_MONITOR_RUN_ONCE=true npm run health-monitor:start`.
+- Finalize com `npm run pm2:webui:stop` e `npm run pm2:health:stop`, ou use `pm2 monit` quando o painel não estiver disponível.
 Ajuste os principais toggles:
 
 | Variável | O que faz | Valor típico em dev |
@@ -86,9 +94,9 @@ npm run dev
 | URL | Descrição |
 |-----|-----------|
 | `GET /health` | Heartbeat e uptime |
-| `GET /readiness` | Consulta Redis/Mongo, atualiza gauges `backbet_dependency_health` |
+| `GET /readiness` | Consulta Redis/Mongo e atualiza `dependencyHealthSnapshot` |
 | `GET /health/cache` | Exibe métricas internas do `RedisClient` |
-| `GET /metrics` | Prometheus/OpenMetrics |
+| `GET /metrics` | Desativado (410) por padrão — habilite `OBS_ENABLE_PROMETHEUS=true` se precisar do Prometheus legado |
 | `GET /api/docs` | Swagger UI |
 | `GET /api/docs.json` | OpenAPI 3.1 |
 
@@ -114,7 +122,7 @@ Após `npm run dev` ou `npm start`:
 curl -sf http://localhost:3000/health
 curl -sf http://localhost:3000/readiness
 curl -sf http://localhost:3000/api/docs.json | head -n 20
-curl -sf http://localhost:3000/metrics | head -n 20
+curl -i http://localhost:3000/metrics
 ```
 
 Cache habilitado?
@@ -147,7 +155,7 @@ curl -sf http://localhost:3000/health/cache
 
 1. Rodar `npm run lint && npm run test -- --coverage && npm run build` antes de commitar.
 2. Atualizar documentação do módulo tocado em `docs/*.mdx` quando necessário.
-3. Em staging/prod: ative Redis real, conecte Mongo definitivo, defina `CLERK_*`, configure OTLP (`TRACING_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT`) e proteja `/metrics`/`/readiness` via proxy.
+3. Em staging/prod: ative Redis real, conecte Mongo definitivo, defina `CLERK_*`, configure OTLP (`TRACING_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT`) e proteja `/health/cache` + `/readiness` via proxy (`/metrics` responde 410 até que `OBS_ENABLE_PROMETHEUS=true`).
 
 ---
 

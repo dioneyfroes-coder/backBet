@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
-import { UpdateProfileDTO, ChangeEmailDTO, UpdateProfileDTOType, ChangeEmailDTOType } from '../dtos/UserDTOs';
+import {
+  UpdateProfileDTO,
+  ChangeEmailDTO,
+  UpdateProfileDTOType,
+  ChangeEmailDTOType,
+} from '../dtos/UserDTOs';
 import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile';
 import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
 import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
@@ -15,7 +20,7 @@ export class UserController extends BaseController {
   constructor(
     private getUserProfileUseCase: GetUserProfile,
     private updateProfileUseCase: UpdateProfile,
-    private changeEmailUseCase: ChangeEmail
+    private changeEmailUseCase: ChangeEmail,
   ) {
     super();
   }
@@ -56,7 +61,7 @@ export class UserController extends BaseController {
       return this.unauthorized(res, 'Autenticação requerida');
     }
 
-      const user = await this.getUserProfileUseCase.execute(userId);
+    const user = await this.getUserProfileUseCase.execute(userId);
     if (!user) {
       return this.notFound(res, 'Usuário não encontrado');
     }
@@ -139,9 +144,11 @@ export class UserController extends BaseController {
 
     // Delegar atualização para use-case (que chama o UserService)
     await this.updateProfileUseCase.execute(userId, { username: username || '' });
-    await flushUserProfileCache(userId).catch((error) => console.warn('Failed to flush user cache', error));
+    await flushUserProfileCache(userId).catch((error) =>
+      console.warn('Failed to flush user cache', error),
+    );
 
-      const user = await this.getUserProfileUseCase.execute(userId);
+    const user = await this.getUserProfileUseCase.execute(userId);
     if (!user) {
       return this.notFound(res, 'Usuário não encontrado');
     }
@@ -225,9 +232,11 @@ export class UserController extends BaseController {
 
     // Delegar mudança de email para use-case
     await this.changeEmailUseCase.execute(userId, payload.email);
-    await flushUserProfileCache(userId).catch((error) => console.warn('Failed to flush user cache', error));
+    await flushUserProfileCache(userId).catch((error) =>
+      console.warn('Failed to flush user cache', error),
+    );
 
-      const updatedUser = await this.getUserProfileUseCase.execute(userId);
+    const updatedUser = await this.getUserProfileUseCase.execute(userId);
     return this.ok(res, {
       message: 'Email alterado com sucesso',
       user: updatedUser

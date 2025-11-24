@@ -72,7 +72,11 @@ export class RedisClient {
     }
   }
 
-  async set<T>(key: string, value: T, ttlSeconds: number = cacheConfig.defaultTTLSeconds): Promise<void> {
+  async set<T>(
+    key: string,
+    value: T,
+    ttlSeconds: number = cacheConfig.defaultTTLSeconds,
+  ): Promise<void> {
     try {
       const client = this.getRedis();
       if (!client) {

@@ -9,8 +9,12 @@ describe('CircuitBreaker helper', () => {
       resetTimeoutMs: 1000,
     });
 
-    await expect(breaker.execute(() => Promise.reject(new Error('failure-1')))).rejects.toThrow('failure-1');
-    await expect(breaker.execute(() => Promise.reject(new Error('failure-2')))).rejects.toThrow('failure-2');
+    await expect(breaker.execute(() => Promise.reject(new Error('failure-1')))).rejects.toThrow(
+      'failure-1',
+    );
+    await expect(breaker.execute(() => Promise.reject(new Error('failure-2')))).rejects.toThrow(
+      'failure-2',
+    );
 
     expect(breaker.getState()).toBe('OPEN');
     await expect(breaker.execute(() => Promise.resolve('ok'))).rejects.toThrow(CircuitOpenError);

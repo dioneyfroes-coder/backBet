@@ -56,21 +56,51 @@ describe('API integration tests', () => {
 
     const clerkService = new ClerkService();
     const jwtService = new JwtService();
-    const authController = new AuthController(registerUserUseCase, userService, clerkService, jwtService);
+    const authController = new AuthController(
+      registerUserUseCase,
+      userService,
+      clerkService,
+      jwtService,
+    );
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
     const router = Router();
 
-    router.post('/auth/register', asyncHandler((req, res) => authController.register(req, res)));
-    router.post('/auth/login', asyncHandler((req, res) => authController.login(req, res)));
-    router.post('/auth/refresh', asyncHandler((req, res) => authController.refreshToken(req, res)));
-    router.get('/auth/me', protectedRoute, asyncHandler((req, res) => authController.me(req as any, res)));
+    router.post(
+      '/auth/register',
+      asyncHandler((req, res) => authController.register(req, res)),
+    );
+    router.post(
+      '/auth/login',
+      asyncHandler((req, res) => authController.login(req, res)),
+    );
+    router.post(
+      '/auth/refresh',
+      asyncHandler((req, res) => authController.refreshToken(req, res)),
+    );
+    router.get(
+      '/auth/me',
+      protectedRoute,
+      asyncHandler((req, res) => authController.me(req as any, res)),
+    );
 
-    router.get('/wallets/me', protectedRoute, asyncHandler((req, res) => walletController.getMe(req as any, res)));
-    router.post('/wallets/deposit', protectedRoute, asyncHandler((req, res) => walletController.deposit(req as any, res)));
+    router.get(
+      '/wallets/me',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.getMe(req as any, res)),
+    );
+    router.post(
+      '/wallets/deposit',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.deposit(req as any, res)),
+    );
 
-    router.post('/bets', protectedRoute, asyncHandler((req, res) => betController.placeBet(req as any, res)));
+    router.post(
+      '/bets',
+      protectedRoute,
+      asyncHandler((req, res) => betController.placeBet(req as any, res)),
+    );
 
     server.registerHealthCheck();
     server.registerRoutes(router, '');

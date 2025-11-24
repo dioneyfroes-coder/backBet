@@ -1,10 +1,4 @@
-import {
-  collectDefaultMetrics,
-  Counter,
-  Gauge,
-  Histogram,
-  Registry,
-} from 'prom-client';
+import { collectDefaultMetrics, Counter, Gauge, Histogram, Registry } from 'prom-client';
 
 const registry = new Registry();
 collectDefaultMetrics({ prefix: 'backbet_', register: registry });

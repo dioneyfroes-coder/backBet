@@ -94,7 +94,7 @@ describe('BaseAggregateRoot', () => {
       const firstUpdate = aggregate.updatedAt;
 
       // Wait a bit to ensure time difference
-      const delay = new Promise(resolve => setTimeout(resolve, 10));
+      const delay = new Promise((resolve) => setTimeout(resolve, 10));
       return delay.then(() => {
         aggregate.touch();
         const secondUpdate = aggregate.updatedAt;

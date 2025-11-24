@@ -18,7 +18,10 @@ export class JwtService {
   }
 
   signRefreshToken(userId: string, sessionId: string): string {
-    return this.signToken({ userId, sessionId, kind: 'refresh' }, this.config.refreshTokenExpiration);
+    return this.signToken(
+      { userId, sessionId, kind: 'refresh' },
+      this.config.refreshTokenExpiration,
+    );
   }
 
   verifyAccessToken(token: string): JwtPayload {

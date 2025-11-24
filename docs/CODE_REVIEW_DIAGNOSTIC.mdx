@@ -52,12 +52,12 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 
 ## 5. Observabilidade & Operação
 
-- Metrics Prometheus (`/metrics`), health/readiness/cache endpoints, request context + logging JSON.
+- Snapshots internos (cache/resiliência/dependências), health/readiness/cache endpoints, request context + logging JSON.
 - OTEL tracing configurável via `TRACING_ENABLED` + `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - Documentação em `docs/OBSERVABILITY.mdx` e dashboards versionados.
 
 **Ações**
-- [ ] Certificar que ambientes expõem `/metrics` apenas internamente (reverse proxy). (alto)
+- [ ] Propagar snapshots para PM2 WebUI/alertas antes do go-live (alto).
 - [ ] Adicionar testes que validem `X-Request-ID` e `requestContext` (méd).
 
 ## 6. Typescript & Qualidade
@@ -76,7 +76,7 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 
 **Próximas melhorias**
 - [ ] Adicionar suíte de carga (k6/Artillery) para `/auth`, `/wallets`, `/bets`. (méd)
-- [ ] Automatizar smoke (`curl /health`, `/readiness`, `/metrics`) pós-deploy. (méd)
+- [ ] Automatizar smoke (`curl /health`, `/health/cache`, `/readiness`) pós-deploy. (méd)
 
 ## 8. Backlog de revisão (prioridade)
 
@@ -92,7 +92,7 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 
 1. **Revisões enxutas**: validar diffs por domínio (auth/user/wallet/bet) e exigir descrição de testes executados.
 2. **Logs**: nunca logar tokens; revisar PRs que toquem `loggingMiddleware`/`requestContext`.
-3. **Observabilidade**: qualquer rota nova deve expor métricas (latência/contadores) e incluir `requestId` no log.
+3. **Observabilidade**: qualquer rota nova deve atualizar os snapshots relevantes (latência/contadores internos) e incluir `requestId` no log.
 4. **Docs**: atualizar `docs/*.mdx` no mesmo PR da mudança (arquitetura, API, quickstart, observabilidade, Clerk, etc.).
 5. **Dependências externas**: toda integração (Redis, Mongo, Clerk, OTLP) precisa de fallback documentado + feature flag.
 

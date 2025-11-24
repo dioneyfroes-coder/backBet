@@ -47,10 +47,7 @@ describe('configuration parsing helpers', () => {
     await jest.isolateModulesAsync(async () => {
       const { appConfig } = await import('../appConfig');
       expect(appConfig.server.port).toBe(8080);
-      expect(appConfig.cors.allowedOrigins).toEqual([
-        'http://site-a.com',
-        'http://site-b.com',
-      ]);
+      expect(appConfig.cors.allowedOrigins).toEqual(['http://site-a.com', 'http://site-b.com']);
       expect(appConfig.security.allowDevBearerBypass).toBe(true);
       expect(appConfig.rateLimit.max).toBe(1000);
     });

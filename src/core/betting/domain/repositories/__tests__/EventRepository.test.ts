@@ -12,10 +12,7 @@ describe('EventRepository in-memory', () => {
       'Football',
       ['Home', 'Away'],
       new Map([
-        [
-          'market-1',
-          new Market('market-1', 'Winner', 'OPEN', new Map([['odd-1', new Odds(2)]]) ),
-        ],
+        ['market-1', new Market('market-1', 'Winner', 'OPEN', new Map([['odd-1', new Odds(2)]]))],
       ]),
     );
 

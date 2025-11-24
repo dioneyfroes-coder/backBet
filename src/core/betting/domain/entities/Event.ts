@@ -56,7 +56,10 @@ export class Market {
 
   updateOdd(key: string, value: number): void {
     if (this._status !== 'OPEN') {
-      throw new DomainError({ code: 'MARKET_NOT_OPEN', message: 'Cannot update odds on non-open market' });
+      throw new DomainError({
+        code: 'MARKET_NOT_OPEN',
+        message: 'Cannot update odds on non-open market',
+      });
     }
     this.odds.set(key, new Odds(value));
   }
@@ -133,14 +136,20 @@ export class Event {
       throw new DomainError({ code: 'EVENT_FINISHED', message: 'Cannot cancel finished event' });
     }
     if (this._status === 'CANCELED') {
-      throw new DomainError({ code: 'EVENT_ALREADY_CANCELED', message: 'Event is already canceled' });
+      throw new DomainError({
+        code: 'EVENT_ALREADY_CANCELED',
+        message: 'Event is already canceled',
+      });
     }
     this._status = 'CANCELED';
   }
 
   addMarket(market: Market): void {
     if (this._status !== 'SCHEDULED') {
-      throw new DomainError({ code: 'EVENT_NOT_SCHEDULED', message: 'Cannot add markets to non-scheduled event' });
+      throw new DomainError({
+        code: 'EVENT_NOT_SCHEDULED',
+        message: 'Cannot add markets to non-scheduled event',
+      });
     }
     this.markets.set(market.id, market);
   }
@@ -163,7 +172,10 @@ export class Event {
       throw new DomainError({ code: 'EVENT_INVALID_CATEGORY', message: 'Invalid category' });
     }
     if (!Array.isArray(this.participants) || this.participants.length < 2) {
-      throw new DomainError({ code: 'EVENT_INVALID_PARTICIPANTS', message: 'Invalid participants' });
+      throw new DomainError({
+        code: 'EVENT_INVALID_PARTICIPANTS',
+        message: 'Invalid participants',
+      });
     }
     if (!(this.markets instanceof Map)) {
       throw new DomainError({ code: 'EVENT_INVALID_MARKETS', message: 'Invalid markets' });

@@ -46,7 +46,7 @@ export const userSchema = new Schema<IUserDocument>(
       default: 'PENDING_VERIFICATION',
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const UserModel = mongoose.model<IUserDocument>('User', userSchema);

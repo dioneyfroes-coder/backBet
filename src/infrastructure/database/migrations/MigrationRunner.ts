@@ -6,7 +6,7 @@ const migrationSchema = new Schema(
     description: { type: String, required: true },
     appliedAt: { type: Date, required: true, default: () => new Date() },
   },
-  { timestamps: false }
+  { timestamps: false },
 );
 
 const MigrationModel = mongoose.models.Migration || model('Migration', migrationSchema);

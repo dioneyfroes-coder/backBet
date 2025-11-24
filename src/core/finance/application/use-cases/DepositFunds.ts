@@ -6,7 +6,9 @@ export class DepositFunds {
   constructor(private walletService: WalletService) {}
 
   async execute(userId: string, amount: number): Promise<IWalletDTO> {
-    const wallet = await executeWithWalletErrorMapping(() => this.walletService.deposit(userId, amount));
+    const wallet = await executeWithWalletErrorMapping(() =>
+      this.walletService.deposit(userId, amount),
+    );
     return wallet.toDTO();
   }
 }

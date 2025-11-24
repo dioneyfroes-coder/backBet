@@ -54,7 +54,7 @@ export class MongooseCreditPackageRepository implements ICreditPackageRepository
           createdAt: creditPackage.createdAt,
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true },
     ).lean<ICreditPackageDocument>();
 
     if (!saved) {

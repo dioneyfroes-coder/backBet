@@ -34,7 +34,7 @@ export class FinanceController extends BaseController {
         ...creditPackage.toDTO(),
         createdAt: creditPackage.createdAt.toISOString(),
         updatedAt: creditPackage.updatedAt.toISOString(),
-      })
+      }),
     );
 
     return this.ok(res, payload);
@@ -46,13 +46,20 @@ export class FinanceController extends BaseController {
       return this.unauthorized(res);
     }
 
-    const payload = this.validateSchema(CreditPackagePurchaseDTO, { packageId: req.params.packageId });
+    const payload = this.validateSchema(CreditPackagePurchaseDTO, {
+      packageId: req.params.packageId,
+    });
     if (!payload) {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const { creditPackage, wallet } = await this.purchaseCreditPackage.execute(userId, payload.packageId);
-    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache after purchase', error));
+    const { creditPackage, wallet } = await this.purchaseCreditPackage.execute(
+      userId,
+      payload.packageId,
+    );
+    await flushWalletCache(userId).catch((error) =>
+      console.warn('Failed to flush wallet cache after purchase', error),
+    );
 
     return this.created(res, {
       message: 'Pacote de créditos adquirido com sucesso',
@@ -76,8 +83,15 @@ export class FinanceController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const request = await this.requestWithdrawal.execute(userId, payload.amount, payload.currency, payload.notes);
-    await flushWalletCache(userId).catch((error) => console.warn('Failed to flush wallet cache after withdrawal request', error));
+    const request = await this.requestWithdrawal.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      payload.notes,
+    );
+    await flushWalletCache(userId).catch((error) =>
+      console.warn('Failed to flush wallet cache after withdrawal request', error),
+    );
 
     return this.created(res, {
       message: 'Solicitação de saque criada com sucesso',
@@ -109,7 +123,7 @@ export class FinanceController extends BaseController {
           ...log,
           createdAt: log.createdAt.toISOString(),
         })),
-      })
+      }),
     );
 
     return this.ok(res, payload);
@@ -126,8 +140,15 @@ export class FinanceController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const processed = await this.processWithdrawalRequest.execute(req.params.requestId, userId, payload.action, payload.notes);
-    await flushWalletCache(processed.userId).catch((error) => console.warn('Failed to flush wallet cache after withdrawal processing', error));
+    const processed = await this.processWithdrawalRequest.execute(
+      req.params.requestId,
+      userId,
+      payload.action,
+      payload.notes,
+    );
+    await flushWalletCache(processed.userId).catch((error) =>
+      console.warn('Failed to flush wallet cache after withdrawal processing', error),
+    );
 
     return this.ok(res, {
       message: 'Solicitação atualizada',

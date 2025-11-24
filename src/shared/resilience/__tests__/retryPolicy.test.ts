@@ -7,10 +7,7 @@ describe('retryWithBackoff helper', () => {
 
   it('retries until success and propagates the result', async () => {
     jest.useFakeTimers();
-    const fn = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('first failure'))
-      .mockResolvedValue('ok');
+    const fn = jest.fn().mockRejectedValueOnce(new Error('first failure')).mockResolvedValue('ok');
     const onRetry = jest.fn();
 
     const promise = retryWithBackoff(fn, {

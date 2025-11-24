@@ -88,26 +88,27 @@ describe('Bet entity', () => {
       } as Record<string, any>;
 
       args[field] = value;
-      expect(() =>
-        new Bet(
-          args.id,
-          args.userId,
-          args.eventId,
-          args.marketId,
-          args.amount,
-          args.odds,
-          args.status,
-          args.type,
-          args.createdAt,
-          args.resolvedAt,
-          args.cancellationReason,
-        ),
+      expect(
+        () =>
+          new Bet(
+            args.id,
+            args.userId,
+            args.eventId,
+            args.marketId,
+            args.amount,
+            args.odds,
+            args.status,
+            args.type,
+            args.createdAt,
+            args.resolvedAt,
+            args.cancellationReason,
+          ),
       ).toThrow(
         field === 'marketId'
           ? 'Invalid market ID'
           : field === 'eventId'
-          ? 'Invalid event ID'
-          : 'Invalid user ID',
+            ? 'Invalid event ID'
+            : 'Invalid user ID',
       );
     });
   });

@@ -15,16 +15,17 @@ const serializeTransactions = (transactions: Transaction[]): ITransactionDTO[] =
   transactions.map((tx) => tx.toDTO());
 
 const parseTransactions = (transactions: any[] = []): Transaction[] =>
-  transactions.map((tx) =>
-    new Transaction(
-      tx.id,
-      tx.userId,
-      tx.type,
-      tx.amount,
-      tx.currency,
-      tx.description,
-      tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
-    ),
+  transactions.map(
+    (tx) =>
+      new Transaction(
+        tx.id,
+        tx.userId,
+        tx.type,
+        tx.amount,
+        tx.currency,
+        tx.description,
+        tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
+      ),
   );
 
 const normalizePagination = (value: number | undefined, fallback: number): number => {
@@ -47,44 +48,33 @@ export class MongooseWalletRepository implements IWalletRepository {
         updatedAt: new Date(),
       };
 
-      await WalletModel.findOneAndUpdate(
-        { userId: wallet.userId },
-        walletData,
-        { upsert: true, new: true }
-      );
+      await WalletModel.findOneAndUpdate({ userId: wallet.userId }, walletData, {
+        upsert: true,
+        new: true,
+      });
       return wallet;
     } catch (error: any) {
       if (error.code === 11000) {
-        throw new AppError(
-          'Uma carteira para este usuário já existe',
-          'CONFLICT',
-          409
-        );
+        throw new AppError('Uma carteira para este usuário já existe', 'CONFLICT', 409);
       }
-      throw new AppError(
-        'Erro ao salvar carteira',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao salvar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
   async findByUserId(userId: string): Promise<Wallet | null> {
     try {
       const safeUserId = sanitizeUserId(userId);
-      const walletData = await WalletModel.findOne({ userId: safeUserId }).lean() as any;
+      const walletData = (await WalletModel.findOne({ userId: safeUserId }).lean()) as any;
       if (!walletData) {
         return null;
       }
       return this.mapToDomain(walletData);
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao buscar carteira',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -100,7 +90,7 @@ export class MongooseWalletRepository implements IWalletRepository {
       const result = await WalletModel.findOneAndUpdate(
         { userId: sanitizeUserId(wallet.userId) },
         walletData,
-        { new: true }
+        { new: true },
       );
 
       if (!result) {
@@ -111,12 +101,9 @@ export class MongooseWalletRepository implements IWalletRepository {
       if (error instanceof AppError) {
         throw error;
       }
-      throw new AppError(
-        'Erro ao atualizar carteira',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao atualizar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
@@ -124,19 +111,20 @@ export class MongooseWalletRepository implements IWalletRepository {
     try {
       await WalletModel.findOneAndDelete({ userId: sanitizeUserId(userId) });
     } catch (error: any) {
-      throw new AppError(
-        'Erro ao deletar carteira',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao deletar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
-  async getHistory(userId: string, limit?: number, offset?: number): Promise<{ transactions: ITransactionDTO[]; total: number }> {
+  async getHistory(
+    userId: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
     try {
       const safeUserId = sanitizeUserId(userId);
-      const wallet = await WalletModel.findOne({ userId: safeUserId }).lean() as any;
+      const wallet = (await WalletModel.findOne({ userId: safeUserId }).lean()) as any;
       if (!wallet) {
         throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
       }
@@ -162,12 +150,9 @@ export class MongooseWalletRepository implements IWalletRepository {
       if (error instanceof AppError) {
         throw error;
       }
-      throw new AppError(
-        'Erro ao buscar histórico de transações',
-        'INTERNAL_SERVER_ERROR',
-        500,
-        { originalError: error.message }
-      );
+      throw new AppError('Erro ao buscar histórico de transações', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError: error.message,
+      });
     }
   }
 
