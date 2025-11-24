@@ -1,6 +1,6 @@
 ---
 title: "Observabilidade"
-description: "Tudo sobre healthchecks, métricas Prometheus, tracing e logs estruturados no BackBet."
+description: "Healthchecks, snapshots operacionais, tracing e logs estruturados no BackBet."
 slug: "/docs/backbet/observability"
 ---
 
@@ -12,11 +12,11 @@ slug: "/docs/backbet/observability"
 
 ```
 src/shared/observability/requestContext.ts        (AsyncLocalStorage para requestId/userId)
-src/infrastructure/api/ApiServer.ts               (middlewares, endpoints /health*/metrics)
-src/infrastructure/observability/{metrics,tracing}.ts
-src/infrastructure/cache/{RedisClient,cacheHooks}.ts (contadores de cache usados pelos gauges)
+src/infrastructure/api/ApiServer.ts               (middlewares, endpoints /health*/readiness)
+src/infrastructure/observability/{cacheMetrics,resilienceMetrics,tracing}.ts
+src/infrastructure/cache/{RedisClient,cacheHooks}.ts (contadores de cache e erros)
 src/infrastructure/api/__tests__/observabilityEndpoints.test.ts
-reports/phase4/{dashboard.json,alerts.yaml}
+docs/PM2-WEBUI-MIGRATION.md                      (plano da nova stack de observabilidade)
 ```
 
 ## Pipeline no ApiServer
@@ -25,22 +25,19 @@ Ordem de middlewares em `ApiServer`:
 
 1. `requestIdMiddleware` gera ou propaga `X-Request-ID` e inicia o contexto com `runWithRequestContext`.
 2. `loggingMiddleware` registra `request_start` / `request_end` com duração, IP e userId derivado de Clerk/JWT.
-3. `metricsMiddleware` mede requisições HTTP (contadores, histogramas, in-flight) antes de despachar para as rotas.
-4. Controle de erros (`registerErrorHandler`) fecha o circuito emitindo logs JSON e payload padronizado.
+3. Controle de erros (`registerErrorHandler`) fecha o circuito emitindo logs JSON e payload padronizado.
+
+> As métricas HTTP que antes eram coletadas por `metricsMiddleware` agora estão suspensas. Os dados necessários seguirão para a PM2 WebUI através dos snapshots descritos abaixo.
 
 ## Saúde e readiness
 
 | Endpoint | Responsabilidade | Retorno rápido |
 |----------|------------------|----------------|
-| `GET /health` | Heartbeat leve para liveness. Não toca Redis/Mongo. | `{ status, uptime, timestamp }` |
+| `GET /health` | Heartbeat leve para liveness. Não toca Redis/Mongo. | `{ status, uptime, timestamp, observability }` |
 | `GET /health/cache` | Reflete `cacheConfig.enabled` e o snapshot de `redisClient.getMetrics()`. | `{ cache: { enabled, metrics }, timestamp }` |
-| `GET /readiness` | Ping em Redis (quando `CACHE_ENABLED=true`) e Mongo (quando `USE_MONGOOSE_PERSISTENCE=true`). Ajusta `backbet_dependency_health`. | `{ ready, timestamp, checks }` com `status: up|down|skipped` |
+| `GET /readiness` | Ping em Redis (quando `CACHE_ENABLED=true`) e Mongo (quando `USE_MONGOOSE_PERSISTENCE=true`). Ajusta `backbet_dependency_health`. | `{ ready, timestamp, checks, observability }` com `status: up|down|skipped` |
 
 Detalhes do readiness (`ApiServer.readinessHandler`):
-
-- Redis medido via `redisClient.ping()`; quando falha, o endpoint devolve `503` e o gauge recebe `0`.
-- Mongo verifica `mongoose.connection.readyState`. Se conectado, executa `db.admin().ping()` para coletar `latencyMs`; se indisponível, retorna `503`.
-- Dependências desabilitadas retornam `status: skipped` e definem o gauge como `-1`, útil para diferenciar “não aplicável” de “fora do ar”.
 
 ### Troubleshooting rápido
 
@@ -48,49 +45,49 @@ Detalhes do readiness (`ApiServer.readinessHandler`):
 - **Mongo down**: confirme `USE_MONGOOSE_PERSISTENCE=true`, confira `mongoose.connection.readyState` e o log do container.
 - **Tudo skipped**: esperado em testes (cache desligado + Mongo inativo). Ajuste flags no CI se precisar validar readiness real.
 
-## Métricas Prometheus
+## Snapshots durante a transição para PM2 WebUI
 
-### Registro e default metrics
+O backend mantém pequenas estruturas em memória para expor o estado atual de cache, resiliência e dependências. Durante a Fase 1 de migração (documentada em `docs/PM2-WEBUI-MIGRATION.md`), esses snapshots substituem completamente os gauges do Prometheus:
 
-`src/infrastructure/observability/metrics.ts` cria um `Registry` e chama `collectDefaultMetrics({ prefix: 'backbet_' })`, expondo CPU, heap e uso de memória do processo Node sem esforço adicional.
+- `cacheMetricsSnapshot` (exportado por `src/infrastructure/observability/cacheMetrics.ts`) agrega hits, misses, writes, errors e latência média reportada pelo `RedisClient`.
+- `resilienceMetricsSnapshot` (`src/infrastructure/observability/resilienceMetrics.ts`) acumula tentativas de retry, circuitos abertos e falhas de operação.
+- `dependencyHealthSnapshot` (mantido em `ApiServer`) guarda o último status de Redis/Mongo/Clerk sempre que `readiness` roda; cada item registra `status`, `latencyMs` e timestamp.
 
-### HTTP middleware
+Esses dados são expostos via dois caminhos:
 
-`metricsMiddleware` (montado antes das rotas) alimenta:
+1. **Health endpoints** — `GET /health/cache` e `GET /readiness` devolvem os snapshots completos, garantindo visibilidade imediata para automações.
+2. **Integração PM2 WebUI** (Fase 2) — os snapshots serão enviados para a API do PM2 WebUI para alimentar gráficos e alertas; consultar o plano para detalhes das tasks em aberto.
 
-- `backbet_http_requests_total{method,route,status}`
-- `backbet_http_request_duration_ms_bucket` / `_sum` / `_count`
-- `backbet_http_request_duration_seconds_bucket` (com label `status_class`)
-- `backbet_http_errors_total{method,route,status}` (respostas 5xx)
-- `backbet_http_in_flight{method,route}` (incrementa na entrada, decrementa em `finish/close`)
+### Endpoint `/metrics` e Prometheus
 
-PromQL úteis:
+- `OBS_ENABLE_PROMETHEUS=false` (default): `/metrics` responde `410 Gone` orientando a migração para PM2 WebUI. Use este modo na maioria dos ambientes para evitar dependências do `prom-client`.
+- `OBS_ENABLE_PROMETHEUS=true`: o endpoint volta a expor os gauges/counters do `prom-client` (`backbet_http_*`, `backbet_dependency_health`, etc.). O gauge de dependências é atualizado diretamente pelo `readinessHandler`, e o response usa `metricsRegistry.metrics()`.
 
-```
-rate(backbet_http_requests_total[1m])
-histogram_quantile(0.95, sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le))
-sum(backbet_http_in_flight) by (route)
-sum(rate(backbet_http_errors_total[5m])) by (route)
-```
+Use `overrideObservabilityToggles` em testes (`src/shared/observability/featureToggles.ts`) para exercitar ambos os modos, como demonstrado em `observabilityEndpoints.test.ts`.
 
-### Cache e dependências
+## PM2 WebUI (Fase 2)
 
-- `updateCacheMetrics()` roda a cada ~3s (quando `CACHE_ENABLED=true`) e copia `redisClient.getMetrics()` para `backbet_cache_{hits,misses,writes,errors}_total`. Com cache desligado, todos os gauges ficam em 0.
-- `/readiness` também é responsável por atualizar `backbet_dependency_health{dependency="redis|mongo"}` e `backbet_dependency_latency_ms{dependency}` (latência medida em ms). Use isso para alarmes sem precisar varrer o endpoint.
+- Inicie com `npm run pm2:webui:start`. O painel roda em `PM2_WEB_PORT` (default `9615`) e exige autenticação básica configurada por `PM2_WEB_USERNAME`/`PM2_WEB_PASSWORD`. Se `OBS_USE_PM2_WEBUI=false`, o script avisa e encerra sem subir o processo (útil para pipelines que não usam PM2).
+- Consulte status/logs usando `npm run pm2:webui:status` e `npm run pm2:webui:logs`. Para desligar, execute `npm run pm2:webui:stop`.
+- Use apenas via túnel SSH/VPN ou proxy autenticado; nunca exponha a porta diretamente na internet. Se não houver acesso seguro, utilize `pm2 monit` como fallback local.
 
-### Endpoint `/metrics`
+### Métricas a validar no painel
 
-`registerMetricsEndpoint()` define `GET /metrics`, devolvendo `text/plain` no formato Prometheus. Configure um scrape assim:
+1. **CPU/Memória** do processo `backbet` — atenção a spikes ou leaks.
+2. **Restarts** — deve permanecer em 0 durante a sessão; qualquer reinício inesperado precisa ser investigado com `pm2 logs backbet`.
+3. **Tempo de atividade** — confirme que o uptime cresce continuamente após deploy.
+4. **Health via logs** — monitore `request_healthcheck`/`readiness_dependency` nos logs para complementar o painel.
 
-```yaml
-scrape_configs:
-  - job_name: backbet
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['api.backbet.local:3000']
-```
+Após a verificação, encerre o painel (`npm run pm2:webui:stop`) para liberar recursos.
 
-Evite que proxies comprimam a resposta para não truncar o stream.
+## Health monitor (Fase 3)
+
+- Script: `scripts/health-monitor.cjs` roda em loop, pingando `GET /health` e `GET /readiness` e enviando alertas quando qualquer endpoint falha ou ultrapassa a latência máxima.
+- Execução local: `HEALTH_MONITOR_DRY_RUN=true HEALTH_MONITOR_RUN_ONCE=true npm run health-monitor:start` (não envia e-mails, útil para validar).
+- Execução contínua (PM2): `npm run pm2:health:start` → cria o processo `health-monitor`; use `pm2:health:status|logs` para inspecionar e `pm2:health:stop` para desligar.
+- Variáveis principais: `HEALTH_MONITOR_BASE_URL`, `HEALTH_MONITOR_INTERVAL_MS`, `HEALTH_MONITOR_TIMEOUT_MS`, `HEALTH_MONITOR_MAX_LATENCY_MS`, `HEALTH_MONITOR_ALERT_RECIPIENTS`, `HEALTH_MONITOR_NOTIFY_RECOVERY`, além de `SMTP_*` (host, porta, secure, username, password, from) quando usar Gmail com App Password dedicada.
+- `OBS_ENABLE_EMAIL_ALERTS=false` mantém o loop de verificação ativo, mas transforma alertas em logs (`[alerts-disabled] ...`) sem exigir credenciais SMTP, simplificando ambientes de teste/local.
+- Para evitar spam em ambientes de teste, use `HEALTH_MONITOR_DRY_RUN=true` ou mantenha `HEALTH_MONITOR_ALERT_RECIPIENTS` vazio (o script apenas logará os alertas).
 
 ## Logs estruturados e request context
 
@@ -98,14 +95,16 @@ Evite que proxies comprimam a resposta para não truncar o stream.
 - `loggingMiddleware` emite logs JSON `request_start` / `request_end` com IP, userId e duração em ms.
 - `registerErrorHandler` serializa qualquer exceção em `{ success:false, error:{code,message}, meta:{timestamp,requestId} }` e emite log `request_error` reutilizando `getRequestContext()`.
 - Para logs customizados dentro de serviços/use-cases, basta importar `getRequestContext()` ou `updateRequestContext()` e incluir `requestId` no payload.
+- `writeStructuredLog` (src/shared/logging/structuredLogger.ts) replica cada evento tanto para `stdout` quanto para o arquivo configurado (`LOG_FILE_PATH`, default `logs/backbet.log`). A rotação local respeita `LOG_FILE_MAX_SIZE_MB` (20MB) e `LOG_FILE_MAX_FILES` (5). Em produção `LOG_FILE_ENABLED` já nasce `true`; em dev pode ser ligado/desligado conforme necessário. Valide rapidamente com `tail -f logs/backbet.log | jq .`.
 
 Exemplo:
 
 ```ts
 import { getRequestContext } from '@/shared/observability/requestContext';
+import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 
 const ctx = getRequestContext();
-console.log(JSON.stringify({ level: 'info', event: 'bet_resolved', requestId: ctx?.requestId }));
+writeStructuredLog({ event: 'bet_resolved', requestId: ctx?.requestId, payload: bet });
 ```
 
 ## Tracing OpenTelemetry
@@ -123,7 +122,7 @@ Configuração principal:
 | `TRACING_ENABLED` | `false` | Liga/desliga o SDK. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318/v1/traces` | Destino OTLP/HTTP. |
 | `OTEL_EXPORTER_OTLP_HEADERS` | _(vazio)_ | Cabeçalhos extras (`key=value,key2=value2`). |
-| `OTEL_SERVICE_NAME` | `backbet-api` | `resource.service.name`. |
+| `OTEL_SERVICE_NAME` | `SERVICE_NAME` (por padrão `backbet-backend`) | `resource.service.name`. |
 | `OTEL_DIAGNOSTIC_LOG_LEVEL` | `error` | Verbosidade do logger OpenTelemetry. |
 
 Como testar localmente:
@@ -138,55 +137,50 @@ Gere tráfego e confira os spans no backend (Grafana Tempo, Jaeger, etc.).
 
 ## Variáveis e flags relevantes
 
-- `CACHE_ENABLED`, `REDIS_URL`, `CACHE_*_TTL_SECONDS`: controlam Redis, TTLs e, por consequência, `backbet_cache_*` e `/health/cache`.
-- `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL`: determinam se o readiness pingará Mongo (e qual instância).
+- `CACHE_ENABLED`, `REDIS_URL`, `CACHE_*_TTL_SECONDS`: controlam Redis, TTLs e, por consequência, o conteúdo de `cacheMetricsSnapshot` e `/health/cache`.
+- `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL`: determinam se o readiness pingará Mongo (e qual instância) para atualizar `dependencyHealthSnapshot`.
 - `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*`, `BET_*`: alteram o comportamento das rotas e tendem a impactar histogramas de HTTP; monitore após ajustar limites.
+- `APP_NAME`: nome do produto (exibido nos dashboards e reaproveitado por `NEW_RELIC_APP_NAME` quando não configurado diretamente).
+- `SERVICE_NAME`: identidade técnica do serviço; OpenTelemetry usa esse nome quando `OTEL_SERVICE_NAME` não é definido.
+- `NEW_RELIC_APP_NAME`: se ausente, herdará `APP_NAME`; configure um valor específico apenas se precisar separar o app visível do nome do serviço em New Relic.
 
 ## Dashboards e alertas
 
-Artefatos em `reports/phase4/`:
+Os artefatos antigos de Grafana/Prometheus foram arquivados em `reports/phase4/` apenas para consulta histórica. A nova stack opera em três camadas já habilitadas:
 
-- `dashboard.json`: painel Grafana com seções de tráfego, latência, cache e dependências.
-- `alerts.yaml`: exemplos de Alertmanager (erro em cache, P95 alto, readiness caindo).
+1. **PM2 WebUI** — suba com `npm run pm2:webui:start`, audite CPU/memória, restarts e uptime e encerre com `pm2:webui:stop`. Acesse somente via túnel SSH/VPN.
+2. **Alertas por e-mail** — `scripts/health-monitor.cjs` roda via `npm run pm2:health:start`, consome `/health` e `/readiness` e envia Gmail SMTP quando qualquer dependência fica `down` ou ultrapassa `HEALTH_MONITOR_MAX_LATENCY_MS`. Use `HEALTH_MONITOR_DRY_RUN=true` em testes.
+3. **Logs em arquivo** — `writeStructuredLog` grava todos os eventos em `logs/backbet.log` além do console. Configure `LOG_FILE_PATH`, `LOG_FILE_MAX_SIZE_MB` e `LOG_FILE_MAX_FILES` para o pipeline alvo e revise os artefatos com `ls -lh logs/backbet.log*` durante RCA.
 
-Queries recomendadas:
+Mesmo com essas automações, monitore manualmente `GET /readiness` (status `down`/`degraded`) e acompanhe eventos `request_error`/`readiness_dependency` para validar se o monitoramento está cobrindo todos os cenários.
 
-1. **Tráfego geral** — `rate(backbet_http_requests_total[5m])`, `histogram_quantile(0.95, sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le))`.
-2. **Cache** — `rate(backbet_cache_hits_total[5m])`, `increase(backbet_cache_errors_total[5m])`.
-3. **Dependências** — `backbet_dependency_health{dependency="redis"}` (single stat) e `avg_over_time(backbet_dependency_latency_ms[5m])`.
+## Feature toggles
 
-Alertas úteis (PromQL):
+- `OBS_USE_PM2_WEBUI` — controla se os scripts `npm run pm2:webui:*` devem iniciar o painel. Mantém pipelines CI limpos quando PM2 não está disponível.
+- `OBS_ENABLE_PROMETHEUS` — ativa o endpoint `/metrics` com `prom-client`. Quando `false`, retorna 410 e incentiva o uso do pipeline PM2.
+- `OBS_ENABLE_EMAIL_ALERTS` — habilita/desabilita o envio SMTP no `health-monitor`. Mesmo desativado, o loop continua registrando issues nos logs.
 
-```promql
-increase(backbet_cache_errors_total[5m]) > 0
+Todos os toggles vivem em `appConfig.observability` e podem ser ajustados dinamicamente em testes via `overrideObservabilityToggles`/`resetObservabilityToggles` (`src/shared/observability/featureToggles.ts`).
 
-histogram_quantile(
-  0.95,
-  sum(rate(backbet_http_request_duration_ms_bucket[5m])) by (route, le)
-) > 1000
-
-backbet_dependency_health{dependency="mongo"} == 0
-```
-
-Associe-os a Slack/PagerDuty para resposta rápida.
+Sempre que um toggle `OBS_*` é inicializado, sobrescrito ou resetado, o serviço emite o log `observability_toggle_state` e o snapshot atual passa a aparecer nos campos `observability` dos endpoints `/health` e `/readiness`, permitindo auditar mudanças sem acessar os arquivos `.env` diretamente.
 
 ## Testes e verificações
 
-- `npm test -- observabilityEndpoints` garante `/health`, `/health/cache`, `/readiness`, `/metrics` e o serializador de erros.
+- `npm test -- observabilityEndpoints` garante `/health`, `/health/cache`, `/readiness`, o comportamento 410 de `/metrics` e o serializador de erros.
 - Para smoke manual:
 
 ```bash
 curl http://localhost:3000/health
 curl http://localhost:3000/readiness | jq
-curl -H 'Accept: text/plain' http://localhost:3000/metrics | head
+curl -i http://localhost:3000/metrics
 ```
 
 ## Próximos passos
 
-1. Propagar `traceparent`/`X-Request-ID` até o frontend para correlacionar spans com UX.
-2. Persistir métricas de negócio (apostas criadas, depósitos aprovados) em contadores próprios.
-3. Armazenar histórico do readiness (ex.: Loki) para investigar instabilidades de dependências.
+1. Automatizar o upload/retention dos arquivos `logs/backbet.log*` para storage externo (S3/Blob) após cada rotação.
+2. Integrar o health monitor ao canal on-call (Opsgenie/Slack) reutilizando a mesma payload de e-mail.
+3. Enriquecer os logs estruturados com contadores de produto (apostas criadas, depósitos aprovados) para alimentar novos painéis no PM2 WebUI.
 
 ---
 
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 25 de novembro de 2025

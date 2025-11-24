@@ -11,10 +11,12 @@ BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20
 ## Stack e princípios
 
 - **Linguagem/Runtime**: TypeScript 5.9 + Node 20 (`ts-node`/`tsx` em dev, `tsc` + `tsc-alias` para build)
+- **Nomes configuráveis**: `APP_NAME` declara o nome do produto exibido (é reaproveitado em `NEW_RELIC_APP_NAME` quando não há override) enquanto `SERVICE_NAME` identifica o serviço em métricas/tracing (`OTEL_SERVICE_NAME`). Mantemos ambos no `.env` para separar a identidade do app da identidade operacional.
+- **Configuração centralizada**: `BACKBET_RUNTIME_ENV` decide se as validações de produção devem exigir chaves live; mantenha em `development` para tolerar valores de `.env` mesmo quando ferramentas (PM2/New Relic) precisam que `NODE_ENV=production`.
 - **Arquitetura**: Monólito modular (API ▸ application ▸ domain ▸ infrastructure ▸ shared)
 - **Padrões**: DDD, Result pattern, repositories async, factories para troca de adapters
 - **Qualidade**: ESLint flat config, Jest + SWC, 350 testes (97% cobertura), CI local `npm run lint && npm run test --coverage && npm run build`
-- **Observabilidade**: Prometheus (`/metrics`), health/readiness endpoints, request-id + logs JSON, OpenTelemetry opcional
+- **Observabilidade**: health/readiness endpoints, snapshots internos de cache/resiliência, request-id + logs JSON, OpenTelemetry e PM2 WebUI (em rollout)
 
 ## Bounded contexts
 
@@ -38,7 +40,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 
 ## Camadas principais
 
-- **API (`src/infrastructure/api`)**: `ApiServer`, controllers, DTOs, middlewares (`metricsMiddleware`, `loggingMiddleware`, `requestIdMiddleware`), Swagger (`/api/docs`).
+- **API (`src/infrastructure/api`)**: `ApiServer`, controllers, DTOs, middlewares (`loggingMiddleware`, `requestIdMiddleware`), Swagger (`/api/docs`).
 - **Application**: Use cases por contexto (`RegisterUser`, `DepositFunds`, `PlaceBet`, `ChangeEmail`, etc.), com Result pattern.
 - **Domínio**: Entidades/VOs puros (`User`, `Wallet`, `Bet`, `Money`, `Email`, `Odds`), regras e invariantes.
 - **Infraestrutura**: Persistência (Mongo/in-memory), cache Redis, auth (Clerk/JWT), observabilidade (metrics/tracing), config loaders.
@@ -52,7 +54,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 | **Redis** | Opcional em dev, recomendado em produção | Config em `shared/config/cacheConfig.ts`. `RedisClient` expõe métricas e flush helpers para manter consistência. |
 | **Clerk** | Obrigatório em produção | Middleware `@clerk/express`. Dev/test podem usar bypass definindo `ALLOW_DEV_BEARER_BYPASS=true`. |
 | **JWT local** | Usado nos endpoints `/auth/login` & `/auth/refresh` | `JwtService` gera/valida tokens; útil para testes E2E sem Clerk. |
-| **Observabilidade** | Default ON | `/health`, `/health/cache`, `/readiness`, `/metrics` e tracing (`TRACING_ENABLED`) com exportador OTLP configurável. |
+| **Observabilidade** | Default ON | `/health`, `/health/cache`, `/readiness` e tracing (`TRACING_ENABLED`) com exportador OTLP configurável; por padrão `/metrics` responde `410` até que `OBS_ENABLE_PROMETHEUS=true`. PM2 WebUI + health monitor cobrem o restante da stack. |
 
 ## APIs e contratos
 
@@ -67,7 +69,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 2. Ajustar variáveis: `NODE_ENV=development`, `CACHE_ENABLED=false` (caso sem Redis), `USE_MONGOOSE_PERSISTENCE=false` (para in-memory) ou definir `MONGODB_URI`.
 3. `npm install`
 4. `npm run dev` (hot reload com `tsx`)
-5. Exercitar rotas (`curl`, Postman, Swagger) e consultar métricas/health endpoints.
+5. Exercitar rotas (`curl`, Postman, Swagger) e acompanhar health/readiness e logs estruturados (métricas estão sendo migradas para PM2 WebUI).
 
 ### Pipelines úteis
 
@@ -76,18 +78,40 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 - `npm run build`
 - `npm start` (executa `dist/index.js`)
 
+### Monitoramento diário
+
+- Suba o painel com `npm run pm2:webui:start` (usa `PM2_WEB_PORT`, `PM2_WEB_USERNAME`, `PM2_WEB_PASSWORD` e respeita `OBS_USE_PM2_WEBUI`).
+- Verifique CPU, memória e restarts do processo `backbet` direto no PM2 WebUI e complemente com `npm run pm2:webui:logs`.
+- Continue usando `/health`, `/health/cache` e `/readiness` para probes externos; o antigo Grafana foi aposentado (ligue `OBS_ENABLE_PROMETHEUS=true` apenas para compatibilidade temporária com Prometheus).
+- Inicie o monitor de saúde com `npm run pm2:health:start` (usa `HEALTH_MONITOR_*` + `SMTP_*` e só envia e-mails quando `OBS_ENABLE_EMAIL_ALERTS=true`); consulte `npm run pm2:health:logs` para acompanhar envios.
+- Quando tudo estiver estável, finalize `pm2:webui:stop` e `pm2:health:stop` ou utilize `pm2 monit`/execuções pontuais (`HEALTH_MONITOR_RUN_ONCE=true npm run health-monitor:start`) em ambientes sem túnel seguro.
+
+### Processos e PM2
+
+- `npm run pm2:start` (build + `pm2 start ecosystem.config.cjs --env production`)
+- `npm run pm2:reload`/`npm run pm2:stop`/`npm run pm2:logs` para controlar o cluster em produção
+- Consulte `docs/PM2.mdx` para operações de zero downtime e monitoramento de métricas/health no cluster PM2.
+
+### Feature toggles de observabilidade
+
+- `OBS_USE_PM2_WEBUI` → controla se os scripts `pm2:webui:*` devem efetivamente subir o painel.
+- `OBS_ENABLE_PROMETHEUS` → reativa `/metrics` com `prom-client`; deixe `false` para manter o retorno `410 Gone`.
+- `OBS_ENABLE_EMAIL_ALERTS` → habilita/desliga o envio SMTP do `health-monitor` (o loop continua registrando falhas nos logs).
+
+Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapshot atual também aparece no campo `observability` das respostas `/health` e `/readiness`, facilitando auditoria sem depender do `.env`.
+
 ## Qualidade e operação
 
 - 350 testes Jest (unidade + integração leve) — statements 97.79%, branches 87.19%, functions 97.99%, lines 97.96%.
 - Logs estruturados JSON com `request_start`, `request_end` e `request_error` (incluem requestId, userId, duração).
-- Métricas chave: `backbet_http_requests_total`, `backbet_http_request_duration_ms_bucket`, `backbet_dependency_health`, métricas Redis custom (`hits`, `misses`, `errors`).
-- Dashboards/alertas versionados em `reports/phase4/*` (Grafana/Prometheus) + scripts k6/Artillery planejados.
+- Snapshots de saúde trackeiam dependências externas (Mongo, Redis, Clerk) e alimentarão a PM2 WebUI/alertas de saúde.
+- Dashboards/alertas anteriores baseados em Prometheus/Grafana foram aposentados; o plano de migração está documentado em `docs/PM2-WEBUI-MIGRATION.mdx`.
 
 ## Documentação relacionada
 
 - `docs/ARCHITECTURE.mdx` – detalhes das camadas e integrações.
 - `docs/API_DOCS.mdx` – referência completa de endpoints.
-- `docs/OBSERVABILITY.mdx` – métricas, tracing e dashboards.
+- `docs/OBSERVABILITY.mdx` – health/readiness, logs e plano de migração para PM2 WebUI.
 - `docs/CLERK_SETUP.mdx`, `docs/MONGODB_SETUP.mdx`, `docs/LOGS.mdx` – guias operacionais.
 - `docs/QUICKSTART.mdx` – passo a passo para levantar dependências locais.
 
@@ -98,9 +122,9 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 | ✅ Concluído | Integração Clerk/JWT consolidada, cache Redis com métricas, docs Bet/User/Finance/Observability/API atualizados. |
 | Curto prazo | Automatizar lint/test/build em CI, adicionar testes de carga e segurança básicos, publicar playbooks de incidentes. |
 | Médio prazo | Instrumentar tracing OTEL em staging, remover fallback in-memory em produção, formalizar eventos/outbox (`UserCreated`, `BetPlaced`, `FundsWithdrawn`). |
-| Pré-produção | Security review completa, testes de performance/stress automatizados, alertas Prometheus → Slack/PagerDuty, checklist de rollout/rollback. |
+| Pré-produção | Security review completa, testes de performance/stress automatizados, ativação dos alertas via PM2 WebUI + e-mail de saúde, checklist de rollout/rollback. |
 
 ---
 
 **Versão atual:** 0.1.0 (pre-alpha)  
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 25 de novembro de 2025

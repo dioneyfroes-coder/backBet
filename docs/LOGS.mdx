@@ -21,8 +21,9 @@ slug: "/docs/logs"
 | Geração/propagação de `requestId` + `AsyncLocalStorage` | `src/shared/observability/requestContext.ts` |
 | Middlewares `requestIdMiddleware` e `loggingMiddleware` | `src/infrastructure/api/ApiServer.ts` |
 | Serialização de erros e logs `request_error` | `src/infrastructure/api/ApiServer.ts#registerErrorHandler` |
-| Configuração dos endpoints `/health`, `/metrics`, `/readiness` (para correlação) | `src/infrastructure/api/ApiServer.ts` |
+| Configuração dos endpoints `/health`, `/health/cache`, `/readiness` (para correlação) | `src/infrastructure/api/ApiServer.ts` |
 | Documentação geral de observabilidade | `docs/OBSERVABILITY.mdx` |
+| Transporte para arquivo (`logs/backbet.log`) | `src/shared/logging/fileLogger.ts`, `src/shared/logging/structuredLogger.ts` |
 
 ## Eventos emitidos automaticamente
 
@@ -31,7 +32,8 @@ slug: "/docs/logs"
 | `request_start` | `info` | Entrada no `loggingMiddleware` | `method`, `path`, `ip`, `userId` |
 | `request_end` | `info` | `res.finish` | `status`, `durationMs`, `contentLength` |
 | `request_error` | `error` | Middleware global captura `AppError` ou `Error` | `code`, `statusCode`, `details` |
-| `request_healthcheck` | `info` | Handlers de `/health*` | `endpoint`, `result`, `cacheEnabled` |
+| `request_healthcheck` | `info` | Handlers de `/health*` | `endpoint`, `result`, `cacheEnabled`, `observability` |
+| `observability_toggle_state` | `info` | Ao inicializar/alterar toggles `OBS_*` | `toggle`, `value`, `source`, `metadata` |
 | `readiness_dependency` | `warn`/`error` | Dependência caiu durante `/readiness` | `dependency`, `status`, `latencyMs`, `error` |
 | `startup` | `info` | `ApiServer.start()` | `port`, `swaggerUrl`, `env` |
 
@@ -57,6 +59,13 @@ Cada log é uma linha JSON, enviada para `stdout`/`stderr`.
 ```
 
 Campos obrigatórios: `level`, `event`, `timestamp`. Prefira snake-case apenas para campos herdados de payloads externos; demais campos usam camelCase.
+
+## Armazenamento em arquivo
+
+- Além de `stdout`, os mesmos logs são gravados em `logs/backbet.log` (configurável com `LOG_FILE_PATH`).
+- Habilite/desabilite com `LOG_FILE_ENABLED` (`true` em produção por padrão). Os limites de rotação são `LOG_FILE_MAX_SIZE_MB` (default 20MB) e `LOG_FILE_MAX_FILES` (default 5 arquivos históricos).
+- A rotação é local: ao atingir o limite de tamanho, o arquivo atual vira `.1`, `.1` vira `.2` e assim por diante; o arquivo principal volta a começar vazio.
+- Para coexistir com pipelines externos (PM2, Loki, CloudWatch), mantenha `stdout` coletado normalmente e use o arquivo apenas para troubleshooting rápido ou ingestão offline.
 
 ## Contexto e correlação
 
@@ -88,7 +97,7 @@ Sempre serializamos manualmente para JSON para evitar diferenças entre runtimes
 | Nível | Uso permitido | Ações recomendadas |
 | --- | --- | --- |
 | `info` | Eventos esperados (start/end, mutações bem-sucedidas) | Mantido em todos os ambientes; base para métricas derivadas |
-| `warn` | Requisições atendidas, mas com fallback ou degradação (ex.: dependência `skipped`) | Abra issue se o volume aumentar em 5m │ configure alertas no Grafana |
+| `warn` | Requisições atendidas, mas com fallback ou degradação (ex.: dependência `skipped`) | Abra issue se o volume aumentar em 5m │ configure alertas no PM2 WebUI/e-mail |
 | `error` | Fluxos abortados, exceções capturadas, dependências fora do ar | Gatilho para incidentes; deve ter `code` ou `dependency` |
 | `fatal` | Reservado para falhas que derrubam o processo (não usado hoje) | Se necessário, integre com o orchestrator para reiniciar pods |
 
@@ -101,6 +110,9 @@ npm run dev | jq -c '.'
 
 # filtrar apenas request_error
 npm run dev | grep 'request_error'
+
+# acompanhar arquivo local
+tail -f logs/backbet.log | jq .
 ```
 
 - Use `LOG_PRETTY=true npm run dev` quando precisar de saída legível (utilize apenas localmente para não quebrar ingestão).
@@ -110,7 +122,7 @@ npm run dev | grep 'request_error'
 
 1. O contêiner escreve logs JSON em `stdout`/`stderr`.
 2. O runtime (Docker, Kubernetes) envia para o agente (Fluent Bit, Vector ou Promtail).
-3. Os agentes transmitem para o Loki / Elasticsearch definido em `reports/phase4/alerts.yaml`.
+3. Os agentes transmitem para o Loki / Elasticsearch definido internamente (os arquivos antigos em `reports/phase4/alerts.yaml` ficaram apenas como referência histórica).
 
 Comandos úteis:
 
@@ -121,10 +133,10 @@ docker logs backbet-api -f | jq -c 'select(.event == "request_error")'
 kubectl logs deploy/backbet-api -n backbet --since=30m
 ```
 
-## Integração com métricas e tracing
+## Integração com snapshots e tracing
 
-- Os mesmos `requestId` e `userId` aparecem nos gauges `backbet_http_in_flight` (labels) e nos spans OTEL, permitindo pivotar entre painéis sem perder contexto.
-- O middleware de erro incrementa `backbet_http_errors_total` e emite `request_error`, garantindo que logs e métricas tenham contagens equivalentes.
+- Os mesmos `requestId` e `userId` usados nos logs ficam registrados nos snapshots `cacheMetricsSnapshot`, `resilienceMetricsSnapshot` e `dependencyHealthSnapshot`, facilitando correlação durante o consumo via PM2 WebUI.
+- Quando um erro dispara `request_error`, o handler atualiza imediatamente os snapshots (ex.: `resilienceMetricsSnapshot.failures`) garantindo consistência entre logs e dados operacionais.
 - Traces incluem atributos `log.level` e `log.event` quando o `DiagConsoleLogger` está em modo `debug` (`OTEL_DIAGNOSTIC_LOG_LEVEL=debug`).
 
 ## Boas práticas para novos logs
@@ -149,12 +161,12 @@ kubectl logs deploy/backbet-api -n backbet --since=30m
 - [ ] Adicionou log estrutural ao criar fluxo crítico? (depósitos, saques, apostas)
 - [ ] Reutilizou `requestId`/`userId` via `getRequestContext()`?
 - [ ] Sanitizou payloads antes de logar (`password`, `token`)?
-- [ ] Documentou novos campos nesta página e no dashboard (`reports/phase4/dashboard.json`)?
+- [ ] Documentou novos campos nesta página e, se necessário, no plano `docs/PM2-WEBUI-MIGRATION.mdx`?
 
 ## Próximos passos sugeridos
 
-1. Introduzir `LOG_LEVEL` e `LOG_DESTINATION` no `appConfig` para reduzir volume em produção.
-2. Enviar logs diretamente para o agente OTLP (`otlp-logs`) quando for habilitado na stack grafana/tempo/loki.
+1. Exportar os arquivos `logs/backbet.log*` para um bucket/VSI quando o PM2 realizar rotação prolongada (cold storage).
+2. Enviar logs diretamente para o agente OTLP (`otlp-logs`) quando for habilitado na stack Tempo/Loki (ou equivalente).
 3. Automatizar testes de contrato que validem `requestId` e `Content-Type` nos logs de erro.
 
-**Última atualização:** 23 de novembro de 2025.
+**Última atualização:** 25 de novembro de 2025.
