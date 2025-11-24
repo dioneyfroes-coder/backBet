@@ -158,7 +158,7 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | `POST` | `/finance/packages/:packageId/purchase` | Compra pacote, credita `base+bonus` e retorna `{ wallet, creditPackage }`. |
 | `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes? }` e trava o saldo (`wallet.lock`). |
 | `GET` | `/finance/withdrawal-requests` | Lista pedidos do usuário com `approvalLogs`. |
-| `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"|"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
+| `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"&#124;"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
 
 ### Apostas (`/api/bets`)
 
