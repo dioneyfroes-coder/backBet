@@ -19,6 +19,7 @@
     "strict": true,
     "isolatedModules": false,
     "skipLibCheck": true,
+    "types": ["node", "jest"],
 
     "sourceMap": true,
     "declaration": true,
