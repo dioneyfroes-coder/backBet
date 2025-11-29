@@ -9,12 +9,14 @@ import { IWalletService } from '@/core/finance/domain/services/IWalletService';
 import { ICreateBetDTO, ICancelBetDTO, IResolveBetDTO } from '../../types/bet.types';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
+import { RiskService } from '@/core/risk/domain/services/RiskService';
 
 export class BetService {
   constructor(
     private betRepository: IBetRepository,
     private eventRepository: IEventRepository,
     private walletService: IWalletService,
+    private riskService?: RiskService,
   ) {}
 
   async placeBet(input: ICreateBetDTO): Promise<Bet> {
@@ -25,6 +27,15 @@ export class BetService {
     this.ensureMarketAllowsBetting(market);
 
     const odd = this.getOddOrThrow(market, input.oddId);
+
+    // Risk check (if configured) before withdrawing funds
+    if (this.riskService) {
+      const allowed = await this.riskService.canPlaceBet(input.userId, input.amount, odd.value, input.eventId, input.marketId);
+      if (!allowed) {
+        throw new DomainError({ code: 'RISK_REJECTED', message: 'Bet rejected by risk rules' });
+      }
+    }
+
     const wallet = await this.walletService.withdraw(input.userId, input.amount);
 
     const bet = BetFactory.createPendingBet({
@@ -38,6 +49,13 @@ export class BetService {
     });
 
     await this.betRepository.create(bet);
+
+    // register exposure (reserve) after successful creation
+    if (this.riskService) {
+      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
+      await this.riskService.registerExposure(bet.userId, liability);
+    }
+
     return bet;
   }
 
@@ -53,6 +71,13 @@ export class BetService {
     }
 
     bet.cancel(input.reason);
+
+    // release exposure
+    if (this.riskService) {
+      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
+      await this.riskService.reduceExposure(bet.userId, liability);
+    }
+
     await this.walletService.deposit(bet.userId, bet.amount.value);
     await this.betRepository.update(bet);
 
@@ -62,6 +87,12 @@ export class BetService {
   async resolveBet(input: IResolveBetDTO): Promise<Bet> {
     const bet = await this.getBetOrThrow(input.betId);
     bet.resolve(input.result);
+
+    // reduce exposure for resolved bet
+    if (this.riskService) {
+      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
+      await this.riskService.reduceExposure(bet.userId, liability);
+    }
 
     if (input.result === 'WON') {
       await this.walletService.deposit(bet.userId, bet.potentialReturn);

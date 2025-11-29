@@ -1,0 +1,68 @@
+---
+title: "Integração de Risco (RiskService)"
+description: "Como o RiskService é integrado ao fluxo de apostas, regras aplicadas e toggles/configuração."
+slug: "/docs/risk-integration"
+sidebar_label: "Risk Service"
+---
+
+# Integração de Risco
+
+Este documento descreve como o `RiskService` foi integrado ao ciclo de vida de apostas, as regras implementadas e como configurar/estender o comportamento.
+
+## Objetivo
+
+O `RiskService` tem dois propósitos principais:
+
+- **Prevenir perdas excessivas:** validar se uma aposta adicional faria o usuário ultrapassar limites definidos (por evento, por mercado ou globais).
+- **Reservar exposição:** atualizar um registro de exposição por usuário durante o tempo em que a aposta estiver pendente, e liberar essa exposição quando a aposta for resolvida ou cancelada.
+
+## Pontos de integração
+
+- `BetService.placeBet` chama `riskService.canPlaceBet(userId, stake, oddsValue, eventId?, marketId?)` antes de executar o débito na carteira.
+- Após persistir a aposta, `BetService.placeBet` chama `riskService.registerExposure(userId, liability)` para reservar a exposição.
+- `BetService.cancelBet` e `BetService.resolveBet` chamam `riskService.reduceExposure(userId, liability)` quando a exposição deve ser liberada.
+
+Essas chamadas são feitas de forma resiliente: falha na camada de risco pode ser configurada para ser tolerada (modo permissivo) ou bloqueante (modo estrito) via configuração.
+
+## Regras implementadas
+
+- **Velocity limits (limite por janela):** impede que um usuário crie mais que `MAX_BETS_PER_WINDOW` dentro de `VELOCITY_WINDOW_SECONDS`.
+- **Limites de exposição por evento/market:** soma da exposição reservada para um `eventId` ou `marketId` não pode ultrapassar `MAX_EXPOSURE_PER_EVENT` / `MAX_EXPOSURE_PER_MARKET`.
+- **Whitelist / Blacklist:** `WHITELIST_USER_IDS` e `BLACKLIST_USER_IDS` permitem exceções e bloqueios explícitos.
+- **Liability:** calculada como `liability = stake * (odds - 1)` (arredondar para 2 casas) e usada para comparar contra exposições atuais.
+
+## Configuração (variáveis relevantes)
+
+- `VELOCITY_WINDOW_SECONDS` (ex.: `60`) — janela em segundos para cálculo de velocity.
+- `MAX_BETS_PER_WINDOW` (ex.: `10`) — máximo de apostas por janela.
+- `MAX_EXPOSURE_PER_EVENT` (ex.: `10000`) — exposição máxima por evento.
+- `MAX_EXPOSURE_PER_MARKET` (ex.: `5000`) — exposição máxima por mercado.
+- `WHITELIST_USER_IDS`, `BLACKLIST_USER_IDS` — listas separadas por vírgula em variáveis de ambiente ou provenientes do `RISK_CONFIG` do app.
+- `USE_MONGOOSE_PERSISTENCE` — quando `true` usa repositórios Mongoose; caso contrário, usa fallback em memória.
+
+## Observabilidade
+
+Rejeições por risco emitem logs estruturados com o evento `risk_reject` contendo `userId`, `reason`, `liability`, `currentExposure` e `maxExposure`. Esses logs são pontos de integração para:
+
+- métricas/contadores (Prometheus),
+- alertas por e-mail ou integrações PM2 WebUI,
+- dashboards e auditoria.
+
+## Tests & desenvolvimento
+
+- Há unidades cobrindo `RiskService` (regras de cálculo e lógica de decisão).
+- O repositório Mongoose possui testes que foram adaptados para mockar chamadas encadeadas do Mongoose (ex.: `.findOne().lean()`).
+- Um `InMemoryRiskRepository` existe como fallback para desenvolvimento/local, permitindo executar testes sem MongoDB.
+
+## Como estender
+
+- Para adicionar uma regra adicional, implemente a checagem em `RiskService.canPlaceBet` e emita um log estruturado com `risk_reject` quando recusar.
+- Para expor métricas, incremente um contador no local do log (ex.: `risk_reject_total`) no `RiskService`.
+
+----
+
+**Referências:**
+
+- `src/core/risk/domain/services/RiskService.ts`
+- `src/infrastructure/persistence/factory.ts`
+- `src/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository.ts`

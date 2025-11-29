@@ -29,6 +29,7 @@ Domain (interfaces) → Persistence factory → Mongoose repo → Schema → Mon
 | Eventos | `IEventRepository` | *(in-memory apenas)* | — | Planejado para futura coleção. |
 | Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository.ts` | `schemas/CreditPackageSchema.ts` | Campos derivados (`bonusPercent`) calculados no domínio antes de persistir. |
 | Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository.ts` | `schemas/WithdrawalRequestSchema.ts` | Guarda audit trail (`approverId`, `approvedAt`). |
+| Risco | `IRiskRepository` | `MongooseRiskRepository.ts` | `schemas/RiskProfileSchema.ts` | Fallback `InMemoryRiskRepository` disponível quando `USE_MONGOOSE_PERSISTENCE=false`. |
 
 ## Ativando/desativando Mongo
 
@@ -76,6 +77,10 @@ if (!fetched) {
 | Unit tests de casos de uso | Use os repositórios in-memory (flag `false`). Mantém testes rápidos e determinísticos. |
 | Integração/Mongo real | Suba Mongo com Docker ou Testcontainers, habilite a flag e rode `npm run test -- integration`. Limpe coleções com `dropDatabase()` antes de cada suite. |
 | CI | Evite habilitar Mongo a menos que o pipeline suba um container. Sem URI válido, `env.ts` interrompe o processo em produção. |
+
+**Observação (Risco / IRiskRepository):** este repositório adiciona gerenciamento de exposição por usuário (reservas de liability). Quando `USE_MONGOOSE_PERSISTENCE=false` a fábrica retorna um `InMemoryRiskRepository` que permite executar testes sem Mongo; quando `true` utiliza `MongooseRiskRepository` com `RiskProfileSchema`.
+
+Ao escrever testes para o repositório Mongoose (incluindo risco), lembre-se que muitas consultas usam encadeamento como `.findOne().lean()` — os mocks Jest devem retornar um objeto com `.lean()` que resolve para o documento esperado.
 
 ## Índices e migrações
 

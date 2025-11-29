@@ -78,6 +78,17 @@ O `BetService` consome `WalletService` (`src/core/finance/domain/services/Wallet
 2. `deposit(userId, amount)` devolve fundos após cancelamentos ou paga ganhos em resoluções `WON`.
 3. Evolução futura: utilizar `lock/unlock` para reservas sem débito imediato.
 
+## Integração com RiskService
+
+O sistema agora possui um serviço de risco (`RiskService`) que é consultado durante o fluxo de criação de apostas e que gerencia reserva/liberação de exposição por usuário.
+
+- **Onde é chamado:** `BetService.placeBet` chama `riskService.canPlaceBet(...)` antes de debitar a carteira; após a criação bem-sucedida da aposta chama `riskService.registerExposure(...)`. `BetService.cancelBet` e `BetService.resolveBet` chamam `riskService.reduceExposure(...)` quando aplicável.
+- **Regras observadas:** `RiskService` aplica limites de velocidade (velocity), limites por evento/market, whitelist/blacklist de usuários e checagens de exposição cumulativa. A fórmula de liability segue: `liability = stake * (odds - 1)` arredondado a 2 casas.
+- **Persistência:** o `RiskService` usa um `IRiskRepository` (implementações Mongoose ou In-memory). A fábrica de persistência (`src/infrastructure/persistence/factory.ts`) expõe `createRiskRepository()`.
+- **Observability:** rejeições de risco emitem logs estruturados (`risk_reject`) que servem como hooks para alertas e métricas (Prometheus/Email/PM2 WebUI).
+
+Considere ler `docs/risk-integration.mdx` para detalhes de configuração, toggles e exemplos de comportamento.
+
 ## Persistência e configuração
 
 - **Contratos**: `IBetRepository` e `IEventRepository` descrevem as operações de persistência.

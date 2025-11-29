@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OddsSchema } from './OddsSchema';
 
 /**
  * DTO para colocar aposta
@@ -31,7 +32,7 @@ export const BetResponseDTO = z.object({
   eventId: z.string().uuid(),
   marketId: z.string(),
   amount: z.number(),
-  odds: z.number(),
+  odds: OddsSchema,
   status: z.enum(['PENDING', 'WON', 'LOST', 'CANCELED']),
   type: z.string(),
   potentialReturn: z.number(),

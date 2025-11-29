@@ -10,6 +10,8 @@ import {
   createEventRepository,
   createWalletRepository,
 } from '@/infrastructure/persistence/factory';
+import { createRiskRepository } from '@/infrastructure/persistence/factory';
+import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseCase';
 import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
@@ -34,7 +36,10 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
   const walletRepository = deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository as any);
 
-  const betService = new BetService(betRepository as any, eventRepository as any, walletService);
+  const riskRepository = await createRiskRepository();
+  const riskService = new RiskService(riskRepository as any, betRepository as any);
+
+  const betService = new BetService(betRepository as any, eventRepository as any, walletService, riskService);
 
   // use-cases (thin wrappers / orchestration)
   const placeBetUseCase = new PlaceBetUseCase(betService);

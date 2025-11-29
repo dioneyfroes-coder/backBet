@@ -14,6 +14,8 @@ slug: "/docs/mongodb-setup"
 - **Homologação/produção**: defina `USE_MONGOOSE_PERSISTENCE=true` e providencie um Mongo real. O `server.ts` chamará `connectMongoDB()` antes de subir o Express e registrará handlers de shutdown para `disconnectMongoDB()`.
 - **Testes automatizados que precisam de banco**: use containers (Docker/Compose) ou Atlas M0 e exponha `MONGODB_URI` durante o job.
 
+> Nota: o projeto introduziu um contrato `IRiskRepository` para gerenciar exposição/risco por usuário. Quando `USE_MONGOOSE_PERSISTENCE=false` a fábrica usa `InMemoryRiskRepository` como fallback; quando `true` utiliza `MongooseRiskRepository` (com `RiskProfileSchema`). Considere isto ao planejar testes de integração de risco.
+
 ## Variáveis essenciais
 
 | Variável | Obrigatória quando | Exemplo | Observações |

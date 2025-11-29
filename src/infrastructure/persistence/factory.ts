@@ -65,3 +65,14 @@ export async function createWithdrawalRequestRepository() {
   );
   return new WithdrawalRequestRepository();
 }
+
+export async function createRiskRepository() {
+  if (USE_MONGOOSE) {
+    const { MongooseRiskRepository } = await import('./mongoose/repositories/MongooseRiskRepository');
+    return new MongooseRiskRepository();
+  }
+  const { InMemoryRiskRepository } = await import(
+    './inmemory/repositories/InMemoryRiskRepository'
+  );
+  return new InMemoryRiskRepository();
+}
