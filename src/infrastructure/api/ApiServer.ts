@@ -294,6 +294,21 @@ export class ApiServer {
   }
 
   public registerHealthCheck(): void {
+    // Root handshake endpoint to confirm the API is reachable
+    this.app.get('/', (_req: Request, res: Response) => {
+      res.status(200).json({
+        success: true,
+        service: {
+          name: appConfig.project.appName,
+          serviceName: appConfig.project.serviceName,
+          env: appConfig.runtime.env,
+        },
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        dependencies: this.getDependencyHealthSnapshot(),
+      });
+    });
+
     this.app.get('/health', (_req: Request, res: Response) => {
       res.status(200).json({
         status: 'healthy',

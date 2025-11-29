@@ -29,11 +29,21 @@ describe('metrics helpers (modo compatibilidade sem Prometheus)', () => {
 
       cacheMetrics.updateCacheMetrics();
       expect(metricsMock).toHaveBeenCalled();
-      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({ hits: 1, misses: 2, writes: 3, errors: 4 });
+      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({
+        hits: 1,
+        misses: 2,
+        writes: 3,
+        errors: 4,
+      });
 
       cacheConfig.enabled = false;
       cacheMetrics.updateCacheMetrics();
-      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({ hits: 0, misses: 0, writes: 0, errors: 0 });
+      expect(cacheMetrics.getCacheMetricsSnapshot()).toEqual({
+        hits: 0,
+        misses: 0,
+        writes: 0,
+        errors: 0,
+      });
 
       cacheMetrics.stopCacheMetricsPolling();
     });

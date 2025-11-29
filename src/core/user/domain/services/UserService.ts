@@ -1,7 +1,7 @@
 import { User } from '../entities/User';
 import { IUserRepository } from '../repositories/IUserRepository';
 import { Email } from '../value-objects/Email';
-import { ICreateUserDTO } from '../../types/user.types';
+import { ICreateUserDTO, UserStatus } from '../../types/user.types';
 import { AppError } from '@/shared/errors/AppError';
 import { userConfig } from '../../config/user-config';
 import bcrypt from 'bcryptjs';
@@ -15,22 +15,32 @@ export class UserService {
       throw new AppError('CONFLICT', 'Email already exists', 409);
     }
 
-    if (!input.password || input.password.length < userConfig.minPasswordLength) {
-      throw new AppError(
-        'BAD_REQUEST',
-        `Senha deve ter pelo menos ${userConfig.minPasswordLength} caracteres`,
-        400,
-      );
-    }
+    let passwordHash = '';
+    let status: UserStatus = 'PENDING_VERIFICATION';
 
-    const passwordHash = await bcrypt.hash(input.password, 12);
+    if (input.password) {
+      if (input.password.length < userConfig.minPasswordLength) {
+        throw new AppError(
+          'BAD_REQUEST',
+          `Senha deve ter pelo menos ${userConfig.minPasswordLength} caracteres`,
+          400,
+        );
+      }
+      passwordHash = await bcrypt.hash(input.password, 12);
+      status = 'PENDING_VERIFICATION';
+    } else {
+      // Accounts created via Clerk (lazy creation) do not store a local password
+      // and are considered immediately active because identity is managed by Clerk.
+      passwordHash = '';
+      status = 'ACTIVE';
+    }
 
     const user = new User(
       crypto.randomUUID(),
       new Email(input.email),
       input.username,
       passwordHash,
-      'PENDING_VERIFICATION',
+      status,
       new Date(),
       new Date(),
     );

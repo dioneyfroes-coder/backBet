@@ -63,4 +63,18 @@ export class ClerkService {
       return null;
     }
   }
+
+  async linkInternalUserId(clerkUserId: string, internalUserId: string): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.users.updateUser(clerkUserId, {
+        publicMetadata: {
+          internalUserId,
+        },
+      } as any);
+    } catch (error) {
+      console.warn('Failed to link internalUserId on Clerk user:', error);
+    }
+  }
 }

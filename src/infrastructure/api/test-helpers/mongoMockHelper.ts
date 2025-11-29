@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import mongoose, { Connection } from 'mongoose';
 
 export type MongoMockHandle = {

@@ -30,7 +30,8 @@ export const userSchema = new Schema<IUserDocument>(
     },
     passwordHash: {
       type: String,
-      required: true,
+      required: false,
+      default: '',
     },
     firstName: {
       type: String,

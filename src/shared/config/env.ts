@@ -27,7 +27,10 @@ const assignDefault = (name: string, value: string): void => {
 
 assignDefault('APP_NAME', 'backbet');
 assignDefault('SERVICE_NAME', 'backbet-backend');
-assignDefault('NEW_RELIC_APP_NAME', process.env.NEW_RELIC_APP_NAME ?? process.env.APP_NAME ?? 'backbet');
+assignDefault(
+  'NEW_RELIC_APP_NAME',
+  process.env.NEW_RELIC_APP_NAME ?? process.env.APP_NAME ?? 'backbet',
+);
 assignDefault('OBS_USE_PM2_WEBUI', 'true');
 assignDefault('OBS_ENABLE_PROMETHEUS', 'false');
 assignDefault('OBS_ENABLE_EMAIL_ALERTS', 'true');
