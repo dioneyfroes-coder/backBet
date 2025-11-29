@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { createAuthRoutes, AuthRoutesDeps } from './authRoutes';
 import { createUserRoutes, UserRoutesDeps } from './userRoutes';
 import { createWalletRoutes, WalletRoutesDeps } from './walletRoutes';
@@ -60,7 +60,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
   const registerUserUseCase = new RegisterUser(userService, walletService);
 
   // Middleware: lazy-create internal user when request authenticated by Clerk
-  router.use(async (req: AuthenticatedRequest, _res, next) => {
+  router.use(async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
     try {
       const ensureAuthContext = () => {
         if (!req.auth) {

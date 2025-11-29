@@ -83,17 +83,22 @@ export class ApiServer {
 
     const allowedOrigins = new Set(appConfig.cors.allowedOrigins);
     const allowAllOrigins = allowedOrigins.has('*');
+    type OriginCallback = (err: Error | null, allow?: boolean) => void;
+    const validateOrigin = (origin: string | undefined, callback: OriginCallback): void => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (allowAllOrigins || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+      console.warn(`Origin ${origin} blocked by CORS policy`);
+      callback(new Error('Not allowed by CORS'));
+    };
+
     const corsOptions: CorsOptions = {
-      origin: (origin, callback) => {
-        if (!origin) {
-          return callback(null, true);
-        }
-        if (allowAllOrigins || allowedOrigins.has(origin)) {
-          return callback(null, true);
-        }
-        console.warn(`Origin ${origin} blocked by CORS policy`);
-        return callback(new Error('Not allowed by CORS'));
-      },
+      origin: validateOrigin,
       credentials: appConfig.cors.allowCredentials,
     };
 

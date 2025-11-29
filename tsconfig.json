@@ -19,7 +19,17 @@
     "strict": true,
     "isolatedModules": false,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": [
+      "node",
+      "express",
+      "express-serve-static-core",
+      "cors",
+      "qs",
+      "swagger-jsdoc",
+      "swagger-ui-express",
+      "jsonwebtoken",
+      "newrelic"
+    ],
 
     "sourceMap": true,
     "declaration": true,

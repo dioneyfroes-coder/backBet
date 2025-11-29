@@ -1,8 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { cacheKeys, cacheTTL } from '@/infrastructure/cache/cacheKeys';
 import { AuthenticatedRequest } from './AuthMiddleware';
+
+type AuthedQueryRequest = AuthenticatedRequest<
+  ParamsDictionary,
+  unknown,
+  unknown,
+  ParsedQs
+>;
 
 type CacheResponseOptions<Req extends Request> = {
   key: (req: Req) => string | null;
@@ -67,13 +76,13 @@ const buildAuthenticatedCacheKey = (
   return formatter(userId);
 };
 
-export const cacheWalletBalanceMiddleware = cacheResponse({
-  key: (req: AuthenticatedRequest) => buildAuthenticatedCacheKey(req, cacheKeys.walletBalance),
+export const cacheWalletBalanceMiddleware = cacheResponse<AuthenticatedRequest>({
+  key: (req) => buildAuthenticatedCacheKey(req, cacheKeys.walletBalance),
   ttlSeconds: cacheTTL.walletBalance,
 });
 
-export const cacheWalletHistoryMiddleware = cacheResponse({
-  key: (req: AuthenticatedRequest) => {
+export const cacheWalletHistoryMiddleware = cacheResponse<AuthedQueryRequest>({
+  key: (req) => {
     const baseKey = buildAuthenticatedCacheKey(req, cacheKeys.walletHistory);
     if (!baseKey) {
       return null;
@@ -85,8 +94,8 @@ export const cacheWalletHistoryMiddleware = cacheResponse({
   ttlSeconds: cacheTTL.walletHistory,
 });
 
-export const cacheUserProfileMiddleware = cacheResponse({
-  key: (req: AuthenticatedRequest) => buildAuthenticatedCacheKey(req, cacheKeys.userProfile),
+export const cacheUserProfileMiddleware = cacheResponse<AuthenticatedRequest>({
+  key: (req) => buildAuthenticatedCacheKey(req, cacheKeys.userProfile),
   ttlSeconds: cacheTTL.userProfile,
 });
 
