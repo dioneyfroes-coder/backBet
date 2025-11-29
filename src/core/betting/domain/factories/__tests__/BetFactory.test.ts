@@ -1,5 +1,5 @@
 import { BetFactory } from '../BetFactory';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 describe('BetFactory', () => {
   it('uses provided id and timestamp factories when available', () => {

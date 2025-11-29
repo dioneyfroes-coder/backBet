@@ -1,7 +1,7 @@
 import { BetRepository } from '../../repositories/BetRepository';
 import { Bet } from '../../entities/Bet';
 import { BetAmount } from '../../value-objects/BetAmount';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 describe('BetRepository in-memory', () => {
   let repo: BetRepository;

@@ -1,7 +1,7 @@
 import { BetService } from '../BetService';
 import { Bet } from '../../entities/Bet';
 import { BetAmount } from '../../value-objects/BetAmount';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { Event, Market } from '../../entities/Event';
 
 const makeEvent = (status: 'SCHEDULED' | 'LIVE' | 'FINISHED' = 'SCHEDULED') =>

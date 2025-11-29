@@ -1,5 +1,5 @@
 import { EventStatus, MarketStatus } from '../../types/bet.types';
-import { Odds } from '../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 // ---------- MARKET ----------

@@ -2,7 +2,7 @@
 
 import { BetStatus, BetType } from '../../types/bet.types';
 import { BetAmount } from '../value-objects/BetAmount';
-import { Odds } from '../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export class Bet {

@@ -1,6 +1,6 @@
 import { Market } from '../Event';
 import { Event } from '../Event';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 describe('Market domain behavior', () => {
   const createMarket = (status: 'OPEN' | 'SUSPENDED' | 'CLOSED' = 'OPEN') =>

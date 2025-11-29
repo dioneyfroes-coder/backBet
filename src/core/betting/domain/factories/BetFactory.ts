@@ -1,6 +1,6 @@
 import { Bet } from '../entities/Bet';
 import { BetAmount } from '../value-objects/BetAmount';
-import { Odds } from '../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { BetType } from '../../types/bet.types';
 import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 

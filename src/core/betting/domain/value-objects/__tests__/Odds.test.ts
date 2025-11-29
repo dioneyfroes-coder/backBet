@@ -1,4 +1,4 @@
-import { Odds } from '../Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 describe('Odds value object', () => {

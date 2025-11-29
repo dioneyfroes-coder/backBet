@@ -1,6 +1,6 @@
 import { EventRepository } from '../../repositories/EventRepository';
 import { Event, Market } from '../../entities/Event';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 describe('EventRepository in-memory', () => {
   const buildEvent = (id: string) =>

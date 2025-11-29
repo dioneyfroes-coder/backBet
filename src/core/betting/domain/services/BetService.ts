@@ -8,7 +8,7 @@ import { IEventRepository } from '../repositories/IEventRepository';
 import { IWalletService } from '@/core/finance/domain/services/IWalletService';
 import { ICreateBetDTO, ICancelBetDTO, IResolveBetDTO } from '../../types/bet.types';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
-import { Odds } from '../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 export class BetService {
   constructor(

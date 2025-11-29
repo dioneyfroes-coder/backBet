@@ -1,6 +1,6 @@
 import { Bet } from '../Bet';
 import { BetAmount } from '../../value-objects/BetAmount';
-import { Odds } from '../../value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 const makeBet = (): Bet => {
   const amount = new BetAmount(100, 'BRL');

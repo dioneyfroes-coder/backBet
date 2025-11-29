@@ -2,7 +2,7 @@ import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepositor
 import { Bet } from '@/core/betting/domain/entities/Bet';
 import { BetStatus, BetType } from '@/core/betting/types/bet.types';
 import { BetAmount } from '@/core/betting/domain/value-objects/BetAmount';
-import { Odds } from '@/core/betting/domain/value-objects/Odds';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { AppError } from '@/shared/errors/AppError';
 import { BetModel, IBetDocument } from '../schemas/BetSchema';
 
