@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { protectedRoute } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
 import { cacheUserProfileMiddleware } from '../middleware/cacheMiddleware';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '@core/user/domain/services/UserService';
@@ -20,8 +20,8 @@ export type UserRoutesDeps = {
 export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const userRepository = deps.userRepository ?? (await createUserRepository());
-  const userService = new UserService(userRepository as any);
+  const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
+  const userService = new UserService(userRepository);
 
   // Use-cases
   const getUserProfileUseCase = new GetUserProfile(userService);
@@ -39,19 +39,19 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     '/me',
     protectedRoute,
     cacheUserProfileMiddleware,
-    asyncHandler((req, res) => userController.getMe(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => userController.getMe(req, res)),
   );
 
   router.patch(
     '/me',
     protectedRoute,
-    asyncHandler((req, res) => userController.updateProfile(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => userController.updateProfile(req, res)),
   );
 
   router.patch(
     '/me/email',
     protectedRoute,
-    asyncHandler((req, res) => userController.changeEmail(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => userController.changeEmail(req, res)),
   );
 
   return router;

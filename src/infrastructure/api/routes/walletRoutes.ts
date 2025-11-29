@@ -4,7 +4,7 @@ import {
   cacheWalletBalanceMiddleware,
   cacheWalletHistoryMiddleware,
 } from '../middleware/cacheMiddleware';
-import { protectedRoute } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
@@ -26,8 +26,9 @@ export type WalletRoutesDeps = {
 export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
-  const walletService = new WalletService(walletRepository as any);
+  const walletRepository: IWalletRepository =
+    deps.walletRepository ?? (await createWalletRepository());
+  const walletService = new WalletService(walletRepository);
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
@@ -57,28 +58,28 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     '/me',
     protectedRoute,
     cacheWalletBalanceMiddleware,
-    asyncHandler((req, res) => walletController.getMe(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => walletController.getMe(req, res)),
   );
 
   router.post(
     '/deposit',
     protectedRoute,
     depositLimiter,
-    asyncHandler((req, res) => walletController.deposit(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => walletController.deposit(req, res)),
   );
 
   router.post(
     '/withdraw',
     protectedRoute,
     withdrawLimiter,
-    asyncHandler((req, res) => walletController.withdraw(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => walletController.withdraw(req, res)),
   );
 
   router.get(
     '/history',
     protectedRoute,
     cacheWalletHistoryMiddleware,
-    asyncHandler((req, res) => walletController.getHistory(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => walletController.getHistory(req, res)),
   );
 
   return router;

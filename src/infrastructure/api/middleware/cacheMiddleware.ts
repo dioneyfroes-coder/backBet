@@ -4,8 +4,8 @@ import { cacheConfig } from '@/shared/config/cacheConfig';
 import { cacheKeys, cacheTTL } from '@/infrastructure/cache/cacheKeys';
 import { AuthenticatedRequest } from './AuthMiddleware';
 
-type CacheResponseOptions = {
-  key: (req: Request) => string | null;
+type CacheResponseOptions<Req extends Request> = {
+  key: (req: Req) => string | null;
   ttlSeconds?: number;
   statusCodeOnHit?: number;
 };
@@ -15,8 +15,12 @@ const safeParseNumber = (value: unknown, fallback: number): number => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
-export const cacheResponse = ({ key, ttlSeconds, statusCodeOnHit = 200 }: CacheResponseOptions) => {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const cacheResponse = <Req extends Request = Request, ResBody = unknown>({
+  key,
+  ttlSeconds,
+  statusCodeOnHit = 200,
+}: CacheResponseOptions<Req>) => {
+  return async (req: Req, res: Response<ResBody>, next: NextFunction): Promise<void> => {
     if (!cacheConfig.enabled) {
       return next();
     }
@@ -26,7 +30,7 @@ export const cacheResponse = ({ key, ttlSeconds, statusCodeOnHit = 200 }: CacheR
     }
 
     try {
-      const cached = await redisClient.get<any>(cacheKey);
+      const cached = await redisClient.get<ResBody>(cacheKey);
       if (cached) {
         res.status(statusCodeOnHit);
         res.json(cached);
@@ -37,24 +41,26 @@ export const cacheResponse = ({ key, ttlSeconds, statusCodeOnHit = 200 }: CacheR
     }
 
     const originalJson = res.json.bind(res);
-    res.json = (body: any) => {
+    res.json = ((body?: ResBody) => {
+      if (typeof body === 'undefined') {
+        return originalJson(body);
+      }
       const ttl = ttlSeconds ?? cacheConfig.defaultTTLSeconds;
       redisClient.set(cacheKey, body, ttl).catch((error) => {
         console.warn('Cache write failed', cacheKey, error);
       });
       return originalJson(body);
-    };
+    }) as typeof res.json;
 
     next();
   };
 };
 
 const buildAuthenticatedCacheKey = (
-  req: Request,
+  req: AuthenticatedRequest,
   formatter: (userId: string) => string,
 ): string | null => {
-  const authReq = req as AuthenticatedRequest;
-  const userId = authReq.auth?.userId;
+  const userId = req.auth?.userId;
   if (!userId) {
     return null;
   }
@@ -62,26 +68,25 @@ const buildAuthenticatedCacheKey = (
 };
 
 export const cacheWalletBalanceMiddleware = cacheResponse({
-  key: (req) => buildAuthenticatedCacheKey(req, cacheKeys.walletBalance),
+  key: (req: AuthenticatedRequest) => buildAuthenticatedCacheKey(req, cacheKeys.walletBalance),
   ttlSeconds: cacheTTL.walletBalance,
 });
 
 export const cacheWalletHistoryMiddleware = cacheResponse({
-  key: (req) => {
-    const authReq = req as AuthenticatedRequest;
+  key: (req: AuthenticatedRequest) => {
     const baseKey = buildAuthenticatedCacheKey(req, cacheKeys.walletHistory);
     if (!baseKey) {
       return null;
     }
-    const limit = safeParseNumber(authReq.query.limit ?? '10', 10);
-    const offset = safeParseNumber(authReq.query.offset ?? '0', 0);
+    const limit = safeParseNumber(req.query.limit ?? '10', 10);
+    const offset = safeParseNumber(req.query.offset ?? '0', 0);
     return `${baseKey}:limit=${limit}:offset=${offset}`;
   },
   ttlSeconds: cacheTTL.walletHistory,
 });
 
 export const cacheUserProfileMiddleware = cacheResponse({
-  key: (req) => buildAuthenticatedCacheKey(req, cacheKeys.userProfile),
+  key: (req: AuthenticatedRequest) => buildAuthenticatedCacheKey(req, cacheKeys.userProfile),
   ttlSeconds: cacheTTL.userProfile,
 });
 

@@ -9,7 +9,9 @@ describe('MongooseRiskRepository (mocked model)', () => {
 
   it('should return profile from findOne', async () => {
     const fakeDoc = { userId: 'user-x', exposure: 150, maxExposure: 500 } as any;
-    jest.spyOn(RiskProfileModel, 'findOne').mockReturnValue({ lean: jest.fn().mockResolvedValue(fakeDoc) } as any);
+    jest
+      .spyOn(RiskProfileModel, 'findOne')
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue(fakeDoc) } as any);
 
     const repo = new MongooseRiskRepository();
     const p = await repo.getByUserId('user-x');
@@ -27,7 +29,10 @@ describe('MongooseRiskRepository (mocked model)', () => {
   });
 
   it('should call findOneAndUpdate on decreaseExposure and normalize negative', async () => {
-    const spy = jest.spyOn(RiskProfileModel, 'findOneAndUpdate').mockResolvedValue({ _id: 'abc', exposure: -10 } as any);
+    const leanResult = { _id: 'abc', exposure: -10 } as any;
+    const spy = jest
+      .spyOn(RiskProfileModel, 'findOneAndUpdate')
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue(leanResult) } as any);
     const findById = jest.spyOn(RiskProfileModel, 'findByIdAndUpdate').mockResolvedValue({} as any);
 
     const repo = new MongooseRiskRepository();
@@ -38,7 +43,9 @@ describe('MongooseRiskRepository (mocked model)', () => {
   });
 
   it('should return exposure via getExposure', async () => {
-    jest.spyOn(RiskProfileModel, 'findOne').mockReturnValue({ lean: jest.fn().mockResolvedValue({ exposure: 77 } as any) } as any);
+    jest
+      .spyOn(RiskProfileModel, 'findOne')
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue({ exposure: 77 } as any) } as any);
     const repo = new MongooseRiskRepository();
     const v = await repo.getExposure('u2');
     expect(v).toBe(77);

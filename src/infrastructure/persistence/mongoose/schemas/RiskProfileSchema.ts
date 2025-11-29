@@ -18,4 +18,7 @@ const riskProfileSchema = new Schema<IRiskProfileDocument>(
   { timestamps: true },
 );
 
-export const RiskProfileModel = mongoose.model<IRiskProfileDocument>('RiskProfile', riskProfileSchema);
+export const RiskProfileModel = mongoose.model<IRiskProfileDocument>(
+  'RiskProfile',
+  riskProfileSchema,
+);

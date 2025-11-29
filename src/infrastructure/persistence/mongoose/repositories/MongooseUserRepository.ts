@@ -8,7 +8,6 @@ export class MongooseUserRepository implements IUserRepository {
   async save(user: User): Promise<void> {
     try {
       const userData: Partial<IUserDocument> = {
-        _id: user.id as any,
         email: user.email.toString(),
         username: user.username,
         status: user.status,
@@ -18,41 +17,50 @@ export class MongooseUserRepository implements IUserRepository {
       };
 
       await UserModel.findByIdAndUpdate(user.id, userData, { upsert: true });
-    } catch (error: any) {
-      if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0];
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: number }).code === 11000 &&
+        'keyPattern' in error
+      ) {
+        const field = Object.keys((error as { keyPattern: Record<string, unknown> }).keyPattern)[0];
         throw new AppError(`Um usuário com este ${field} já existe`, 'CONFLICT', 409, { field });
       }
+      const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('Erro ao salvar usuário', 'INTERNAL_SERVER_ERROR', 500, {
-        originalError: error.message,
+        originalError,
       });
     }
   }
 
   async findById(id: string): Promise<User | null> {
     try {
-      const userData = (await UserModel.findById(id).lean()) as IUserDocument | null;
+      const userData = await UserModel.findById(id).lean<IUserDocument | null>();
       if (!userData) {
         return null;
       }
       return this.mapToDomain(userData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('Erro ao buscar usuário', 'INTERNAL_SERVER_ERROR', 500, {
-        originalError: error.message,
+        originalError,
       });
     }
   }
 
   async findByEmail(email: string): Promise<User | null> {
     try {
-      const userData = (await UserModel.findOne({ email }).lean()) as IUserDocument | null;
+      const userData = await UserModel.findOne({ email }).lean<IUserDocument | null>();
       if (!userData) {
         return null;
       }
       return this.mapToDomain(userData);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('Erro ao buscar usuário por email', 'INTERNAL_SERVER_ERROR', 500, {
-        originalError: error.message,
+        originalError,
       });
     }
   }
@@ -69,19 +77,20 @@ export class MongooseUserRepository implements IUserRepository {
       if (!result) {
         throw new AppError('Usuário não encontrado', 'NOT_FOUND', 404);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof AppError) {
         throw error;
       }
+      const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('Erro ao atualizar usuário', 'INTERNAL_SERVER_ERROR', 500, {
-        originalError: error.message,
+        originalError,
       });
     }
   }
 
   private mapToDomain(data: IUserDocument): User {
     return new User(
-      data._id!.toString(),
+      data._id?.toString() ?? '',
       new Email(data.email),
       data.username,
       data.passwordHash,

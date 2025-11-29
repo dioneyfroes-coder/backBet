@@ -10,7 +10,10 @@ export class InMemoryRiskRepository implements IRiskRepository {
   }
 
   async upsert(profile: RiskProfile): Promise<void> {
-    this.store.set(profile.userId, new RiskProfile(profile.userId, profile.exposure, profile.maxExposure));
+    this.store.set(
+      profile.userId,
+      new RiskProfile(profile.userId, profile.exposure, profile.maxExposure),
+    );
   }
 
   async increaseExposure(userId: string, amount: number): Promise<void> {

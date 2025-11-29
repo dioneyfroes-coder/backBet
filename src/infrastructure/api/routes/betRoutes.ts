@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { protectedRoute } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { cacheEventOddsMiddleware } from '../middleware/cacheMiddleware';
 import { BetController } from '../controllers/BetController';
@@ -21,6 +21,7 @@ import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository
 import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { appConfig } from '@/shared/config/appConfig';
+import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 
 export type BetRoutesDeps = {
   betRepository?: IBetRepository;
@@ -31,15 +32,16 @@ export type BetRoutesDeps = {
 export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const betRepository = deps.betRepository ?? (await createBetRepository());
-  const eventRepository = deps.eventRepository ?? (await createEventRepository());
-  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
-  const walletService = new WalletService(walletRepository as any);
+  const betRepository: IBetRepository = deps.betRepository ?? (await createBetRepository());
+  const eventRepository: IEventRepository = deps.eventRepository ?? (await createEventRepository());
+  const walletRepository: IWalletRepository =
+    deps.walletRepository ?? (await createWalletRepository());
+  const walletService = new WalletService(walletRepository);
 
-  const riskRepository = await createRiskRepository();
-  const riskService = new RiskService(riskRepository as any, betRepository as any);
+  const riskRepository: IRiskRepository = await createRiskRepository();
+  const riskService = new RiskService(riskRepository, betRepository);
 
-  const betService = new BetService(betRepository as any, eventRepository as any, walletService, riskService);
+  const betService = new BetService(betRepository, eventRepository, walletService, riskService);
 
   // use-cases (thin wrappers / orchestration)
   const placeBetUseCase = new PlaceBetUseCase(betService);
@@ -73,18 +75,18 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
     '/',
     protectedRoute,
     placeLimiter,
-    asyncHandler((req, res) => betController.placeBet(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => betController.placeBet(req, res)),
   );
   router.post(
     '/:betId/cancel',
     protectedRoute,
     cancelLimiter,
-    asyncHandler((req, res) => betController.cancelBet(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => betController.cancelBet(req, res)),
   );
   router.get(
     '/me',
     protectedRoute,
-    asyncHandler((req, res) => betController.getMyBets(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res) => betController.getMyBets(req, res)),
   );
 
   return router;

@@ -30,7 +30,13 @@ export class BetService {
 
     // Risk check (if configured) before withdrawing funds
     if (this.riskService) {
-      const allowed = await this.riskService.canPlaceBet(input.userId, input.amount, odd.value, input.eventId, input.marketId);
+      const allowed = await this.riskService.canPlaceBet(
+        input.userId,
+        input.amount,
+        odd.value,
+        input.eventId,
+        input.marketId,
+      );
       if (!allowed) {
         throw new DomainError({ code: 'RISK_REJECTED', message: 'Bet rejected by risk rules' });
       }

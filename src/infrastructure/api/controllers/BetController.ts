@@ -90,7 +90,7 @@ export class BetController extends BaseController {
       marketId: payload.marketId,
       oddId: payload.oddId,
       amount: payload.amount,
-      type: payload.type as any,
+      type: payload.type === 'MULTIPLE' ? 'MULTIPLE' : 'SINGLE',
     });
     await flushEventOddsCache(payload.eventId).catch((error) =>
       console.warn('Failed to flush event cache', error),

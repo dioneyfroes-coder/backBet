@@ -60,7 +60,10 @@ export class Odds {
 
   compareTo(other: Odds): number {
     if (!(other instanceof Odds)) {
-      throw new DomainError({ code: 'ODDS_COMPARISON_ERROR', message: 'Can only compare Odds instances' });
+      throw new DomainError({
+        code: 'ODDS_COMPARISON_ERROR',
+        message: 'Can only compare Odds instances',
+      });
     }
     if (this.value === other.value) {
       return 0;
@@ -85,10 +88,18 @@ export class Odds {
 
   static fromFractional(numerator: number, denominator: number): Odds {
     if (!Number.isFinite(numerator) || numerator <= 0) {
-      throw new DomainError({ code: 'ODDS_INVALID_FRACTION', message: 'Fractional numerator must be > 0', details: { numerator } });
+      throw new DomainError({
+        code: 'ODDS_INVALID_FRACTION',
+        message: 'Fractional numerator must be > 0',
+        details: { numerator },
+      });
     }
     if (!Number.isFinite(denominator) || denominator <= 0) {
-      throw new DomainError({ code: 'ODDS_INVALID_FRACTION', message: 'Fractional denominator must be > 0', details: { denominator } });
+      throw new DomainError({
+        code: 'ODDS_INVALID_FRACTION',
+        message: 'Fractional denominator must be > 0',
+        details: { denominator },
+      });
     }
     const decimal = numerator / denominator + 1;
     return new Odds(Number(decimal.toFixed(4)));
@@ -104,7 +115,11 @@ export class Odds {
 
   static fromAmerican(american: number): Odds {
     if (!Number.isFinite(american) || Math.abs(american) < 100) {
-      throw new DomainError({ code: 'ODDS_INVALID_AMERICAN', message: 'American odds must be >= |100|', details: { american } });
+      throw new DomainError({
+        code: 'ODDS_INVALID_AMERICAN',
+        message: 'American odds must be >= |100|',
+        details: { american },
+      });
     }
 
     let decimal: number;
@@ -125,7 +140,10 @@ export class Odds {
       case OddFormat.AMERICAN:
         return this.toAmerican();
       default:
-        throw new DomainError({ code: 'ODDS_UNSUPPORTED_FORMAT', message: `Unsupported format ${format}` });
+        throw new DomainError({
+          code: 'ODDS_UNSUPPORTED_FORMAT',
+          message: `Unsupported format ${format}`,
+        });
     }
   }
 
@@ -146,7 +164,10 @@ export class Odds {
       const numerator = Math.round(value * denominator);
       const approximation = numerator / denominator;
       if (Math.abs(approximation - value) <= Odds.FRACTION_PRECISION) {
-        const { reducedNumerator, reducedDenominator } = Odds.reduceFraction(Math.abs(numerator), denominator);
+        const { reducedNumerator, reducedDenominator } = Odds.reduceFraction(
+          Math.abs(numerator),
+          denominator,
+        );
         return { numerator: reducedNumerator, denominator: reducedDenominator };
       }
     }
@@ -155,7 +176,10 @@ export class Odds {
     return { numerator: reduced.reducedNumerator, denominator: reduced.reducedDenominator };
   }
 
-  private static reduceFraction(numerator: number, denominator: number): { reducedNumerator: number; reducedDenominator: number } {
+  private static reduceFraction(
+    numerator: number,
+    denominator: number,
+  ): { reducedNumerator: number; reducedDenominator: number } {
     const gcd = Odds.greatestCommonDivisor(numerator, denominator);
     return {
       reducedNumerator: numerator / gcd,

@@ -1,9 +1,16 @@
 import 'dotenv/config';
+import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
+import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
+import { IEventRepository } from '@/core/betting/domain/repositories/IEventRepository';
+import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
+import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
 // Lazy imports to avoid loading mongoose models when not needed
-export async function createUserRepository() {
+export async function createUserRepository(): Promise<IUserRepository> {
   if (USE_MONGOOSE) {
     const { MongooseUserRepository } = await import(
       './mongoose/repositories/MongooseUserRepository'
@@ -14,7 +21,7 @@ export async function createUserRepository() {
   return new UserRepository();
 }
 
-export async function createWalletRepository() {
+export async function createWalletRepository(): Promise<IWalletRepository> {
   if (USE_MONGOOSE) {
     const { MongooseWalletRepository } = await import(
       './mongoose/repositories/MongooseWalletRepository'
@@ -25,7 +32,7 @@ export async function createWalletRepository() {
   return new WalletRepository();
 }
 
-export async function createBetRepository() {
+export async function createBetRepository(): Promise<IBetRepository> {
   if (USE_MONGOOSE) {
     const { MongooseBetRepository } = await import('./mongoose/repositories/MongooseBetRepository');
     return new MongooseBetRepository();
@@ -34,13 +41,13 @@ export async function createBetRepository() {
   return new BetRepository();
 }
 
-export async function createEventRepository() {
+export async function createEventRepository(): Promise<IEventRepository> {
   // Events currently only have in-memory implementation
   const { EventRepository } = await import('@/core/betting/domain/repositories/EventRepository');
   return new EventRepository();
 }
 
-export async function createCreditPackageRepository() {
+export async function createCreditPackageRepository(): Promise<ICreditPackageRepository> {
   if (USE_MONGOOSE) {
     const { MongooseCreditPackageRepository } = await import(
       './mongoose/repositories/MongooseCreditPackageRepository'
@@ -53,7 +60,7 @@ export async function createCreditPackageRepository() {
   return new CreditPackageRepository();
 }
 
-export async function createWithdrawalRequestRepository() {
+export async function createWithdrawalRequestRepository(): Promise<IWithdrawalRequestRepository> {
   if (USE_MONGOOSE) {
     const { MongooseWithdrawalRequestRepository } = await import(
       './mongoose/repositories/MongooseWithdrawalRequestRepository'
@@ -66,13 +73,13 @@ export async function createWithdrawalRequestRepository() {
   return new WithdrawalRequestRepository();
 }
 
-export async function createRiskRepository() {
+export async function createRiskRepository(): Promise<IRiskRepository> {
   if (USE_MONGOOSE) {
-    const { MongooseRiskRepository } = await import('./mongoose/repositories/MongooseRiskRepository');
+    const { MongooseRiskRepository } = await import(
+      './mongoose/repositories/MongooseRiskRepository'
+    );
     return new MongooseRiskRepository();
   }
-  const { InMemoryRiskRepository } = await import(
-    './inmemory/repositories/InMemoryRiskRepository'
-  );
+  const { InMemoryRiskRepository } = await import('./inmemory/repositories/InMemoryRiskRepository');
   return new InMemoryRiskRepository();
 }

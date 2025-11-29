@@ -9,7 +9,10 @@ export class RiskService {
   // If repository is provided, use it; otherwise fallback to in-memory map for compatibility/tests
   private profiles: Map<string, RiskProfile> = new Map();
 
-  constructor(private riskRepository?: IRiskRepository, private betRepository?: IBetRepository) {}
+  constructor(
+    private riskRepository?: IRiskRepository,
+    private betRepository?: IBetRepository,
+  ) {}
 
   getMaxExposure(): number {
     return RISK_CONFIG.MAX_EXPOSURE_PER_USER;
@@ -73,35 +76,84 @@ export class RiskService {
       const bets = await this.betRepository.findByUserId(userId);
       const now = Date.now();
       const windowStart = now - RISK_CONFIG.VELOCITY_WINDOW_SECONDS * 1000;
-      const recentPending = bets.filter((b) => b.status === 'PENDING' && b.createdAt.getTime() >= windowStart);
+      const recentPending = bets.filter(
+        (b) => b.status === 'PENDING' && b.createdAt.getTime() >= windowStart,
+      );
       if (recentPending.length + 1 > RISK_CONFIG.MAX_BETS_PER_WINDOW) {
-        writeStructuredLog({ event: 'risk_reject', userId, reason: 'velocity_limit', count: recentPending.length + 1 }, 'warn');
+        writeStructuredLog(
+          {
+            event: 'risk_reject',
+            userId,
+            reason: 'velocity_limit',
+            count: recentPending.length + 1,
+          },
+          'warn',
+        );
         return false;
       }
 
       // per-event and per-market exposure checks
       if (eventId) {
-        const pendingSameEvent = bets.filter((b) => b.status === 'PENDING' && b.eventId === eventId);
-        const exposureSameEvent = pendingSameEvent.reduce((acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)), 0);
+        const pendingSameEvent = bets.filter(
+          (b) => b.status === 'PENDING' && b.eventId === eventId,
+        );
+        const exposureSameEvent = pendingSameEvent.reduce(
+          (acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)),
+          0,
+        );
         if (exposureSameEvent + liability > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
-          writeStructuredLog({ event: 'risk_reject', userId, reason: 'event_exposure_limit', eventId, exposureSameEvent, liability }, 'warn');
+          writeStructuredLog(
+            {
+              event: 'risk_reject',
+              userId,
+              reason: 'event_exposure_limit',
+              eventId,
+              exposureSameEvent,
+              liability,
+            },
+            'warn',
+          );
           return false;
         }
       }
 
       if (marketId) {
-        const pendingSameMarket = bets.filter((b) => b.status === 'PENDING' && b.marketId === marketId);
-        const exposureSameMarket = pendingSameMarket.reduce((acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)), 0);
+        const pendingSameMarket = bets.filter(
+          (b) => b.status === 'PENDING' && b.marketId === marketId,
+        );
+        const exposureSameMarket = pendingSameMarket.reduce(
+          (acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)),
+          0,
+        );
         if (exposureSameMarket + liability > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {
-          writeStructuredLog({ event: 'risk_reject', userId, reason: 'market_exposure_limit', marketId, exposureSameMarket, liability }, 'warn');
+          writeStructuredLog(
+            {
+              event: 'risk_reject',
+              userId,
+              reason: 'market_exposure_limit',
+              marketId,
+              exposureSameMarket,
+              liability,
+            },
+            'warn',
+          );
           return false;
         }
       }
-
     }
 
     if (currentExposure + liability > maxExposure) {
-      writeStructuredLog({ event: 'risk_reject', userId, reason: 'exceeds_max_exposure', currentExposure, liability, maxExposure }, 'warn');
+      writeStructuredLog(
+        {
+          event: 'risk_reject',
+          userId,
+          reason: 'exceeds_max_exposure',
+          currentExposure,
+          liability,
+          maxExposure,
+        },
+        'warn',
+      );
       return false;
     }
 
@@ -113,7 +165,8 @@ export class RiskService {
       await this.riskRepository.increaseExposure(userId, amount);
       return;
     }
-    const profile = this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER);
+    const profile =
+      this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER);
     profile.increaseExposure(amount);
     this.profiles.set(userId, profile);
   }
@@ -129,5 +182,3 @@ export class RiskService {
     this.profiles.set(userId, profile);
   }
 }
-
-

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { AuthController } from '../controllers/AuthController';
 import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
-import { protectedRoute } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
 import { UserService } from '../../../core/user/domain/services/UserService';
 import { WalletService } from '../../../core/finance/domain/services/WalletService';
 import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
@@ -38,12 +38,13 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   });
 
   // Instanciar repositórios via factory
-  const userRepository = deps.userRepository ?? (await createUserRepository());
-  const walletRepository = deps.walletRepository ?? (await createWalletRepository());
+  const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
+  const walletRepository: IWalletRepository =
+    deps.walletRepository ?? (await createWalletRepository());
 
   // Instanciar serviços
-  const userService = new UserService(userRepository as any);
-  const walletService = new WalletService(walletRepository as any);
+  const userService = new UserService(userRepository);
+  const walletService = new WalletService(walletRepository);
   const jwtService = deps.jwtService ?? new JwtService();
 
   // Use-cases
@@ -84,7 +85,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   router.get(
     '/me',
     protectedRoute,
-    asyncHandler((req: Request, res: Response) => authController.me(req as any, res)),
+    asyncHandler((req: AuthenticatedRequest, res: Response) => authController.me(req, res)),
   );
 
   /**
@@ -104,7 +105,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   router.post(
     '/logout',
     protectedRoute,
-    asyncHandler((req: Request, res: Response) => authController.logout(req as any, res)),
+    asyncHandler((req: AuthenticatedRequest, res: Response) => authController.logout(req, res)),
   );
 
   return router;

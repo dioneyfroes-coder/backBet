@@ -1,5 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import { clerkMiddleware, requireAuth } from '@clerk/express';
+import { clerkMiddleware } from '@clerk/express';
 import cors, { CorsOptions } from 'cors';
 import helmet, { HelmetOptions } from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -35,6 +35,8 @@ import {
 } from '@/infrastructure/observability/resilienceMetrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { getObservabilityToggles } from '@/shared/observability/featureToggles';
+import { AuthenticatedRequest } from './middleware/AuthMiddleware';
+import { RequestWithContext } from '@/types/http';
 
 const MONGO_PING_RETRY_OPTIONS = {
   maxAttempts: 2,
@@ -43,6 +45,8 @@ const MONGO_PING_RETRY_OPTIONS = {
   jitter: 0.2,
   onRetry: () => recordRetryAttempt('mongo'),
 };
+
+type HealthCheckMap = Record<string, Record<string, unknown>>;
 
 export class ApiServer {
   private app: Express;
@@ -136,13 +140,13 @@ export class ApiServer {
 
     if (allowDevBypass) {
       // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
-      this.app.use((req: Request, res: Response, next: NextFunction) => {
+      this.app.use((req: AuthenticatedRequest, res: Response, next: NextFunction) => {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
           const token = authHeader.substring(7).trim();
           const looksLikeJwt = token.split('.').length === 3;
           if (!looksLikeJwt) {
-            (req as any).auth = {
+            req.auth = {
               userId: token,
               sessionId: 'dev-session',
             };
@@ -175,13 +179,17 @@ export class ApiServer {
     }
   }
 
-  private requestIdMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  private requestIdMiddleware = (
+    req: RequestWithContext,
+    res: Response,
+    next: NextFunction,
+  ): void => {
     const requestId =
       (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
       `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     const initialiseContext = () => {
-      (req as any).id = requestId;
+      req.id = requestId;
       res.setHeader('X-Request-ID', requestId);
       next();
     };
@@ -189,10 +197,14 @@ export class ApiServer {
     runWithRequestContext({ requestId, userId: undefined }, initialiseContext);
   };
 
-  private loggingMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  private loggingMiddleware = (
+    req: RequestWithContext,
+    res: Response,
+    next: NextFunction,
+  ): void => {
     const start = process.hrtime();
-    const requestId = (req as any).id;
-    const userId = (req as any).auth?.userId || (req as any).user?.id;
+    const requestId = req.id;
+    const userId = req.auth?.userId || req.user?.id;
     const clientIpHeader = req.headers['x-forwarded-for'];
     const clientIp = Array.isArray(clientIpHeader)
       ? clientIpHeader[0]
@@ -229,13 +241,25 @@ export class ApiServer {
     next();
   };
 
-  private metricsMiddleware = (req: Request, res: Response, next: NextFunction): void => {
+  private metricsMiddleware = (
+    req: RequestWithContext,
+    res: Response,
+    next: NextFunction,
+  ): void => {
     if (req.path === '/metrics') {
       return next();
     }
 
-    const getRouteLabel = () =>
-      (req.route && (req.route as any).path) || req.path || req.originalUrl;
+    const getRouteLabel = () => {
+      const routePath = req.route?.path;
+      if (typeof routePath === 'string') {
+        return routePath;
+      }
+      if (routePath instanceof RegExp) {
+        return routePath.source;
+      }
+      return req.path || req.originalUrl;
+    };
     const method = req.method;
     const start = process.hrtime();
     httpActiveRequests.labels(method, getRouteLabel()).inc();
@@ -353,13 +377,14 @@ export class ApiServer {
   }
 
   public registerErrorHandler(): void {
-    this.app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-      const statusCode = err.statusCode || err.status || 500;
-      const code = err.code || 'INTERNAL_SERVER_ERROR';
+    this.app.use((err: unknown, req: RequestWithContext, res: Response, _next: NextFunction) => {
+      const normalizedError = this.normalizeError(err);
+      const statusCode = normalizedError.statusCode ?? normalizedError.status ?? 500;
+      const code = normalizedError.code ?? 'INTERNAL_SERVER_ERROR';
       const requestContextSnapshot = getRequestContext();
-      const requestId = requestContextSnapshot?.requestId || (req as any).id;
+      const requestId = requestContextSnapshot?.requestId || req.id;
       const timestamp = new Date().toISOString();
-      const message = err.message || 'Erro interno inesperado';
+      const message = normalizedError.message ?? 'Erro interno inesperado';
 
       writeStructuredLog(
         {
@@ -369,7 +394,7 @@ export class ApiServer {
           statusCode,
           code,
           requestId,
-          details: err.details,
+          details: normalizedError.details,
         },
         'error',
       );
@@ -379,7 +404,7 @@ export class ApiServer {
         error: {
           code,
           message,
-          details: err.details,
+          details: normalizedError.details,
         },
         meta: {
           timestamp,
@@ -401,8 +426,8 @@ export class ApiServer {
     });
   }
 
-  private readinessHandler = async (_req: Request, res: Response): Promise<void> => {
-    const checks: Record<string, any> = {};
+  private readinessHandler = async (_req: RequestWithContext, res: Response): Promise<void> => {
+    const checks: HealthCheckMap = {};
     let ready = true;
     const timestamp = new Date().toISOString();
 
@@ -427,11 +452,12 @@ export class ApiServer {
             breakerState: redisCircuitBreaker.getState(),
           };
           this.setDependencyHealthMetric('redis', 1);
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Redis ping failed';
           ready = false;
           checks.redis = {
             status: 'down',
-            error: error?.message ?? 'Redis ping failed',
+            error: message,
             breakerState: redisCircuitBreaker.getState(),
           };
           this.setDependencyHealthMetric('redis', 0);
@@ -479,12 +505,13 @@ export class ApiServer {
               breakerState: mongoCircuitBreaker.getState(),
             };
             this.setDependencyHealthMetric('mongo', 1);
-          } catch (error: any) {
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Mongo ping failed';
             ready = false;
             checks.mongo = {
               status: 'down',
               state: mappedState,
-              error: error?.message ?? 'Mongo ping failed',
+              error: message,
               breakerState: mongoCircuitBreaker.getState(),
             };
             this.setDependencyHealthMetric('mongo', 0);
@@ -539,6 +566,25 @@ export class ApiServer {
       recordRetryFailure('mongo');
       throw error;
     }
+  }
+
+  private normalizeError(err: unknown): {
+    statusCode?: number;
+    status?: number;
+    code?: string;
+    message?: string;
+    details?: unknown;
+  } {
+    if (typeof err === 'object' && err !== null) {
+      return err as {
+        statusCode?: number;
+        status?: number;
+        code?: string;
+        message?: string;
+        details?: unknown;
+      };
+    }
+    return {};
   }
 }
 

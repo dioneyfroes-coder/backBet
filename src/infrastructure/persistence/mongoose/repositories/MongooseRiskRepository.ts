@@ -3,15 +3,35 @@ import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { RiskProfileModel } from '../schemas/RiskProfileSchema';
 import { AppError } from '@/shared/errors/AppError';
 
+type RiskProfileRecord = {
+  _id?: string | { toString(): string };
+  userId: string;
+  exposure: number;
+  maxExposure: number;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'unknown';
+
+const normalizeRecordId = (id?: RiskProfileRecord['_id']): string | null => {
+  if (!id) {
+    return null;
+  }
+  return typeof id === 'string' ? id : id.toString();
+};
+
+const mapToDomain = (record: RiskProfileRecord): RiskProfile =>
+  new RiskProfile(record.userId, record.exposure, record.maxExposure);
+
 export class MongooseRiskRepository implements IRiskRepository {
   async getByUserId(userId: string): Promise<RiskProfile | null> {
     try {
-      const doc = await RiskProfileModel.findOne({ userId }).lean();
+      const doc = await RiskProfileModel.findOne({ userId }).lean<RiskProfileRecord | null>();
       if (!doc) return null;
-      return new RiskProfile(doc.userId, doc.exposure, doc.maxExposure);
-    } catch (error: any) {
+      return mapToDomain(doc);
+    } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar perfil de risco', 500, {
-        originalError: error?.message,
+        originalError: getErrorMessage(error),
       });
     }
   }
@@ -23,9 +43,9 @@ export class MongooseRiskRepository implements IRiskRepository {
         { exposure: profile.exposure, maxExposure: profile.maxExposure },
         { upsert: true, new: true },
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar perfil de risco', 500, {
-        originalError: error?.message,
+        originalError: getErrorMessage(error),
       });
     }
   }
@@ -37,9 +57,9 @@ export class MongooseRiskRepository implements IRiskRepository {
         { $inc: { exposure: amount } },
         { upsert: true },
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao incrementar exposição', 500, {
-        originalError: error?.message,
+        originalError: getErrorMessage(error),
       });
     }
   }
@@ -50,25 +70,28 @@ export class MongooseRiskRepository implements IRiskRepository {
         { userId },
         { $inc: { exposure: -Math.abs(amount) } },
         { new: true },
-      );
+      ).lean<RiskProfileRecord | null>();
+
       if (res && res.exposure < 0) {
-        // normalize to zero
-        await RiskProfileModel.findByIdAndUpdate(res._id, { exposure: 0 });
+        const normalizedId = normalizeRecordId(res._id);
+        if (normalizedId) {
+          await RiskProfileModel.findByIdAndUpdate(normalizedId, { exposure: 0 });
+        }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao decrementar exposição', 500, {
-        originalError: error?.message,
+        originalError: getErrorMessage(error),
       });
     }
   }
 
   async getExposure(userId: string): Promise<number> {
     try {
-      const doc = await RiskProfileModel.findOne({ userId }).lean();
+      const doc = await RiskProfileModel.findOne({ userId }).lean<RiskProfileRecord | null>();
       return doc?.exposure ?? 0;
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição', 500, {
-        originalError: error?.message,
+        originalError: getErrorMessage(error),
       });
     }
   }

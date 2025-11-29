@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appConfig } from '@/shared/config/appConfig';
 
+const isErrnoException = (error: unknown): error is NodeJS.ErrnoException =>
+  typeof error === 'object' && error !== null && 'code' in error;
+
 interface FileLoggerOptions {
   enabled: boolean;
   filePath: string;
@@ -48,8 +51,8 @@ export class FileLogger {
     try {
       const stats = fs.statSync(this.filePath);
       this.currentSize = stats.size;
-    } catch (error: any) {
-      if (error?.code !== 'ENOENT') {
+    } catch (error: unknown) {
+      if (!isErrnoException(error) || error.code !== 'ENOENT') {
         console.warn('[file-logger] Não foi possível obter tamanho do arquivo:', error);
       }
       this.currentSize = 0;
