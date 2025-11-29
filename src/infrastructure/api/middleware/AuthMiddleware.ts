@@ -1,8 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
+import { ParamsDictionary } from 'express-serve-static-core';
+import { ParsedQs } from 'qs';
 import { JwtService } from '@/shared/services/JwtService';
 import { appConfig } from '@/shared/config/appConfig';
 
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest<
+  Params extends ParamsDictionary = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = ParsedQs,
+  Locals extends Record<string, unknown> = Record<string, unknown>,
+> extends Request<Params, ResBody, ReqBody, ReqQuery, Locals> {
   auth?: {
     userId: string;
     sessionId: string;
