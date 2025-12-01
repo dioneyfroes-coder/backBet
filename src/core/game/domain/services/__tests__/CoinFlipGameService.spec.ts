@@ -1,4 +1,7 @@
-import { CoinFlipGameService, CoinFlipConfig } from '@/core/game/domain/services/CoinFlipGameService';
+import {
+  CoinFlipGameService,
+  CoinFlipConfig,
+} from '@/core/game/domain/services/CoinFlipGameService';
 import { CoinFlipEngine } from '@/core/game/domain/services/CoinFlipEngine';
 import { InMemoryGameRoundRepository } from '@/core/game/domain/repositories/InMemoryGameRoundRepository';
 import { IWalletService } from '@/core/finance/domain/services/IWalletService';
@@ -33,13 +36,10 @@ const createService = (
     } as any);
 
   const repository = new InMemoryGameRoundRepository();
-  const service = new CoinFlipGameService(
-    walletService,
-    engine,
-    repository,
-    integrationPort,
-    { ...baseConfig, ...overridesConfig },
-  );
+  const service = new CoinFlipGameService(walletService, engine, repository, integrationPort, {
+    ...baseConfig,
+    ...overridesConfig,
+  });
 
   return { service, walletService, repository, integrationPort };
 };
@@ -60,10 +60,10 @@ describe('CoinFlipGameService', () => {
 
   it('should not credit winnings when player loses', async () => {
     const engine = new CoinFlipEngine(() => 0.9); // outcome tails
-    const walletService = ({
+    const walletService = {
       withdraw: jest.fn().mockResolvedValue({ currency: 'USD' }),
       deposit: jest.fn(),
-    } as Partial<IWalletService>) as jest.Mocked<IWalletService>;
+    } as Partial<IWalletService> as jest.Mocked<IWalletService>;
     const { service, integrationPort } = createService({}, engine, walletService);
 
     const round = await service.play({ userId: 'user-2', choice: 'HEADS', wager: 25 });

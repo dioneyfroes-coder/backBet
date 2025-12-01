@@ -43,7 +43,10 @@ export class GameRound {
       throw new DomainError({ code: 'GAME_ROUND_INVALID_RESULT', message: 'Invalid result' });
     }
     if (!Number.isFinite(this.payoutAmount) || this.payoutAmount < 0) {
-      throw new DomainError({ code: 'GAME_ROUND_INVALID_PAYOUT', message: 'Invalid payout amount' });
+      throw new DomainError({
+        code: 'GAME_ROUND_INVALID_PAYOUT',
+        message: 'Invalid payout amount',
+      });
     }
   }
 

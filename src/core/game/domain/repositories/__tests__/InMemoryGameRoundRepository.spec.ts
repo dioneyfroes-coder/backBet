@@ -3,7 +3,18 @@ import { GameRound } from '@/core/game/domain/entities/GameRound';
 
 describe('InMemoryGameRoundRepository', () => {
   const buildRound = (id: string, userId: string, createdAt: string) =>
-    new GameRound(id, userId, 'COIN_FLIP', 10, 'BRL', 'HEADS', 'HEADS', 'WIN', 10, new Date(createdAt));
+    new GameRound(
+      id,
+      userId,
+      'COIN_FLIP',
+      10,
+      'BRL',
+      'HEADS',
+      'HEADS',
+      'WIN',
+      10,
+      new Date(createdAt),
+    );
 
   it('should store rounds and return most recent first', async () => {
     const repo = new InMemoryGameRoundRepository();

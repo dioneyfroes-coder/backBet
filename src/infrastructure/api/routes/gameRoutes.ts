@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';
-import { createWalletRepository, createGameRoundRepository } from '@/infrastructure/persistence/factory';
+import {
+  createWalletRepository,
+  createGameRoundRepository,
+} from '@/infrastructure/persistence/factory';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { CoinFlipEngine } from '@core/game/domain/services/CoinFlipEngine';
 import { CoinFlipGameService } from '@core/game/domain/services/CoinFlipGameService';
@@ -25,7 +28,8 @@ export type GameRoutesDeps = {
 export async function createGameRoutes(deps: GameRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const walletRepository: IWalletRepository = deps.walletRepository ?? (await createWalletRepository());
+  const walletRepository: IWalletRepository =
+    deps.walletRepository ?? (await createWalletRepository());
   const gameRoundRepository: IGameRoundRepository =
     deps.gameRoundRepository ?? (await createGameRoundRepository());
   const integrationAdapter: GameIntegrationPort =
@@ -70,11 +74,20 @@ export async function createGameRoutes(deps: GameRoutesDeps = {}): Promise<Route
     },
   );
 
-  router.get('/', asyncHandler((req, res) => gameController.listGames(req, res)));
+  router.get(
+    '/',
+    asyncHandler((req, res) => gameController.listGames(req, res)),
+  );
 
-  router.get('/coin-flip', asyncHandler((req, res) => gameController.getCoinFlipConfig(req, res)));
+  router.get(
+    '/coin-flip',
+    asyncHandler((req, res) => gameController.getCoinFlipConfig(req, res)),
+  );
 
-  router.get('/coin-flip/feed', asyncHandler((req, res) => gameController.getFeed(req, res)));
+  router.get(
+    '/coin-flip/feed',
+    asyncHandler((req, res) => gameController.getFeed(req, res)),
+  );
 
   router.get(
     '/coin-flip/history',

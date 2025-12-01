@@ -1,7 +1,4 @@
-import {
-  EventCatalogService,
-  EventStatusAction,
-} from '../../domain/services/EventCatalogService';
+import { EventCatalogService, EventStatusAction } from '../../domain/services/EventCatalogService';
 import { Event } from '../../domain/entities/Event';
 
 export class UpdateEventStatusUseCase {

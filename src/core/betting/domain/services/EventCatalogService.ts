@@ -51,7 +51,11 @@ export class EventCatalogService {
   async getEvent(eventId: string): Promise<Event> {
     const event = await this.eventRepository.findById(eventId);
     if (!event) {
-      throw new DomainError({ code: 'EVENT_NOT_FOUND', message: 'Event not found', details: { eventId } });
+      throw new DomainError({
+        code: 'EVENT_NOT_FOUND',
+        message: 'Event not found',
+        details: { eventId },
+      });
     }
     return event;
   }

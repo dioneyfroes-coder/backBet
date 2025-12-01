@@ -34,8 +34,14 @@ describe('GameRound', () => {
 
   it.each([
     ['invalid wager', () => new GameRound('id', 'user', 'COIN_FLIP', 0, 'BRL', 'H', 'H', 'WIN', 1)],
-    ['invalid type', () => new GameRound('id', 'user', 'INVALID' as any, 10, 'BRL', 'H', 'H', 'WIN', 1)],
-    ['invalid payout', () => new GameRound('id', 'user', 'COIN_FLIP', 10, 'BRL', 'H', 'H', 'WIN', -1)],
+    [
+      'invalid type',
+      () => new GameRound('id', 'user', 'INVALID' as any, 10, 'BRL', 'H', 'H', 'WIN', 1),
+    ],
+    [
+      'invalid payout',
+      () => new GameRound('id', 'user', 'COIN_FLIP', 10, 'BRL', 'H', 'H', 'WIN', -1),
+    ],
   ])('should throw DomainError for %s', (_label, factory) => {
     expect(factory).toThrow(DomainError);
   });

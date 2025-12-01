@@ -6,12 +6,7 @@ import { cacheConfig } from '@/shared/config/cacheConfig';
 import { cacheKeys, cacheTTL } from '@/infrastructure/cache/cacheKeys';
 import { AuthenticatedRequest } from './AuthMiddleware';
 
-type AuthedQueryRequest = AuthenticatedRequest<
-  ParamsDictionary,
-  unknown,
-  unknown,
-  ParsedQs
->;
+type AuthedQueryRequest = AuthenticatedRequest<ParamsDictionary, unknown, unknown, ParsedQs>;
 
 type CacheResponseOptions<Req extends Request> = {
   key: (req: Req) => string | null;

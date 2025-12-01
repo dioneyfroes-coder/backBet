@@ -11,6 +11,10 @@ export class PlayCoinFlipUseCase {
   constructor(private readonly gameService: CoinFlipGameService) {}
 
   async execute(input: PlayCoinFlipDTO): Promise<GameRound> {
-    return this.gameService.play({ userId: input.userId, choice: input.choice, wager: input.wager });
+    return this.gameService.play({
+      userId: input.userId,
+      choice: input.choice,
+      wager: input.wager,
+    });
   }
 }

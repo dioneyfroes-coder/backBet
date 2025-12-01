@@ -89,11 +89,7 @@ export const optionalAuth = (req: AuthenticatedRequest, _res: Response, next: Ne
   }
 };
 
-export const requireAdminRole = (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction,
-) => {
+export const requireAdminRole = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const allowedIds = appConfig.admin?.allowedUserIds ?? [];
   if (!req.auth?.userId) {
     return unauthorizedResponse(res);

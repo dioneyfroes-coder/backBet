@@ -133,17 +133,18 @@ export class ApiServer {
 
     // Clerk authentication middleware - skip in development if not configured
     const clerkSecret = process.env.CLERK_SECRET_KEY;
-    const hasValidClerkSecret = Boolean(clerkSecret && !clerkSecret.includes('sk_test'));
-    if (isProduction && !hasValidClerkSecret) {
-      throw new Error('CLERK_SECRET_KEY must be configured in production environments');
+    const isTestClerkSecret = Boolean(clerkSecret?.includes('sk_test'));
+    const hasClerkSecret = Boolean(clerkSecret && (isProduction ? !isTestClerkSecret : true));
+    if (isProduction && (!clerkSecret || isTestClerkSecret)) {
+      throw new Error('CLERK_SECRET_KEY must be a live key in production environments');
     }
 
-    const allowDevBypass =
+    const shouldEnableDevBypass =
       runtimeEnv === 'test' ||
-      (!hasValidClerkSecret && !isProduction) ||
+      (!hasClerkSecret && !isProduction) ||
       (runtimeEnv === 'development' && appConfig.security.allowDevBearerBypass);
 
-    if (allowDevBypass) {
+    if (shouldEnableDevBypass) {
       // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
       this.app.use((req: AuthenticatedRequest, res: Response, next: NextFunction) => {
         const authHeader = req.headers.authorization;
@@ -159,7 +160,9 @@ export class ApiServer {
         }
         next();
       });
-    } else {
+    }
+
+    if (hasClerkSecret) {
       // Em produção ou em desenvolvimento com valores reais, usar Clerk
       this.app.use(clerkMiddleware());
     }

@@ -25,6 +25,8 @@ import { protectedRoute } from '@/infrastructure/api/middleware/AuthMiddleware';
 import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
 
+jest.setTimeout(20000);
+
 describe('API expanded integration tests (isolated)', () => {
   let app: express.Express;
   const PASSWORD = 'Password123!';

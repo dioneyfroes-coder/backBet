@@ -15,15 +15,40 @@ export class ClerkService {
   private client?: ClerkClient;
 
   constructor() {
-    const secretKey = env.CLERK_API_KEY || env.CLERK_SECRET_KEY;
-    const isTestKey = secretKey?.includes('sk_test');
-    if (secretKey && !isTestKey) {
-      this.client = createClerkClient({
-        secretKey,
-        publishableKey: env.CLERK_PUBLISHABLE_KEY,
-        apiUrl: env.CLERK_API_URL,
-      });
+    const secretKey =
+      process.env.CLERK_API_KEY ||
+      process.env.CLERK_SECRET_KEY ||
+      env.CLERK_API_KEY ||
+      env.CLERK_SECRET_KEY;
+    const isTestKey = Boolean(secretKey?.includes('sk_test'));
+    const nodeEnv = process.env.NODE_ENV || env.NODE_ENV || 'development';
+    const runtimeEnv =
+      process.env.BACKBET_RUNTIME_ENV || env.BACKBET_RUNTIME_ENV || nodeEnv || 'development';
+    const isProduction = runtimeEnv === 'production';
+    const forceClerkInTests = process.env.CLERK_ENABLE_IN_TESTS === 'true';
+    const isTestRuntime =
+      runtimeEnv === 'test' ||
+      nodeEnv === 'test' ||
+      (Boolean(process.env.JEST_WORKER_ID) && !forceClerkInTests);
+
+    if (isTestRuntime) {
+      return;
     }
+
+    if (!secretKey) {
+      return;
+    }
+
+    if (isProduction && isTestKey) {
+      console.warn('Refusing to bootstrap ClerkService with a test key in production.');
+      return;
+    }
+
+    this.client = createClerkClient({
+      secretKey,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY,
+      apiUrl: process.env.CLERK_API_URL || env.CLERK_API_URL,
+    });
   }
 
   isEnabled(): boolean {

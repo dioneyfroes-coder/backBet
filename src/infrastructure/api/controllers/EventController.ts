@@ -64,7 +64,8 @@ export class EventController extends BaseController {
    */
   async listEvents(req: Request, res: Response) {
     try {
-      const query = (this.validateSchema(ListEventsQueryDTO, req.query) ?? {}) as ListEventsQueryDTOType;
+      const query = (this.validateSchema(ListEventsQueryDTO, req.query) ??
+        {}) as ListEventsQueryDTOType;
       const events = await this.listEventsUseCase.execute({
         status: query.status,
         category: query.category,
@@ -99,7 +100,8 @@ export class EventController extends BaseController {
    */
   async listUpcoming(req: Request, res: Response) {
     try {
-      const query = (this.validateSchema(ListEventsQueryDTO, req.query) ?? {}) as ListEventsQueryDTOType;
+      const query = (this.validateSchema(ListEventsQueryDTO, req.query) ??
+        {}) as ListEventsQueryDTOType;
       const events = await this.getUpcomingEventsUseCase.execute(query.limit);
       return this.ok(res, { events: events.map((event) => this.serializeEvent(event)) });
     } catch (error) {

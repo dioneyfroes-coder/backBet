@@ -6,7 +6,9 @@ export const createGameIntegrationAdapter = async (): Promise<GameIntegrationPor
   const integrationConfig = appConfig.games.integration;
 
   if (integrationConfig.webhookEnabled && integrationConfig.webhookUrl) {
-    const { WebhookGameIntegrationAdapter } = await import('./adapters/WebhookGameIntegrationAdapter');
+    const { WebhookGameIntegrationAdapter } = await import(
+      './adapters/WebhookGameIntegrationAdapter'
+    );
     return new WebhookGameIntegrationAdapter(integrationConfig.webhookUrl);
   }
 

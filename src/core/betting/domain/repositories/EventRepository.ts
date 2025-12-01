@@ -89,7 +89,14 @@ export class EventRepository implements IEventRepository {
     }
 
     const now = Date.now();
-    const buildMarkets = (seed: Array<{ id: string; name: string; status: MarketStatus; odds: Array<{ id: string; value: number }> }>) => {
+    const buildMarkets = (
+      seed: Array<{
+        id: string;
+        name: string;
+        status: MarketStatus;
+        odds: Array<{ id: string; value: number }>;
+      }>,
+    ) => {
       return new Map(
         seed.map((market) => [
           market.id,
@@ -110,7 +117,12 @@ export class EventRepository implements IEventRepository {
       status: EventStatus;
       category: string;
       participants: string[];
-      markets: Array<{ id: string; name: string; status: MarketStatus; odds: Array<{ id: string; value: number }> }>;
+      markets: Array<{
+        id: string;
+        name: string;
+        status: MarketStatus;
+        odds: Array<{ id: string; value: number }>;
+      }>;
     }> = [
       {
         id: 'evt-football-001',

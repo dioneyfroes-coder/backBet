@@ -158,7 +158,10 @@ export class AdminController extends BaseController {
    */
   async updateEventStatus(req: Request, res: Response) {
     try {
-      const payload = this.validateSchema(UpdateEventStatusDTO, req.body) as UpdateEventStatusDTOType;
+      const payload = this.validateSchema(
+        UpdateEventStatusDTO,
+        req.body,
+      ) as UpdateEventStatusDTOType;
       const event = await this.updateEventStatusUseCase.execute(req.params.eventId, payload.action);
       await flushEventOddsCache(event.id).catch((error) =>
         console.warn('Failed to flush cache after event status update', error),

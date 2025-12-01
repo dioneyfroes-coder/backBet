@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { AuthenticatedRequest, protectedRoute, requireAdminRole } from '../middleware/AuthMiddleware';
+import {
+  AuthenticatedRequest,
+  protectedRoute,
+  requireAdminRole,
+} from '../middleware/AuthMiddleware';
 import {
   createBetRepository,
   createEventRepository,
