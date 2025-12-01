@@ -15,6 +15,7 @@ import {
   createEventRepository,
   createCreditPackageRepository,
   createWithdrawalRequestRepository,
+  createRiskRepository,
 } from '@/infrastructure/persistence/factory';
 import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
@@ -29,6 +30,7 @@ import { IEventRepository } from '@/core/betting/domain/repositories/IEventRepos
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 
 export type ApiRoutesDeps = {
   base?: BaseRoutesDeps;
@@ -61,6 +63,8 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
     deps.finance?.creditPackageRepository || (await createCreditPackageRepository());
   const withdrawalRequestRepository: IWithdrawalRequestRepository =
     deps.finance?.withdrawalRequestRepository || (await createWithdrawalRequestRepository());
+  const riskRepository: IRiskRepository =
+    deps.admin?.riskRepository || (await createRiskRepository());
 
   // SERVICES for lazy user creation
   const userService = new UserService(userRepository);
@@ -200,7 +204,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
       betRepository: deps.admin?.betRepository ?? betRepository,
       eventRepository: deps.admin?.eventRepository ?? eventRepository,
       walletRepository: deps.admin?.walletRepository ?? walletRepository,
-      riskRepository: deps.admin?.riskRepository ?? riskRepository,
+      riskRepository,
       dependencyHealthProvider:
         deps.admin?.dependencyHealthProvider ?? deps.base?.dependencyHealthProvider,
     }),
