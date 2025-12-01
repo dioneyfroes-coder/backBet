@@ -1,0 +1,152 @@
+---
+title: "Integração com Games"
+description: "Como autenticar clientes e consumir o módulo de mini games do BackBet"
+slug: "/docs/games-auth"
+---
+
+# Guia de Integração com Games
+
+Este guia explica como autenticar clientes e orquestrar chamadas ao módulo de mini games (inicialmente **Cara ou Coroa**) exposto pelo `ApiServer`. Ele complementa o `docs/API_DOCS.mdx` com um fluxo passo a passo e exemplos testáveis via `curl`.
+
+## 1. Endpoints e ambientes
+
+| Ambiente | Base URL | Observações |
+|----------|----------|-------------|
+| Desenvolvimento local | `http://localhost:3000/api` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
+| Homologação/Produção | `https://api.backbet.com/api` | Requer JWT válido emitido pelo Clerk ou pelo fluxo `/api/auth/login`. |
+
+Os recursos de games ficam em `/api/games/**`:
+
+- `GET /games` — lista jogos e limites.
+- `GET /games/coin-flip` — configuração atual.
+- `GET /games/coin-flip/feed` — feed público (sem auth).
+- `GET /games/coin-flip/history` — histórico pessoal (auth obrigatória).
+- `POST /games/coin-flip/play` — executa rodada (auth obrigatória).
+
+## 2. Autenticação correta
+
+1. **Produção/Staging (Clerk + JWT)**
+   - O frontend autentica via Clerk (OAuth, OTP etc.).
+   - Requisções ao backend enviam `Authorization: Bearer <jwt>` com `userId` e `sessionId` emitidos pelos nossos serviços (`JwtService` valida o token).
+   - Tokens expirados devem ser renovados com `/api/auth/refresh` ou pelo Clerk.
+
+2. **Ambiente local com bypass**
+   - Defina `ALLOW_DEV_BEARER_BYPASS=true` no `.env` (já sugerido no Quickstart).
+   - Envie `Authorization: Bearer <qualquer-user-id>`; o middleware trata o valor como `userId` quando o token **não** tem formato JWT e o bypass está ativo.
+   - Útil para testar o fluxo completo sem provisionar o Clerk.
+
+3. **Boas práticas**
+   - Sempre prefira JWT em ambientes compartilhados.
+   - Guarde o `userId` real para correlacionar transações da carteira e rounds de jogo.
+   - No Play endpoint trate `503` como sinal de manutenção (config `GAME_COINFLIP_ENABLED=false`).
+
+### Exemplo: obtendo um JWT via endpoint interno
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"demo@backbet.com","password":"Passw0rd!"}'
+```
+
+Use o `accessToken` retornado no header `Authorization` das próximas chamadas:
+
+```bash
+export ACCESS_TOKEN="<token>"
+```
+
+## 3. Fluxo recomendado para consumir o Coin Flip
+
+### Passo 1 — Descobrir os jogos
+
+```bash
+curl http://localhost:3000/api/games | jq
+```
+
+Resposta (resumida):
+
+```json
+{
+  "success": true,
+  "data": {
+    "games": [
+      {
+        "id": "coin-flip",
+        "name": "Cara ou Coroa",
+        "enabled": true,
+        "minBet": 1,
+        "maxBet": 200,
+        "payoutMultiplier": 2
+      }
+    ]
+  }
+}
+```
+
+### Passo 2 — Ler a configuração do jogo
+
+```bash
+curl http://localhost:3000/api/games/coin-flip | jq
+```
+
+Use esse payload para montar sliders de aposta e informar se o modo de pagamento é **fixo** (`fixedWinAmount`) ou multiplicador (`payoutMultiplier`).
+
+### Passo 3 — Validar autenticação e histórico
+
+```bash
+curl http://localhost:3000/api/games/coin-flip/history?limit=20 \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
+```
+
+Principais erros:
+
+| Código | Motivo | Correção |
+|--------|--------|----------|
+| `401 UNAUTHORIZED` | Token ausente ou inválido | Gere/renove JWT, confira header. |
+| `400 BAD_REQUEST` | `limit` fora do intervalo (1-50) | Ajuste query string. |
+
+### Passo 4 — Executar uma rodada
+
+```bash
+curl -X POST http://localhost:3000/api/games/coin-flip/play \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{"choice":"HEADS","wager":25}' | jq
+```
+
+- O backend debita a carteira (`WalletService`) antes de jogar.
+- O resultado sempre inclui `outcome`, `result`, `payoutAmount` e `createdAt`.
+- Se o jogo estiver desligado (`GAME_COINFLIP_ENABLED=false`), o endpoint retorna `503` com `GAME_DISABLED`.
+
+### Passo 5 — Consumir o feed público
+
+```bash
+curl http://localhost:3000/api/games/coin-flip/feed | jq '.data.rounds[0]'
+```
+
+Use para painéis em tempo real; não há dados pessoais além do `userId` (você pode ofuscar no frontend se necessário).
+
+## 4. Checklist de configuração
+
+| Item | Onde configurar | Valor recomendado |
+|------|-----------------|-------------------|
+| `GAME_COINFLIP_ENABLED` | `.env` ou secret manager | `true` em prod, `false` para manutenção. |
+| `GAME_COINFLIP_MIN_BET`/`MAX_BET` | `.env` | Ajuste ao perfil de risco. |
+| `GAME_COINFLIP_PAYOUT_MULTIPLIER` | `.env` | `2` (padrão). |
+| `GAME_INTEGRATION_WEBHOOK_ENABLED/URL` | `.env` | Habilite quando quiser disparar webhooks após cada rodada. |
+| `ALLOW_DEV_BEARER_BYPASS` | `.env` | `true` apenas em dev; **false** em prod. |
+| `ADMIN_USER_IDS` | `.env` | IDs autorizados a usar `/api/admin/**`. |
+
+## 5. Troubleshooting rápido
+
+| Sintoma | Solução |
+|---------|---------|
+| `401` mesmo com token | Verifique se o token parece um JWT (`AAA.BBB.CCC`). No bypass, use apenas o `userId`. |
+| `503 GAME_DISABLED` | Confirmar `GAME_COINFLIP_ENABLED` e logs do `GameController`. |
+| Débito não aparece na carteira | Certifique-se de usar o mesmo usuário para carteira e game. Confira `/api/wallets/me`. |
+| Feed vazio | Sem partidas recentes. Rode `play` ou aumente o limite (`ListRecentRoundsUseCase` usa 20 itens). |
+
+## 6. Próximos passos
+
+1. Automatize smoke tests chamando `/api/games` e `/api/games/coin-flip/play` com um usuário seed.
+2. Quando habilitar webhooks (`GAME_INTEGRATION_WEBHOOK_ENABLED=true`), documente o endpoint externo e trate retries idempotentes.
+3. Atualize o frontend para exibir mensagens claras para `401`, `422` (validação) e `503`.

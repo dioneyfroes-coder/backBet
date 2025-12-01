@@ -6,14 +6,14 @@ slug: "/docs/api"
 
 # BackBet API
 
-> Os módulos `auth`, `user`, `wallet`, `finance` e `bet` são montados pelo `ApiServer` em `/api/**`, compartilhando o mesmo container de dependências (repositórios, serviços de domínio, cache hooks, Clerk/JWT, rate limiters e métricas). Este guia resume os contratos expostos hoje.
+> Os módulos `auth`, `user`, `wallet`, `finance`, `bet`, `events`, `games` e `admin` são montados pelo `ApiServer` em `/api/**`, compartilhando o mesmo container de dependências (repositórios, serviços de domínio, cache hooks, Clerk/JWT, rate limiters e métricas). Este guia resume os contratos expostos hoje.
 
 ## Base URLs
 
 | Ambiente | URL base | Docs interativos |
 |----------|----------|------------------|
-| Desenvolvimento | `http://localhost:3000/api` | `http://localhost:3000/api/docs` |
-| Produção (exemplo) | `https://api.backbet.com/api` | `https://api.backbet.com/api/docs` |
+| Desenvolvimento | `https://backbet.onrender.com/api` | `https://backbet.onrender.com/api/docs` |
+| Produção (exemplo) | `https://backbet.onrender.com/api` | `https://backbet.onrender.com/api/docs` |
 
 > A especificação completa está disponível em `/api/docs.json` (OpenAPI 3.1) e usa os mesmos `servers` com prefixo `/api`. Todos os exemplos usam versão v1.
 
@@ -171,6 +171,48 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 
 `Bet` responses incluem `status`, `potentialReturn`, `odds`, `createdAt`, `updatedAt` e detalhes do evento/mercado associados.
 
+### Eventos (`/api/events`)
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| `GET` | `/events` | Lista eventos com filtros `status`, `category`, `dateFrom`, `dateTo`, `limit`, `search`. |
+| `GET` | `/events/upcoming?limit=` | Top próximos eventos ordenados por `startDate`. |
+| `GET` | `/events/categories` | Todas as categorias disponíveis (para filtros no frontend). |
+| `GET` | `/events/:eventId` | Detalhes completos do evento e mercados. |
+| `GET` | `/events/:eventId/markets` | Apenas os mercados (usado em catálogos/odd boards). |
+
+Todos os endpoints são públicos e alimentados pelo `EventCatalogService` (fallback in-memory com `seed`, pronto para feed externo).
+
+### Backoffice (`/api/admin`)
+
+> Protegido por `protectedRoute + requireAdminRole`. Configure `ADMIN_USER_IDS="usr_01,usr_02"` para liberar IDs internos.
+
+| Método | Caminho | Descrição |
+|--------|---------|-----------|
+| `GET` | `/admin/overview` | Resumo do serviço (env, observabilidade, limites de risco e health snapshot). |
+| `GET` | `/admin/risk/users/:userId` | Retorna exposição atual do usuário (`RiskService`). |
+| `POST` | `/admin/bets/:betId/settle` | Liquidação manual (`ResolveBetUseCase`). |
+| `PATCH` | `/admin/events/:eventId/status` | Força `START`/`FINISH`/`CANCEL` em eventos; invalida cache de odds. |
+
+### Jogos (`/api/games`)
+
+> Backend de mini games. O primeiro jogo ativo é **Cara ou Coroa**, com payout fixo configurável. Os endpoints expõem integrações tanto para o front gráfico quanto para futuros adaptadores externos (webhook).
+
+| Método | Caminho | Auth | Descrição |
+|--------|---------|------|-----------|
+| `GET` | `/games` | público | Lista jogos disponíveis (+ min/max bet, status). |
+| `GET` | `/games/coin-flip` | público | Configuração atual do coin flip (habilitado, limites, payout fixo/multiplicador). |
+| `GET` | `/games/coin-flip/feed` | público | Últimas 20 rodadas para exibir em dashboards/frontend. |
+| `GET` | `/games/coin-flip/history?limit=` | bearer | Histórico pessoal (limite até 50). |
+| `POST` | `/games/coin-flip/play` | bearer | Executa rodada; o backend debita a carteira, roda o mecanismo e paga o ganho fixo/multiplicador (ou retorna 503 se o jogo estiver desabilitado). |
+
+#### Mecanismo e integrações
+
+- O serviço `CoinFlipGameService` aplica validações de aposta (`minBet`/`maxBet`) e utiliza `WalletService` para debitar/creditar.
+- `CoinFlipEngine` é um port determinístico (`GameEnginePort`).
+- `GameIntegrationPort` permite conectar webhooks/WebSocket no futuro. Atualmente o factory cria um `NoopGameIntegrationAdapter` ou um webhook simples (`GAME_INTEGRATION_WEBHOOK_ENABLED=true` + `GAME_INTEGRATION_WEBHOOK_URL=https://...`).
+- Configurações do jogo ficam em `appConfig.games.coinFlip` (vide seção de Config).
+
 ## Ferramentas e exemplos
 
 ### Swagger / Postman
@@ -181,17 +223,17 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 ### cURL de referência
 
 ```bash
-TOKEN="$(curl -s -X POST http://localhost:3000/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"dev@example.com","password":"Password123!"}' | jq -r '.data.accessToken')"
+TOKEN="$(curl -s -X POST https://backbet.onrender.com/api/auth/login   -H 'Content-Type: application/json'   -d '{"email":"dev@example.com","password":"Password123!"}' | jq -r '.data.accessToken')"
 
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/wallets/me | jq
+curl -H "Authorization: Bearer $TOKEN" https://backbet.onrender.com/api/wallets/me | jq
 ```
 
 ### Observabilidade endpoints
 
 ```bash
-curl http://localhost:3000/health
-curl http://localhost:3000/readiness | jq
-curl -i http://localhost:3000/metrics
+curl https://backbet.onrender.com/health
+curl https://backbet.onrender.com/readiness | jq
+curl -i https://backbet.onrender.com/metrics
 ```
 
 ## Configurações relevantes
@@ -200,6 +242,8 @@ curl -i http://localhost:3000/metrics
 - **Persistência Mongo:** `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL` (afetando `/readiness` e os repositórios). 
 - **Tracing:** `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `OTEL_DIAGNOSTIC_LOG_LEVEL`.
 - **Rate limiting:** `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*`.
+- **Admin:** `ADMIN_USER_IDS` (CSV de IDs internos que podem usar `/api/admin/**`).
+- **Games:** `GAME_COINFLIP_ENABLED`, `GAME_COINFLIP_MIN_BET`, `GAME_COINFLIP_MAX_BET`, `GAME_COINFLIP_PAYOUT_MULTIPLIER`, `GAME_COINFLIP_FIXED_WIN`, `GAME_INTEGRATION_WEBHOOK_ENABLED`, `GAME_INTEGRATION_WEBHOOK_URL`.
 
 Proteja `/health`, `/readiness` e `/health/cache` via firewall ou reverse proxy em produção caso necessário (o `/metrics` responde 410 enquanto `OBS_ENABLE_PROMETHEUS=false`).
 

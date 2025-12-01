@@ -4,6 +4,10 @@ import { createUserRoutes, UserRoutesDeps } from './userRoutes';
 import { createWalletRoutes, WalletRoutesDeps } from './walletRoutes';
 import { createBetRoutes, BetRoutesDeps } from './betRoutes';
 import { createFinanceRoutes, FinanceRoutesDeps } from './financeRoutes';
+import { createBaseRoutes, BaseRoutesDeps } from './baseRoutes';
+import { createEventRoutes, EventRoutesDeps } from './eventRoutes';
+import { createAdminRoutes, AdminRoutesDeps } from './adminRoutes';
+import { createGameRoutes, GameRoutesDeps } from './gameRoutes';
 import {
   createUserRepository,
   createWalletRepository,
@@ -27,11 +31,15 @@ import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories
 import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 
 export type ApiRoutesDeps = {
+  base?: BaseRoutesDeps;
   auth?: AuthRoutesDeps;
   user?: UserRoutesDeps;
   wallet?: WalletRoutesDeps;
   bet?: BetRoutesDeps;
   finance?: FinanceRoutesDeps;
+  events?: EventRoutesDeps;
+  admin?: AdminRoutesDeps;
+  games?: GameRoutesDeps;
 };
 
 export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router> {
@@ -127,6 +135,8 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
     }
   });
 
+  router.use('/', createBaseRoutes(deps.base ?? {}));
+
   router.use(
     '/auth',
     await createAuthRoutes({
@@ -161,12 +171,38 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
     }),
   );
   router.use(
+    '/events',
+    await createEventRoutes({
+      eventRepository,
+      ...(deps.events || {}),
+    }),
+  );
+  router.use(
     '/finance',
     await createFinanceRoutes({
       walletRepository,
       creditPackageRepository,
       withdrawalRequestRepository,
       ...(deps.finance || {}),
+    }),
+  );
+  router.use(
+    '/games',
+    await createGameRoutes({
+      walletRepository,
+      ...(deps.games || {}),
+    }),
+  );
+  router.use(
+    '/admin',
+    await createAdminRoutes({
+      ...(deps.admin || {}),
+      betRepository: deps.admin?.betRepository ?? betRepository,
+      eventRepository: deps.admin?.eventRepository ?? eventRepository,
+      walletRepository: deps.admin?.walletRepository ?? walletRepository,
+      riskRepository: deps.admin?.riskRepository ?? riskRepository,
+      dependencyHealthProvider:
+        deps.admin?.dependencyHealthProvider ?? deps.base?.dependencyHealthProvider,
     }),
   );
 

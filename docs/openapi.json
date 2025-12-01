@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.0",
   "info": {
     "title": "BackBet API",
     "version": "1.0.0",
@@ -14,11 +14,11 @@
   },
   "servers": [
     {
-      "url": "http://localhost:3000",
+      "url": "http://localhost:3000/api",
       "description": "Desenvolvimento"
     },
     {
-      "url": "https://api.backbet.com",
+      "url": "https://api.backbet.com/api",
       "description": "Produção"
     }
   ],
@@ -198,7 +198,7 @@
             }
           },
           "meta": {
-            "timestamp": "2025-11-15T15:18:29.622Z"
+            "timestamp": "2025-12-01T00:57:31.775Z"
           }
         }
       },
@@ -252,7 +252,7 @@
             }
           },
           "meta": {
-            "timestamp": "2025-11-15T15:18:29.623Z"
+            "timestamp": "2025-12-01T00:57:31.776Z"
           }
         }
       },
@@ -672,6 +672,298 @@
             }
           }
         }
+      },
+      "EventMarket": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "moneyline"
+          },
+          "name": {
+            "type": "string",
+            "example": "Vencedor"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "SUSPENDED",
+              "CLOSED"
+            ],
+            "example": "OPEN"
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "example": "HEADS"
+          },
+          "odds": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "example": {
+              "home": 1.9,
+              "away": 1.8
+            }
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "evt_123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Team A x Team B"
+          },
+          "category": {
+            "type": "string",
+            "example": "football"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SCHEDULED",
+              "LIVE",
+              "FINISHED",
+              "CANCELED"
+            ],
+            "example": "SCHEDULED"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Team A",
+              "Team B"
+            ]
+          },
+          "markets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EventMarket"
+            }
+          }
+        }
+      },
+      "EventListResponse": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          }
+        }
+      },
+      "EventMarketsResponse": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "evt_123"
+          },
+          "markets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventMarket"
+            }
+          }
+        }
+      },
+      "EventCategoriesResponse": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "football",
+              "basketball"
+            ]
+          }
+        }
+      },
+      "CoinFlipRound": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "gameType": {
+            "type": "string",
+            "example": "COIN_FLIP"
+          },
+          "wagerAmount": {
+            "type": "number",
+            "example": 10
+          },
+          "currency": {
+            "type": "string",
+            "example": "BRL"
+          },
+          "playerChoice": {
+            "type": "string",
+            "enum": [
+              "HEADS",
+              "TAILS"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "HEADS",
+              "TAILS"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "WIN",
+              "LOSE"
+            ]
+          },
+          "payoutAmount": {
+            "type": "number",
+            "example": 10
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminOverviewResponse": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "object",
+            "properties": {
+              "appName": {
+                "type": "string",
+                "example": "BackBet"
+              },
+              "serviceName": {
+                "type": "string",
+                "example": "bet-backend"
+              },
+              "env": {
+                "type": "string",
+                "example": "development"
+              }
+            }
+          },
+          "observability": {
+            "type": "object",
+            "properties": {
+              "usePm2WebUi": {
+                "type": "boolean"
+              },
+              "enablePrometheus": {
+                "type": "boolean"
+              },
+              "enableEmailAlerts": {
+                "type": "boolean"
+              }
+            }
+          },
+          "risk": {
+            "type": "object",
+            "properties": {
+              "maxExposurePerUser": {
+                "type": "number",
+                "example": 5000
+              }
+            }
+          },
+          "dependencies": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminRiskResponse": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "usr_123"
+          },
+          "exposure": {
+            "type": "number",
+            "example": 250
+          },
+          "maxExposure": {
+            "type": "number",
+            "example": 5000
+          }
+        }
+      },
+      "SettleBetRequest": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": [
+              "WON",
+              "LOST"
+            ]
+          },
+          "marketResult": {
+            "type": "string",
+            "example": "Team A venceu"
+          }
+        },
+        "required": [
+          "result",
+          "marketResult"
+        ]
+      },
+      "UpdateEventStatusRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "START",
+              "FINISH",
+              "CANCEL"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ]
       }
     }
   },
@@ -695,9 +987,208 @@
     {
       "name": "Bets",
       "description": "Gerenciamento de apostas"
+    },
+    {
+      "name": "Finance",
+      "description": "Pacotes de crédito e solicitações de saque"
+    },
+    {
+      "name": "Events",
+      "description": "Catálogo público de jogos e mercados"
+    },
+    {
+      "name": "Admin",
+      "description": "Operações do backoffice"
+    },
+    {
+      "name": "Games",
+      "description": "Backend dos mini games"
     }
   ],
   "paths": {
+    "/api": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Endpoint raiz da API",
+        "responses": {
+          "200": {
+            "description": "Informações básicas do serviço"
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Status resumido da API",
+        "responses": {
+          "200": {
+            "description": "Status atual do serviço"
+          }
+        }
+      }
+    },
+    "/api/links": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Lista endpoints úteis da API",
+        "responses": {
+          "200": {
+            "description": "Mapa de rotas"
+          }
+        }
+      }
+    },
+    "/api/admin/overview": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Visão geral do backoffice",
+        "responses": {
+          "200": {
+            "description": "Status e limites administrativos"
+          }
+        }
+      }
+    },
+    "/api/admin/risk/users/{userId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta exposição de risco de um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados de risco do usuário"
+          }
+        }
+      }
+    },
+    "/api/admin/bets/{betId}/settle": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Liquida manualmente uma aposta",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "betId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "enum": [
+                      "WON",
+                      "LOST"
+                    ]
+                  },
+                  "marketResult": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aposta liquidada"
+          }
+        }
+      }
+    },
+    "/api/admin/events/{eventId}/status": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Atualiza status de um evento",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "START",
+                      "FINISH",
+                      "CANCEL"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evento atualizado"
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "tags": [
@@ -1053,6 +1544,268 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Lista eventos com filtros opcionais",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SCHEDULED",
+                "LIVE",
+                "FINISHED",
+                "CANCELED"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateFrom",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateTo",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catálogo de eventos"
+          }
+        }
+      }
+    },
+    "/api/events/upcoming": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Lista próximos eventos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Próximos eventos"
+          }
+        }
+      }
+    },
+    "/api/events/{eventId}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Detalhes de um evento",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalhes do evento"
+          },
+          "404": {
+            "description": "Evento não encontrado"
+          }
+        }
+      }
+    },
+    "/api/events/{eventId}/markets": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Lista mercados de um evento",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mercados do evento"
+          }
+        }
+      }
+    },
+    "/api/events/categories": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Lista categorias disponíveis",
+        "responses": {
+          "200": {
+            "description": "Categorias cadastradas"
+          }
+        }
+      }
+    },
+    "/api/games": {
+      "get": {
+        "tags": [
+          "Games"
+        ],
+        "summary": "Lista jogos disponíveis",
+        "responses": {
+          "200": {
+            "description": "Metadados dos jogos"
+          }
+        }
+      }
+    },
+    "/api/games/coin-flip": {
+      "get": {
+        "tags": [
+          "Games"
+        ],
+        "summary": "Detalhes do jogo de cara ou coroa",
+        "responses": {
+          "200": {
+            "description": "Configuração atual do jogo"
+          }
+        }
+      }
+    },
+    "/api/games/coin-flip/play": {
+      "post": {
+        "tags": [
+          "Games"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Executa uma rodada de cara ou coroa",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "choice": {
+                    "type": "string",
+                    "enum": [
+                      "HEADS",
+                      "TAILS"
+                    ]
+                  },
+                  "wager": {
+                    "type": "number",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da rodada"
+          }
+        }
+      }
+    },
+    "/api/games/coin-flip/history": {
+      "get": {
+        "tags": [
+          "Games"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Histórico de cara ou coroa do usuário",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Histórico recente"
+          }
+        }
+      }
+    },
+    "/api/games/coin-flip/feed": {
+      "get": {
+        "tags": [
+          "Games"
+        ],
+        "summary": "Feed público das últimas rodadas de cara ou coroa",
+        "responses": {
+          "200": {
+            "description": "Feed de rodadas"
           }
         }
       }

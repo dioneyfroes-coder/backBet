@@ -88,3 +88,26 @@ export const optionalAuth = (req: AuthenticatedRequest, _res: Response, next: Ne
     next();
   }
 };
+
+export const requireAdminRole = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  const allowedIds = appConfig.admin?.allowedUserIds ?? [];
+  if (!req.auth?.userId) {
+    return unauthorizedResponse(res);
+  }
+
+  if (allowedIds.length === 0 || !allowedIds.includes(req.auth.userId)) {
+    return res.status(403).json({
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Acesso restrito ao backoffice',
+        statusCode: 403,
+      },
+    });
+  }
+
+  return next();
+};

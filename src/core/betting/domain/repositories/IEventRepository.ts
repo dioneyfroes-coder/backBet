@@ -8,12 +8,12 @@ export interface IEventRepository {
   findByStatus(status: EventStatus): Promise<Event[]>;
   findByCategory(category: string): Promise<Event[]>; // ou EventCategory
   findUpcoming(limit?: number): Promise<Event[]>;
-  findAll?(filter?: {
+  findAll(filter?: {
     status?: EventStatus;
     category?: string;
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<Event[]>;
-  exists?(id: string): Promise<boolean>;
+  exists(id: string): Promise<boolean>;
   delete(id: string): Promise<boolean>;
 }

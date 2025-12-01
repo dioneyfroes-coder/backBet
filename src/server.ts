@@ -47,7 +47,14 @@ async function main() {
     apiServer.registerMetricsEndpoint();
 
     // Registrar rotas via roteador agregado
-    const apiRouter = await createApiRouter();
+    const apiRouter = await createApiRouter({
+      base: {
+        dependencyHealthProvider: () => apiServer.getDependencyHealthSnapshot(),
+      },
+      admin: {
+        dependencyHealthProvider: () => apiServer.getDependencyHealthSnapshot(),
+      },
+    });
     apiServer.registerRoutes(apiRouter);
 
     // TODO: Registrar outras rotas

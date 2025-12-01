@@ -6,6 +6,7 @@ import { IEventRepository } from '@/core/betting/domain/repositories/IEventRepos
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
+import { IGameRoundRepository } from '@/core/game/domain/repositories/IGameRoundRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
@@ -82,4 +83,12 @@ export async function createRiskRepository(): Promise<IRiskRepository> {
   }
   const { InMemoryRiskRepository } = await import('./inmemory/repositories/InMemoryRiskRepository');
   return new InMemoryRiskRepository();
+}
+
+export async function createGameRoundRepository(): Promise<IGameRoundRepository> {
+  // Ainda não há implementação Mongoose
+  const { InMemoryGameRoundRepository } = await import(
+    '@/core/game/domain/repositories/InMemoryGameRoundRepository'
+  );
+  return new InMemoryGameRoundRepository();
 }

@@ -79,6 +79,7 @@ type AppEnv = NodeJS.ProcessEnv & {
   APP_NAME?: string;
   SERVICE_NAME?: string;
   NEW_RELIC_APP_NAME?: string;
+  ADMIN_USER_IDS?: string;
   LOG_LEVEL?: string;
   LOG_FILE_ENABLED?: string;
   LOG_FILE_PATH?: string;
@@ -99,6 +100,13 @@ type AppEnv = NodeJS.ProcessEnv & {
   OTEL_EXPORTER_OTLP_HEADERS?: string;
   OTEL_SERVICE_NAME?: string;
   OTEL_DIAGNOSTIC_LOG_LEVEL?: string;
+  GAME_COINFLIP_ENABLED?: string;
+  GAME_COINFLIP_MIN_BET?: string;
+  GAME_COINFLIP_MAX_BET?: string;
+  GAME_COINFLIP_PAYOUT_MULTIPLIER?: string;
+  GAME_COINFLIP_FIXED_WIN?: string;
+  GAME_INTEGRATION_WEBHOOK_ENABLED?: string;
+  GAME_INTEGRATION_WEBHOOK_URL?: string;
 };
 
 export const env = process.env as AppEnv;

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { swaggerSpec } from '@/infrastructure/config/swagger';
 
-const outDir = path.resolve(__dirname, '../docs');
+const outDir = path.resolve(__dirname, '../../docs');
 const outFile = path.join(outDir, 'openapi.json');
 
 if (!fs.existsSync(outDir)) {

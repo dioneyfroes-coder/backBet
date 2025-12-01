@@ -14,6 +14,22 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
   return parsed;
 };
 
+const parsePositiveNumber = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseFloat(value ?? '');
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
+
+const parseNumber = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseFloat(value ?? '');
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return parsed;
+};
+
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
   if (typeof value === 'undefined') {
     return fallback;
@@ -90,6 +106,9 @@ export const appConfig = {
     ]),
     allowCredentials: parseBoolean(env.CORS_ALLOW_CREDENTIALS, true),
   },
+  admin: {
+    allowedUserIds: parseList(env.ADMIN_USER_IDS, []),
+  },
   rateLimit: {
     windowMs: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 600000), // 10 minutos
     max: parsePositiveInt(env.RATE_LIMIT_MAX, 5000), // alto para ambiente dev
@@ -151,6 +170,22 @@ export const appConfig = {
       message:
         env.BET_CANCEL_RATE_LIMIT_MESSAGE ||
         'Muitas tentativas de cancelamento. Aguarde e tente novamente.',
+    },
+  },
+  games: {
+    coinFlip: {
+      enabled: parseBoolean(env.GAME_COINFLIP_ENABLED, true),
+      minBet: parsePositiveNumber(env.GAME_COINFLIP_MIN_BET, 1),
+      maxBet: parsePositiveNumber(env.GAME_COINFLIP_MAX_BET, 500),
+      payoutMultiplier: parsePositiveNumber(env.GAME_COINFLIP_PAYOUT_MULTIPLIER, 1),
+      fixedWinAmount:
+        env.GAME_COINFLIP_FIXED_WIN && parseNumber(env.GAME_COINFLIP_FIXED_WIN, 0) > 0
+          ? parseNumber(env.GAME_COINFLIP_FIXED_WIN, 0)
+          : undefined,
+    },
+    integration: {
+      webhookEnabled: parseBoolean(env.GAME_INTEGRATION_WEBHOOK_ENABLED, false),
+      webhookUrl: env.GAME_INTEGRATION_WEBHOOK_URL,
     },
   },
   jwt: {

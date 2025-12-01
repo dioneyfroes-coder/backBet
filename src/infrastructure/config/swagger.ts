@@ -476,6 +476,146 @@ const swaggerOptions = {
             },
           },
         },
+        EventMarket: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'moneyline' },
+            name: { type: 'string', example: 'Vencedor' },
+            status: {
+              type: 'string',
+              enum: ['OPEN', 'SUSPENDED', 'CLOSED'],
+              example: 'OPEN',
+            },
+            result: { type: ['string', 'null'], example: 'HEADS' },
+            odds: {
+              type: 'object',
+              additionalProperties: { type: 'number' },
+              example: { home: 1.9, away: 1.8 },
+            },
+          },
+        },
+        Event: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'evt_123' },
+            name: { type: 'string', example: 'Team A x Team B' },
+            category: { type: 'string', example: 'football' },
+            status: {
+              type: 'string',
+              enum: ['SCHEDULED', 'LIVE', 'FINISHED', 'CANCELED'],
+              example: 'SCHEDULED',
+            },
+            startDate: { type: 'string', format: 'date-time' },
+            participants: {
+              type: 'array',
+              items: { type: 'string' },
+              example: ['Team A', 'Team B'],
+            },
+            markets: {
+              type: 'object',
+              additionalProperties: { $ref: '#/components/schemas/EventMarket' },
+            },
+          },
+        },
+        EventListResponse: {
+          type: 'object',
+          properties: {
+            events: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/Event' },
+            },
+          },
+        },
+        EventMarketsResponse: {
+          type: 'object',
+          properties: {
+            eventId: { type: 'string', example: 'evt_123' },
+            markets: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/EventMarket' },
+            },
+          },
+        },
+        EventCategoriesResponse: {
+          type: 'object',
+          properties: {
+            categories: {
+              type: 'array',
+              items: { type: 'string' },
+              example: ['football', 'basketball'],
+            },
+          },
+        },
+        CoinFlipRound: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            userId: { type: 'string', format: 'uuid' },
+            gameType: { type: 'string', example: 'COIN_FLIP' },
+            wagerAmount: { type: 'number', example: 10 },
+            currency: { type: 'string', example: 'BRL' },
+            playerChoice: { type: 'string', enum: ['HEADS', 'TAILS'] },
+            outcome: { type: 'string', enum: ['HEADS', 'TAILS'] },
+            result: { type: 'string', enum: ['WIN', 'LOSE'] },
+            payoutAmount: { type: 'number', example: 10 },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        AdminOverviewResponse: {
+          type: 'object',
+          properties: {
+            service: {
+              type: 'object',
+              properties: {
+                appName: { type: 'string', example: 'BackBet' },
+                serviceName: { type: 'string', example: 'bet-backend' },
+                env: { type: 'string', example: 'development' },
+              },
+            },
+            observability: {
+              type: 'object',
+              properties: {
+                usePm2WebUi: { type: 'boolean' },
+                enablePrometheus: { type: 'boolean' },
+                enableEmailAlerts: { type: 'boolean' },
+              },
+            },
+            risk: {
+              type: 'object',
+              properties: {
+                maxExposurePerUser: { type: 'number', example: 5000 },
+              },
+            },
+            dependencies: {
+              type: ['object', 'null'],
+              additionalProperties: { type: 'number' },
+            },
+            timestamp: { type: 'string', format: 'date-time' },
+          },
+        },
+        AdminRiskResponse: {
+          type: 'object',
+          properties: {
+            userId: { type: 'string', example: 'usr_123' },
+            exposure: { type: 'number', example: 250 },
+            maxExposure: { type: 'number', example: 5000 },
+          },
+        },
+        SettleBetRequest: {
+          type: 'object',
+          properties: {
+            result: { type: 'string', enum: ['WON', 'LOST'] },
+            marketResult: { type: 'string', example: 'Team A venceu' },
+          },
+          required: ['result', 'marketResult'],
+        },
+        UpdateEventStatusRequest: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['START', 'FINISH', 'CANCEL'] },
+          },
+          required: ['action'],
+        },
       },
     },
     tags: [
@@ -498,6 +638,22 @@ const swaggerOptions = {
       {
         name: 'Bets',
         description: 'Gerenciamento de apostas',
+      },
+      {
+        name: 'Finance',
+        description: 'Pacotes de crédito e solicitações de saque',
+      },
+      {
+        name: 'Events',
+        description: 'Catálogo público de jogos e mercados',
+      },
+      {
+        name: 'Admin',
+        description: 'Operações do backoffice',
+      },
+      {
+        name: 'Games',
+        description: 'Backend dos mini games',
       },
     ],
   },

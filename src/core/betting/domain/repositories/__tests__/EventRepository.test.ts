@@ -41,9 +41,18 @@ describe('EventRepository in-memory', () => {
     expect(await repository.delete('missing')).toBe(false);
   });
 
-  it('placeholder query helpers return empty arrays', async () => {
-    expect(await repository.findByStatus()).toEqual([]);
-    expect(await repository.findByCategory()).toEqual([]);
-    expect(await repository.findUpcoming()).toEqual([]);
+  it('filters by status, category and upcoming window', async () => {
+    const scheduled = await repository.findByStatus('SCHEDULED');
+    expect(scheduled.length).toBeGreaterThan(0);
+    expect(scheduled.every((event) => event.status === 'SCHEDULED')).toBe(true);
+
+    const football = await repository.findByCategory('Football');
+    expect(football.length).toBe(1);
+    expect(football[0].category).toBe('Football');
+
+    const upcoming = await repository.findUpcoming();
+    const timestamps = upcoming.map((event) => event.startDate.getTime());
+    expect(upcoming.every((event) => event.status === 'SCHEDULED')).toBe(true);
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
   });
 });
