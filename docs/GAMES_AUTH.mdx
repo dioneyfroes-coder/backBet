@@ -12,8 +12,8 @@ Este guia explica como autenticar clientes e orquestrar chamadas ao módulo de m
 
 | Ambiente | Base URL | Observações |
 |----------|----------|-------------|
-| Desenvolvimento local | `http://localhost:3000/api` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
-| Homologação/Produção | `https://api.backbet.com/api` | Requer JWT válido emitido pelo Clerk ou pelo fluxo `/api/auth/login`. |
+| Desenvolvimento local | `https://backbet.onrender.com/api` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
+| Homologação/Produção | `https://backbet.onrender.com/api` | Requer JWT válido emitido pelo Clerk ou pelo fluxo `/api/auth/login`. |
 
 Os recursos de games ficam em `/api/games/**`:
 
@@ -43,7 +43,7 @@ Os recursos de games ficam em `/api/games/**`:
 ### Exemplo: obtendo um JWT via endpoint interno
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST https://backbet.onrender.com/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@backbet.com","password":"Passw0rd!"}'
 ```
@@ -54,12 +54,69 @@ Use o `accessToken` retornado no header `Authorization` das próximas chamadas:
 export ACCESS_TOKEN="<token>"
 ```
 
-## 3. Fluxo recomendado para consumir o Coin Flip
+## 3. O que o frontend precisa implementar
+
+Para que o frontend converse corretamente com o módulo de Coin Flip, garanta os pontos abaixo:
+
+### 3.1 Pré-requisitos técnicos
+
+- Cliente HTTP configurável (fetch/axios) capaz de definir `baseURL`, headers e timeouts.
+- Armazenamento seguro do JWT (Memory/HTTP-only cookie). Use refresh automático quando o Clerk sinalizar expiração.
+- Relógio em UTC para exibir `createdAt` e ordenar rounds.
+- Possibilidade de ler as flags de ambiente (por exemplo, usar `process.env.NEXT_PUBLIC_API_URL`).
+
+```ts
+const api = axios.create({
+  baseURL: `${process.env.NEXT_PUBLIC_API_URL}/games`,
+  headers: { 'Content-Type': 'application/json' }
+})
+
+api.interceptors.request.use((config) => {
+  config.headers.Authorization = `Bearer ${authStore.accessToken}`
+  return config
+})
+```
+
+### 3.2 Estados que o frontend precisa manter
+
+- `accessToken` vigente + forma de renovação (`/api/auth/refresh` ou Clerk SDK).
+- `userId` do jogador para correlacionar carteira, histórico e feed.
+- Saldo atual via `/api/wallets/me` para validar `wager` antes do POST.
+- Configuração do jogo (`minBet`, `maxBet`, `payoutMultiplier`, `fixedWinAmount`, `enabled`). Atualize quando o usuário abrir o modal ou ao receber erro 503.
+- Histórico de rounds (opcional) para exibir últimas apostas do próprio usuário.
+
+### 3.3 Sequência mínima de chamadas
+
+1. **Autenticar**: obter JWT pelo Clerk ou `/api/auth/login` (usar bypass apenas em dev).
+2. **Sincronizar carteira**: `GET /wallets/me` para mostrar saldo e moeda.
+3. **Carregar config**: `GET /games/coin-flip` e cache local até expirar (ex.: 60s) ou até receber `GAME_DISABLED`.
+4. **Mostrar histórico**: `GET /games/coin-flip/history?limit=20` para preencher a tabela inicial.
+5. **Executar rodada**: `POST /games/coin-flip/play` enviando `{ choice: 'HEADS' | 'TAILS', wager: number }`.
+6. **Atualizar UI**: ao receber resposta do `play`, atualize saldo, histórico e destaque a rodada recém-criada.
+7. **Feed opcional**: `GET /games/coin-flip/feed` a cada 5-10s (ou via SSE/WebSocket quando disponível) para mostrar rounds públicos.
+
+### 3.4 Tratamento de respostas obrigatórias
+
+| Código | Ação esperada no frontend |
+|--------|---------------------------|
+| `401`  | Redirecionar para login/renovar token. No dev bypass, solicitar novo `userId` manual. |
+| `403`  | Usuário sem permissão para o jogo (ex.: flag `enabled=false` para contas específicas). Mostrar mensagem e ocultar botão de apostar. |
+| `422`  | Erros de validação (`choice` inválida, `wager` fora dos limites). Exibir mensagens de formulário usando `errors[].message`. |
+| `429`  | Throttling do middleware. Bloquear botão por alguns segundos e exibir aviso. |
+| `503`  | Jogo desligado (`GAME_DISABLED`). Mostrar modal de manutenção e parar polls no feed. |
+
+### 3.5 Observabilidade para o frontend
+
+- Logue o `roundId` retornado em `POST /play` para rastrear bugs junto ao backend.
+- Quando disponível, envie `x-request-id` (gerado pelo frontend) em cada chamada para facilitar traces.
+- O feed público não traz dados sensíveis, mas ofusque `userId` no UI (`user-abcd123`).
+
+## 4. Fluxo recomendado para consumir o Coin Flip
 
 ### Passo 1 — Descobrir os jogos
 
 ```bash
-curl http://localhost:3000/api/games | jq
+curl https://backbet.onrender.com/api/games | jq
 ```
 
 Resposta (resumida):
@@ -85,7 +142,7 @@ Resposta (resumida):
 ### Passo 2 — Ler a configuração do jogo
 
 ```bash
-curl http://localhost:3000/api/games/coin-flip | jq
+curl https://backbet.onrender.com/api/games/coin-flip | jq
 ```
 
 Use esse payload para montar sliders de aposta e informar se o modo de pagamento é **fixo** (`fixedWinAmount`) ou multiplicador (`payoutMultiplier`).
@@ -93,7 +150,7 @@ Use esse payload para montar sliders de aposta e informar se o modo de pagamento
 ### Passo 3 — Validar autenticação e histórico
 
 ```bash
-curl http://localhost:3000/api/games/coin-flip/history?limit=20 \
+curl https://backbet.onrender.com/api/games/coin-flip/history?limit=20 \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
@@ -107,7 +164,7 @@ Principais erros:
 ### Passo 4 — Executar uma rodada
 
 ```bash
-curl -X POST http://localhost:3000/api/games/coin-flip/play \
+curl -X POST https://backbet.onrender.com/api/games/coin-flip/play \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"choice":"HEADS","wager":25}' | jq
@@ -120,12 +177,12 @@ curl -X POST http://localhost:3000/api/games/coin-flip/play \
 ### Passo 5 — Consumir o feed público
 
 ```bash
-curl http://localhost:3000/api/games/coin-flip/feed | jq '.data.rounds[0]'
+curl https://backbet.onrender.com/api/games/coin-flip/feed | jq '.data.rounds[0]'
 ```
 
 Use para painéis em tempo real; não há dados pessoais além do `userId` (você pode ofuscar no frontend se necessário).
 
-## 4. Checklist de configuração
+## 5. Checklist de configuração
 
 | Item | Onde configurar | Valor recomendado |
 |------|-----------------|-------------------|
@@ -136,7 +193,7 @@ Use para painéis em tempo real; não há dados pessoais além do `userId` (voc�
 | `ALLOW_DEV_BEARER_BYPASS` | `.env` | `true` apenas em dev; **false** em prod. |
 | `ADMIN_USER_IDS` | `.env` | IDs autorizados a usar `/api/admin/**`. |
 
-## 5. Troubleshooting rápido
+## 6. Troubleshooting rápido
 
 | Sintoma | Solução |
 |---------|---------|
@@ -145,7 +202,7 @@ Use para painéis em tempo real; não há dados pessoais além do `userId` (voc�
 | Débito não aparece na carteira | Certifique-se de usar o mesmo usuário para carteira e game. Confira `/api/wallets/me`. |
 | Feed vazio | Sem partidas recentes. Rode `play` ou aumente o limite (`ListRecentRoundsUseCase` usa 20 itens). |
 
-## 6. Próximos passos
+## 7. Próximos passos
 
 1. Automatize smoke tests chamando `/api/games` e `/api/games/coin-flip/play` com um usuário seed.
 2. Quando habilitar webhooks (`GAME_INTEGRATION_WEBHOOK_ENABLED=true`), documente o endpoint externo e trate retries idempotentes.

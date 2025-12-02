@@ -13,6 +13,7 @@
     "seed:credit-packages": "tsx src/scripts/seedCreditPackages.ts",
     "migration:run": "tsx src/scripts/runMigrations.ts",
     "seed:initial": "tsx src/scripts/seedInitialData.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\"",

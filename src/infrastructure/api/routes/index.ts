@@ -85,18 +85,18 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
       };
 
       const authUserId = req.auth?.userId;
-      if (!authUserId) return next();
+      if (!authUserId) return;
 
       // Try to fetch Clerk user
       const clerk = await clerkService.getUser(authUserId);
-      if (!clerk) return next();
+      if (!clerk) return;
 
       // If Clerk user already has internalUserId in publicMetadata, ensure req.auth points to it
       const metadataValue = clerk.publicMetadata?.internalUserId;
       const internalIdFromMetadata = typeof metadataValue === 'string' ? metadataValue : undefined;
       if (internalIdFromMetadata) {
         ensureAuthContext().userId = internalIdFromMetadata;
-        return next();
+        return;
       }
 
       // Try to find by email
@@ -110,7 +110,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
           if (clerk.id && clerkService.isEnabled()) {
             await clerkService.linkInternalUserId(clerk.id, existing.id);
           }
-          return next();
+          return;
         }
       }
 
