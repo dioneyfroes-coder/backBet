@@ -35,7 +35,8 @@ shared/services/{ClerkService,JwtService}.ts
 2. O use-case chama `UserService.registerUser` (garante email único, aplica `bcrypt` com fator 12, exige `minPasswordLength` de `userConfig`).
 3. Em seguida `WalletService.createWallet` é acionado via `executeWithWalletErrorMapping`, gerando carteira com a moeda solicitada ou `BRL` (default).
 4. Com Clerk habilitado (`CLERK_SECRET_KEY` real), `AuthController` sincroniza o usuário via `ClerkService.createUser`, preservando o `externalId = user.id`.
-5. A resposta inclui `user.toDTO()` e `wallet.toDTO()`, consumidos pelo front-end e por workflows de ativação.
+5. A resposta inclui `status`, `isActive`, `sessionId`, `accessToken`/`refreshToken` (quando a conta já nasce ativa) e snapshots completos de usuário + carteira.
+6. Se o status permanecer `PENDING_VERIFICATION`, os tokens retornam `null` e o frontend pode acompanhar a liberação via `GET /api/auth/register/status/:userId`.
 
 ## Modelo de domínio
 
@@ -99,6 +100,7 @@ shared/services/{ClerkService,JwtService}.ts
 | Método | Caminho | Rate limit | Observações |
 |--------|---------|-----------|-------------|
 | `POST` | `/api/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com Clerk quando disponível.
+| `GET` | `/api/auth/register/status/:userId` | — | Retorna `{ status, isActive }` e permite polling até liberar o usuário.
 | `POST` | `/api/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
 | `POST` | `/api/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
 | `GET` | `/api/auth/me` | `protectedRoute` | Expõe perfil combinando User + Clerk.
@@ -128,6 +130,12 @@ shared/services/{ClerkService,JwtService}.ts
   - `ALLOW_DEV_BEARER_BYPASS` (false por padrão) para testes locais.
   - `USE_MONGOOSE_PERSISTENCE` para selecionar o repositório.
 
+  ## Limites operacionais da wallet
+
+  - **Depósitos:** `DepositDTO` recusa imediatamente valores menores que R$ 1,00 e responde `400 VALIDATION_ERROR`. Reforce o bloqueio no front e mostre uma mensagem única (“Depósitos começam em R$ 1,00”).
+  - **Saques:** `WithdrawDTO` exige pelo menos R$ 100,00 por solicitação. Entradas abaixo disso são rejeitadas antes do uso do saldo, garantindo que os limites de compliance sejam respeitados.
+  - Ajustes futuros podem ser centralizados via `appConfig.wallets` (ainda sem knobs públicos); por enquanto esses thresholds são fixos e devem ser comunicados em qualquer runbook ou playbook de atendimento.
+
 ## Testes e troubleshooting
 
 - `src/core/user/application/use-cases/__tests__/RegisterUser.test.ts` cobre o fluxo principal (cadastro + wallet), mockando serviços.
@@ -151,4 +159,4 @@ shared/services/{ClerkService,JwtService}.ts
 
 ---
 
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 3 de dezembro de 2025

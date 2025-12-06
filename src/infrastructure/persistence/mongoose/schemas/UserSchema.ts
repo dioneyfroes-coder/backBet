@@ -1,7 +1,8 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { randomUUID } from 'crypto';
 
-export interface IUserDocument extends Document {
-  _id: mongoose.Types.ObjectId;
+export interface IUserDocument extends Document<string> {
+  _id: string;
   email: string;
   username: string;
   passwordHash: string;
@@ -14,6 +15,11 @@ export interface IUserDocument extends Document {
 
 export const userSchema = new Schema<IUserDocument>(
   {
+    _id: {
+      type: String,
+      required: true,
+      default: () => randomUUID(),
+    },
     email: {
       type: String,
       required: true,

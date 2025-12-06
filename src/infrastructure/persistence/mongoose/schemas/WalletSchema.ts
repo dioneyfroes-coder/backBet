@@ -56,6 +56,7 @@ const walletSchema = new Schema<IWalletDocument>(
         currency: String,
         userId: String,
         description: String,
+        metadata: Schema.Types.Mixed,
         createdAt: { type: Date, default: Date.now },
       },
     ],

@@ -1,42 +1,20 @@
-import type { AuthenticatedRequest } from '../AuthMiddleware';
+jest.mock('@/shared/config/appConfig', () => ({
+  appConfig: {
+    runtime: { env: 'test' },
+    security: { allowDevBearerBypass: false },
+    jwt: { secret: 'secret', issuer: 'issuer' },
+    admin: { allowedUserIds: [] },
+  },
+}));
 
-type MiddlewareModule = typeof import('../AuthMiddleware');
-
-type SetupOptions = {
-  env?: string;
-  allowDevBypass?: boolean;
-  verifyImpl?: jest.Mock;
-};
-
-const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
-
-const loadMiddleware = ({
-  env = 'test',
-  allowDevBypass = false,
-  verifyImpl,
-}: SetupOptions = {}) => {
-  jest.resetModules();
-  process.env.NODE_ENV = env;
-  const verifyAccessToken = verifyImpl ?? jest.fn();
-
-  jest.doMock('@/shared/config/appConfig', () => ({
-    appConfig: {
-      security: {
-        allowDevBearerBypass: allowDevBypass,
-      },
-    },
-  }));
-
-  jest.doMock('@/shared/services/JwtService', () => ({
-    JwtService: jest.fn().mockImplementation(() => ({
-      verifyAccessToken,
-    })),
-  }));
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const module: MiddlewareModule = require('../AuthMiddleware');
-  return { ...module, verifyAccessToken };
-};
+import {
+  AuthenticatedRequest,
+  getRequestUserId,
+  optionalAuth,
+  protectedRoute,
+  requireAdminRole,
+} from '../AuthMiddleware';
+import { appConfig } from '@/shared/config/appConfig';
 
 const createResponse = () => {
   const res: any = {};
@@ -52,12 +30,11 @@ const createRequest = (overrides: Partial<AuthenticatedRequest> = {}): Authentic
   }) as AuthenticatedRequest;
 
 describe('AuthMiddleware', () => {
-  afterAll(() => {
-    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  beforeEach(() => {
+    appConfig.admin.allowedUserIds = [];
   });
 
-  it('rejects unauthenticated requests with 401', () => {
-    const { protectedRoute } = loadMiddleware();
+  it('rejects requests without auth context', () => {
     const req = createRequest();
     const res = createResponse();
     const next = jest.fn();
@@ -68,68 +45,52 @@ describe('AuthMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('rejects invalid JWT tokens', () => {
-    const verifyAccessToken = jest.fn(() => {
-      throw new Error('expired');
-    });
-    const { protectedRoute } = loadMiddleware({ verifyImpl: verifyAccessToken });
-    const req = createRequest({ headers: { authorization: 'Bearer a.b.c' } });
-    const res = createResponse();
-
-    protectedRoute(req, res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(verifyAccessToken).toHaveBeenCalledWith('a.b.c');
-  });
-
-  it('rejects tokens that do not provide a userId', () => {
-    const verifyAccessToken = jest.fn().mockReturnValue({ sessionId: 'sess', userId: '' });
-    const { protectedRoute } = loadMiddleware({ verifyImpl: verifyAccessToken });
-    const req = createRequest({ headers: { authorization: 'Bearer header.body.sig' } });
-    const res = createResponse();
-
-    protectedRoute(req, res, jest.fn());
-
-    expect(res.status).toHaveBeenCalledWith(401);
-  });
-
-  it('allows JWT-authenticated requests to proceed', () => {
-    const verifyAccessToken = jest.fn().mockReturnValue({ userId: 'user-1', sessionId: 'sess-1' });
-    const { protectedRoute } = loadMiddleware({ verifyImpl: verifyAccessToken });
-    const req = createRequest({ headers: { authorization: 'Bearer header.body.sig' } });
+  it('allows requests with auth context to proceed', () => {
+    const req = createRequest({ authContext: { userId: 'user-1', sessionId: 'sess-1' } });
     const res = createResponse();
     const next = jest.fn();
 
     protectedRoute(req, res, next);
 
-    expect(verifyAccessToken).toHaveBeenCalledTimes(1);
-    expect(req.auth).toEqual({ userId: 'user-1', sessionId: 'sess-1' });
     expect(next).toHaveBeenCalled();
   });
 
-  it('allows dev bypass tokens when enabled', () => {
-    const { protectedRoute, verifyAccessToken } = loadMiddleware({
-      env: 'development',
-      allowDevBypass: true,
-    });
-    const req = createRequest({ headers: { authorization: 'Bearer dev-user' } });
-    const res = createResponse();
-    const next = jest.fn();
-
-    protectedRoute(req, res, next);
-
-    expect(verifyAccessToken).not.toHaveBeenCalled();
-    expect(req.auth).toEqual({ userId: 'dev-user', sessionId: 'dev-session' });
-    expect(next).toHaveBeenCalled();
-  });
-
-  it('exposes optionalAuth that never blocks the request', () => {
-    const { optionalAuth } = loadMiddleware();
+  it('always advances optionalAuth middleware', () => {
     const req = createRequest();
+    const res = createResponse();
     const next = jest.fn();
 
-    optionalAuth(req, createResponse(), next);
+    optionalAuth(req, res, next);
 
     expect(next).toHaveBeenCalled();
+  });
+
+  it('requires admin role when configured', () => {
+    appConfig.admin.allowedUserIds = ['admin-1'];
+    const req = createRequest({ authContext: { userId: 'admin-1', sessionId: 'sess' } });
+    const res = createResponse();
+    const next = jest.fn();
+
+    requireAdminRole(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('rejects non-admin users', () => {
+    appConfig.admin.allowedUserIds = ['admin-1'];
+    const req = createRequest({ authContext: { userId: 'basic-1', sessionId: 'sess' } });
+    const res = createResponse();
+    const next = jest.fn();
+
+    requireAdminRole(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('extracts the request user id when available', () => {
+    const req = createRequest({ authContext: { userId: 'user-1', sessionId: 'sess-1' } });
+
+    expect(getRequestUserId(req)).toBe('user-1');
   });
 });

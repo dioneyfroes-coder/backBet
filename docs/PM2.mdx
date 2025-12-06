@@ -32,7 +32,7 @@ O runtime utiliza `BACKBET_RUNTIME_ENV` (definido no `.env`) para decidir se hab
 :::
 
 :::info Identidades separadas
-`APP_NAME` é o nome do produto e `SERVICE_NAME` identifica a instância operacional. `SERVICE_NAME` alimenta `OTEL_SERVICE_NAME` e métricas; `NEW_RELIC_APP_NAME` herda `APP_NAME` por padrão. Ajuste todos no `.env` antes de iniciar o PM2.
+`APP_NAME` é o nome do produto e `SERVICE_NAME` identifica a instância operacional. `SERVICE_NAME` alimenta `OTEL_SERVICE_NAME` e métricas. Ajuste ambos no `.env` antes de iniciar o PM2.
 :::
 
 ### Containers ou scripts de deploy

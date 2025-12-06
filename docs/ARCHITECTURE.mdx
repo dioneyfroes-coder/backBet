@@ -106,7 +106,8 @@ POST /api/auth/register
 → AuthController valida DTO (Zod) e chama RegisterUser use case
 → UserService cria User (Email VO) e persiste via IUserRepository
 → WalletService cria Wallet padrão (BRL) e persiste via IWalletRepository
-→ Cache invalida perfil/carteira e resposta inclui ambos os agregados
+→ Cache invalida perfil/carteira e a resposta inclui `status`, `isActive`, snapshot da carteira e (quando o usuário já está ativo) `accessToken`/`refreshToken` + `sessionId`
+→ Caso o status permaneça `PENDING_VERIFICATION`, o frontend faz polling usando `GET /api/auth/register/status/:userId` até `isActive=true`
 ```
 
 ### Depósito / Saque
@@ -169,4 +170,4 @@ src/
 
 ---
 
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 3 de dezembro de 2025

@@ -44,6 +44,22 @@ describe('Game Routes', () => {
 
     app = express();
     app.use(express.json());
+    app.use((req, _res, next) => {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        try {
+          const payload = jwtService.verifyAccessToken(token);
+          (req as any).authContext = {
+            userId: payload.userId,
+            sessionId: payload.sessionId,
+          };
+        } catch (error) {
+          console.warn('Invalid token in tests', error);
+        }
+      }
+      next();
+    });
     app.use('/api/games', routes);
 
     accessToken = jwtService.signAccessToken(userId, 'session-test');

@@ -7,25 +7,34 @@ type AsyncRouteHandler<
   ResBody = unknown,
   ReqBody = unknown,
   ReqQuery = ParsedQs,
-> = (
-  req: Request<Params, ResBody, ReqBody, ReqQuery>,
-  res: Response<ResBody>,
-) => Promise<Response<ResBody>>;
+  Req extends Request<Params, ResBody, ReqBody, ReqQuery> = Request<
+    Params,
+    ResBody,
+    ReqBody,
+    ReqQuery
+  >,
+> = (req: Req, res: Response<ResBody>) => Promise<Response<ResBody>>;
 
 export const asyncHandler = <
   Params extends ParamsDictionary = ParamsDictionary,
   ResBody = unknown,
   ReqBody = unknown,
   ReqQuery = ParsedQs,
+  Req extends Request<Params, ResBody, ReqBody, ReqQuery> = Request<
+    Params,
+    ResBody,
+    ReqBody,
+    ReqQuery
+  >,
 >(
-  fn: AsyncRouteHandler<Params, ResBody, ReqBody, ReqQuery>,
+  fn: AsyncRouteHandler<Params, ResBody, ReqBody, ReqQuery, Req>,
 ): RequestHandler<Params, ResBody, ReqBody, ReqQuery> => {
   return (
     req: Request<Params, ResBody, ReqBody, ReqQuery>,
     res: Response<ResBody>,
     next: NextFunction,
   ) => {
-    Promise.resolve(fn(req, res)).catch(next);
+    Promise.resolve(fn(req as Req, res)).catch(next);
   };
 };
 

@@ -27,8 +27,7 @@
       "qs",
       "swagger-jsdoc",
       "swagger-ui-express",
-      "jsonwebtoken",
-      "newrelic"
+      "jsonwebtoken"
     ],
 
     "sourceMap": true,

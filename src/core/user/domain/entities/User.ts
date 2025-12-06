@@ -13,7 +13,7 @@ export class User {
   ) {}
 
   canOperate(): boolean {
-    return this.status === 'ACTIVE';
+    return this.status !== 'SUSPENDED';
   }
 
   suspend(): void {

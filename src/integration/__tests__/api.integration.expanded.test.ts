@@ -22,8 +22,8 @@ import { GetUserBetsUseCase } from '@/core/betting/aplication/use-cases/GetUserB
 import { GetEventBetsUseCase } from '@/core/betting/aplication/use-cases/GetEventUseCase';
 import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
 import { protectedRoute } from '@/infrastructure/api/middleware/AuthMiddleware';
-import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
+import { MockPixProvider } from '@/infrastructure/payments/pix/MockPixProvider';
 
 jest.setTimeout(20000);
 
@@ -33,7 +33,6 @@ describe('API expanded integration tests (isolated)', () => {
 
   beforeEach(() => {
     process.env.NODE_ENV = 'development';
-    process.env.CLERK_SECRET_KEY = 'sk_test_dummy';
 
     const server = createApiServer(0);
 
@@ -49,8 +48,9 @@ describe('API expanded integration tests (isolated)', () => {
     const registerUserUseCase = new RegisterUser(userService, walletService);
 
     const getWalletUC = new GetWallet(walletService);
-    const depositUC = new Deposit(walletService);
-    const withdrawUC = new Withdraw(walletService);
+    const pixProvider = new MockPixProvider({ latencyMs: 0 });
+    const depositUC = new Deposit(walletService, pixProvider);
+    const withdrawUC = new Withdraw(walletService, pixProvider);
     const historyUC = new GetHistory(walletService);
 
     const placeBetUC = new PlaceBetUseCase(betService);
@@ -58,14 +58,8 @@ describe('API expanded integration tests (isolated)', () => {
     const getUserBetsUC = new GetUserBetsUseCase(betService);
     const getEventBetsUC = new GetEventBetsUseCase(betService);
 
-    const clerkService = new ClerkService();
     const jwtService = new JwtService();
-    const authController = new AuthController(
-      registerUserUseCase,
-      userService,
-      clerkService,
-      jwtService,
-    );
+    const authController = new AuthController(registerUserUseCase, userService, jwtService);
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
@@ -200,7 +194,12 @@ describe('API expanded integration tests (isolated)', () => {
     const res = await request(app)
       .post('/api/wallets/withdraw')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
-      .send({ amount: 500.0, currency: 'BRL', description: 'Attempt overdraw' });
+      .send({
+        amount: 500.0,
+        currency: 'BRL',
+        description: 'Attempt overdraw',
+        pixKey: 'user@pix',
+      });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);

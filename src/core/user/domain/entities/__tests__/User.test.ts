@@ -47,9 +47,9 @@ describe('User Entity', () => {
       expect(user.canOperate()).toBe(false);
     });
 
-    it('should return false when user status is PENDING_VERIFICATION', () => {
+    it('should return true when user status is PENDING_VERIFICATION', () => {
       user.status = 'PENDING_VERIFICATION';
-      expect(user.canOperate()).toBe(false);
+      expect(user.canOperate()).toBe(true);
     });
   });
 

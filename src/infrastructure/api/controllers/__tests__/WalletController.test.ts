@@ -1,7 +1,9 @@
 import { WalletController } from '../WalletController';
 import { AuthenticatedRequest } from '../../middleware/AuthMiddleware';
 import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
+import { AppError } from '@/shared/errors/AppError';
 import { Response } from 'express';
+import { appConfig } from '../../../../shared/config/appConfig';
 
 jest.mock('@/infrastructure/cache/cacheHooks', () => ({
   flushWalletCache: jest.fn().mockResolvedValue(undefined),
@@ -33,7 +35,11 @@ const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): Authentic
     body: {},
     query: {},
     params: {},
-    auth: { userId: 'user-1', sessionId: 'sess-1' },
+    authContext: {
+      userId: 'user-1',
+      sessionId: 'sess-1',
+      ...(overrides?.authContext ?? {}),
+    },
     ...overrides,
   }) as AuthenticatedRequest;
 
@@ -62,7 +68,7 @@ describe('WalletController', () => {
       const controller = buildController();
       const res = createResponse();
 
-      await controller.getMe(createAuthRequest({ auth: undefined }), res);
+      await controller.getMe(createAuthRequest({ authContext: undefined }), res);
 
       expect(res.status).toHaveBeenCalledWith(401);
     });
@@ -104,7 +110,7 @@ describe('WalletController', () => {
       const controller = buildController();
       const res = createResponse();
 
-      await controller.deposit(createAuthRequest({ auth: undefined }), res);
+      await controller.deposit(createAuthRequest({ authContext: undefined }), res);
 
       expect(res.status).toHaveBeenCalledWith(401);
     });
@@ -120,13 +126,66 @@ describe('WalletController', () => {
       validateSpy.mockRestore();
     });
 
-    it('performs deposits, flushes cache, and returns 201', async () => {
+    it('returns 503 when Pix deposits are disabled', async () => {
       const controller = buildController();
+      const res = createResponse();
+      const original = appConfig.payments.pix.features.depositsEnabled;
+      appConfig.payments.pix.features.depositsEnabled = false;
+
+      await controller.deposit(
+        createAuthRequest({
+          body: { amount: 10, currency: 'BRL' },
+        }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      appConfig.payments.pix.features.depositsEnabled = original;
+    });
+
+    it('rejects deposits below the minimum amount', async () => {
+      const controller = buildController();
+      const res = createResponse();
+
+      await expect(
+        controller.deposit(
+          createAuthRequest({
+            body: {
+              amount: 0.5,
+              currency: 'BRL',
+            },
+          }),
+          res,
+        ),
+      ).rejects.toBeInstanceOf(AppError);
+    });
+
+    it('performs deposits, flushes cache, and returns Pix payload', async () => {
+      const controller = buildController();
+      const pixCharge = {
+        chargeId: 'charge-1',
+        reference: 'ref-1',
+        status: 'PENDING',
+        provider: 'mock',
+        qrCode: 'qr-code',
+        expiresAt: new Date('2025-01-01T00:05:00.000Z'),
+      } as const;
+      const pixConfirmation = {
+        chargeId: 'charge-1',
+        reference: 'ref-1',
+        status: 'PAID',
+        provider: 'mock',
+        confirmedAt: new Date('2025-01-01T00:01:00.000Z'),
+      } as const;
       depositUseCase.execute.mockResolvedValueOnce({
-        userId: 'user-1',
-        balance: 200,
-        lockedBalance: 0,
-        currency: 'BRL',
+        wallet: {
+          userId: 'user-1',
+          balance: 200,
+          lockedBalance: 0,
+          currency: 'BRL',
+        },
+        pixCharge,
+        pixConfirmation,
       });
       const res = createResponse();
 
@@ -135,24 +194,51 @@ describe('WalletController', () => {
           body: {
             amount: 100,
             currency: 'BRL',
+            description: 'Test deposit',
           },
         }),
         res,
       );
 
-      expect(depositUseCase.execute).toHaveBeenCalledWith('user-1', 100);
+      expect(depositUseCase.execute).toHaveBeenCalledWith('user-1', 100, 'BRL', 'Test deposit');
       expect(flushWalletCacheMock).toHaveBeenCalledWith('user-1');
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.body?.data?.wallet.balance).toBe(200);
+      expect(res.body?.data?.pix).toEqual({
+        chargeId: pixCharge.chargeId,
+        reference: pixCharge.reference,
+        status: pixConfirmation.status,
+        provider: pixConfirmation.provider,
+        qrCode: pixCharge.qrCode,
+        expiresAt: pixCharge.expiresAt,
+        confirmedAt: pixConfirmation.confirmedAt,
+      });
     });
 
     it('logs a warning when cache flush fails but still returns success', async () => {
       const controller = buildController();
       depositUseCase.execute.mockResolvedValueOnce({
-        userId: 'user-1',
-        balance: 150,
-        lockedBalance: 0,
-        currency: 'BRL',
+        wallet: {
+          userId: 'user-1',
+          balance: 150,
+          lockedBalance: 0,
+          currency: 'BRL',
+        },
+        pixCharge: {
+          chargeId: 'charge-1',
+          reference: 'ref-1',
+          status: 'PENDING',
+          provider: 'mock',
+          qrCode: 'qr',
+          expiresAt: new Date(),
+        },
+        pixConfirmation: {
+          chargeId: 'charge-1',
+          reference: 'ref-1',
+          status: 'PAID',
+          provider: 'mock',
+          confirmedAt: new Date(),
+        },
       });
       flushWalletCacheMock.mockRejectedValueOnce(new Error('fail'));
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -179,7 +265,7 @@ describe('WalletController', () => {
       const controller = buildController();
       const res = createResponse();
 
-      await controller.withdraw(createAuthRequest({ auth: undefined }), res);
+      await controller.withdraw(createAuthRequest({ authContext: undefined }), res);
 
       expect(res.status).toHaveBeenCalledWith(401);
     });
@@ -195,29 +281,93 @@ describe('WalletController', () => {
       validateSpy.mockRestore();
     });
 
+    it('returns 503 when Pix withdrawals are disabled', async () => {
+      const controller = buildController();
+      const res = createResponse();
+      const original = appConfig.payments.pix.features.withdrawalsEnabled;
+      appConfig.payments.pix.features.withdrawalsEnabled = false;
+
+      await controller.withdraw(
+        createAuthRequest({
+          body: {
+            amount: 150,
+            currency: 'BRL',
+            pixKey: 'user@pix',
+          },
+        }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      appConfig.payments.pix.features.withdrawalsEnabled = original;
+    });
+
+    it('rejects withdrawals below the minimum amount', async () => {
+      const controller = buildController();
+      const res = createResponse();
+
+      await expect(
+        controller.withdraw(
+          createAuthRequest({
+            body: {
+              amount: 50,
+              currency: 'BRL',
+              pixKey: 'user@pix',
+            },
+          }),
+          res,
+        ),
+      ).rejects.toBeInstanceOf(AppError);
+    });
+
     it('calls use case and flushes cache on success', async () => {
       const controller = buildController();
+      const pixPayout = {
+        payoutId: 'payout-1',
+        reference: 'ref-2',
+        status: 'COMPLETED',
+        provider: 'mock',
+        processedAt: new Date('2025-01-01T00:02:00.000Z'),
+      };
       withdrawUseCase.execute.mockResolvedValueOnce({
-        userId: 'user-1',
-        balance: 80,
-        lockedBalance: 10,
-        currency: 'BRL',
+        wallet: {
+          userId: 'user-1',
+          balance: 80,
+          lockedBalance: 10,
+          currency: 'BRL',
+        },
+        pixPayout,
       });
       const res = createResponse();
 
       await controller.withdraw(
         createAuthRequest({
           body: {
-            amount: 20,
+            amount: 150,
             currency: 'BRL',
+            pixKey: 'user@pix',
+            description: 'Manual cashout',
           },
         }),
         res,
       );
 
-      expect(withdrawUseCase.execute).toHaveBeenCalledWith('user-1', 20);
+      expect(withdrawUseCase.execute).toHaveBeenCalledWith(
+        'user-1',
+        150,
+        'BRL',
+        'user@pix',
+        'Manual cashout',
+      );
       expect(flushWalletCacheMock).toHaveBeenCalledWith('user-1');
       expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.body?.data?.pix).toEqual({
+        payoutId: pixPayout.payoutId,
+        reference: pixPayout.reference,
+        status: pixPayout.status,
+        provider: pixPayout.provider,
+        processedAt: pixPayout.processedAt,
+      });
     });
   });
 
@@ -226,7 +376,7 @@ describe('WalletController', () => {
       const controller = buildController();
       const res = createResponse();
 
-      await controller.getHistory(createAuthRequest({ auth: undefined }), res);
+      await controller.getHistory(createAuthRequest({ authContext: undefined }), res);
 
       expect(res.status).toHaveBeenCalledWith(401);
     });

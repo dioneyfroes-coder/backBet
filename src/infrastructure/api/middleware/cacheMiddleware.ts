@@ -64,7 +64,7 @@ const buildAuthenticatedCacheKey = (
   req: AuthenticatedRequest,
   formatter: (userId: string) => string,
 ): string | null => {
-  const userId = req.auth?.userId;
+  const userId = req.authContext?.userId;
   if (!userId) {
     return null;
   }

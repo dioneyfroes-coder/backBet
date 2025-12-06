@@ -1,5 +1,7 @@
 export type TransactionType = 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
 
+export type TransactionMetadata = Record<string, unknown> | undefined;
+
 export interface ITransactionDTO {
   id: string;
   userId: string;
@@ -8,6 +10,7 @@ export interface ITransactionDTO {
   currency: string;
   description: string | undefined;
   createdAt: Date;
+  metadata?: TransactionMetadata;
 }
 
 export class Transaction {
@@ -19,6 +22,7 @@ export class Transaction {
     public readonly currency: string,
     public readonly description: string | undefined,
     public readonly createdAt: Date,
+    public readonly metadata?: TransactionMetadata,
   ) {}
 
   toDTO(): ITransactionDTO {
@@ -30,6 +34,7 @@ export class Transaction {
       currency: this.currency,
       description: this.description,
       createdAt: this.createdAt,
+      metadata: this.metadata,
     };
   }
 }

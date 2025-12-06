@@ -1,4 +1,4 @@
-import { Wallet } from '../entities/Wallet';
+import { TransactionContext, Wallet } from '../entities/Wallet';
 import { IWalletRepository } from '../repositories/IWalletRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
@@ -23,9 +23,9 @@ export class WalletService {
     return wallet;
   }
 
-  async deposit(userId: string, amount: number): Promise<Wallet> {
+  async deposit(userId: string, amount: number, context?: TransactionContext): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId);
-    wallet.deposit(amount);
+    wallet.deposit(amount, context);
     await this.walletRepository.update(wallet);
     return wallet;
   }
@@ -38,9 +38,9 @@ export class WalletService {
     return this.walletRepository.getHistory(userId, limit, offset);
   }
 
-  async withdraw(userId: string, amount: number): Promise<Wallet> {
+  async withdraw(userId: string, amount: number, context?: TransactionContext): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId);
-    wallet.withdraw(amount);
+    wallet.withdraw(amount, context);
     await this.walletRepository.update(wallet);
     return wallet;
   }

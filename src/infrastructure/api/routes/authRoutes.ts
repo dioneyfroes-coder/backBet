@@ -8,7 +8,6 @@ import { WalletService } from '../../../core/finance/domain/services/WalletServi
 import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
-import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { appConfig } from '@/shared/config/appConfig';
@@ -16,7 +15,6 @@ import { appConfig } from '@/shared/config/appConfig';
 export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
   walletRepository?: IWalletRepository;
-  clerkService?: ClerkService;
   jwtService?: JwtService;
 };
 
@@ -51,12 +49,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   const registerUserUseCase = new RegisterUser(userService, walletService);
 
   // Instanciar controller
-  const authController = new AuthController(
-    registerUserUseCase,
-    userService,
-    deps.clerkService ?? new ClerkService(),
-    jwtService,
-  );
+  const authController = new AuthController(registerUserUseCase, userService, jwtService);
 
   /**
    * POST /auth/register
@@ -66,6 +59,13 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
     '/register',
     registerLimiter,
     asyncHandler((req: Request, res: Response) => authController.register(req, res)),
+  );
+
+  router.get(
+    '/register/status/:userId',
+    asyncHandler((req: Request<{ userId: string }>, res: Response) =>
+      authController.registrationStatus(req, res),
+    ),
   );
 
   /**

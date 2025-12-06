@@ -57,4 +57,24 @@ describe('appConfig helpers', () => {
       spaced: 'data',
     });
   });
+
+  it('exposes configurable wallet limits, treasury ratios and Pix toggles', () => {
+    process.env.WALLET_MIN_DEPOSIT = '5';
+    process.env.WALLET_MIN_WITHDRAW = '0.5';
+    process.env.PIX_ENABLE_DEPOSITS = 'false';
+    process.env.PIX_ENABLE_WITHDRAWALS = 'true';
+    process.env.TREASURY_MIN_PRIZE_RATIO = '0.3';
+    process.env.TREASURY_MAX_PRIZE_RATIO = '0.7';
+    process.env.TREASURY_TARGET_PRIZE_RATIO = '0.9';
+
+    const { appConfig } = loadConfig();
+
+    expect(appConfig.wallet.limits).toEqual({ minDeposit: 5, minWithdraw: 5 });
+    expect(appConfig.payments.pix.features).toEqual({
+      depositsEnabled: false,
+      withdrawalsEnabled: true,
+    });
+    expect(appConfig.treasury.prizeRatioRange).toEqual({ min: 0.3, max: 0.7 });
+    expect(appConfig.treasury.targetPrizeRatio).toBe(0.7);
+  });
 });

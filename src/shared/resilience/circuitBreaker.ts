@@ -48,6 +48,16 @@ export class CircuitBreaker {
     return this.nextAttempt;
   }
 
+  public reset(): void {
+    this.failureCount = 0;
+    this.successCount = 0;
+    this.nextAttempt = null;
+    if (this.state !== 'CLOSED') {
+      this.state = 'CLOSED';
+      this.options.onStateChange?.({ name: this.options.name, state: this.state });
+    }
+  }
+
   public async execute<T>(fn: () => Promise<T>): Promise<T> {
     const now = Date.now();
     if (this.state === 'OPEN') {

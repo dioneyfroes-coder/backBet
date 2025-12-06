@@ -98,6 +98,7 @@ Detalhes completos em `docs/OBSERVABILITY.mdx`.
 | Método | Caminho | Descrição |
 |--------|---------|-----------|
 | `POST` | `/auth/register` | Cria usuário + carteira (BRL). Sincroniza com Clerk quando habilitado. |
+| `GET` | `/auth/register/status/:userId` | Consulta o status do onboarding (PENDING_VERIFICATION/ACTIVE) para habilitar o front a liberar o acesso assim que o perfil for aprovado. |
 | `POST` | `/auth/login` | Valida credenciais locais, emite `accessToken`/`refreshToken`, retorna perfil. |
 | `POST` | `/auth/refresh` | Recebe `refreshToken` e devolve novo par de tokens. |
 | `GET` | `/auth/me` | Perfil autenticado (dados do domínio + Clerk). |
@@ -125,11 +126,34 @@ Content-Type: application/json
   "success": true,
   "data": {
     "message": "Usuário registrado com sucesso",
-    "user": { "id": "usr_01", "status": "PENDING_VERIFICATION" },
-    "wallet": { "userId": "usr_01", "balance": 0, "currency": "BRL" }
-  }
+    "registrationRequestId": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
+    "status": "ACTIVE",
+    "isActive": true,
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "sessionId": "5ed0f82c-3d8e-49ac-82b0-5aa7cdbd57a4",
+    "user": {
+      "id": "usr_01",
+      "email": "usuario@example.com",
+      "username": "usuario_123",
+      "status": "ACTIVE",
+      "createdAt": "2025-12-03T23:50:41.759Z"
+    },
+    "wallet": {
+      "id": "wal_01",
+      "userId": "usr_01",
+      "balance": 0,
+      "lockedBalance": 0,
+      "currency": "BRL"
+    }
+  },
+  "meta": { "timestamp": "2025-12-03T23:50:41.864Z" }
 }
 ```
+
+> Mesmo com `status = "PENDING_VERIFICATION"`, os campos `accessToken`, `refreshToken` e `sessionId` já são retornados e a conta pode operar normalmente. Esse status apenas indica que ainda não coletamos os dados complementares (PIX, documentos e informações fiscais). Assim que o usuário inicia o primeiro fluxo de saque capturamos esses dados e atualizamos o status para `ACTIVE`. Use `GET /api/auth/register/status/:userId` para acompanhar essa virada e liberar features que exijam verificação completa.
+
+> Toda conta criada recebe imediatamente uma carteira BRL com saldo inicial `0`, garantindo que não exista crédito prévio antes do primeiro depósito.
 
 ### Usuários (`/api/users`)
 
@@ -147,8 +171,23 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 |--------|---------|-------------------|-----------|
 | `GET` | `/wallets/me` | `protectedRoute` + `cacheWalletBalanceMiddleware` | Carteira atual `{ userId, balance, lockedBalance, currency }`. |
 | `GET` | `/wallets/history?limit&offset` | `protectedRoute` + `cacheWalletHistoryMiddleware` | Histórico paginado (`transactions`, `pagination`). |
-| `POST` | `/wallets/deposit` | `protectedRoute` + rate limit `wallet-deposit` | Body `{ amount, currency, description? }`. Responde 201 com carteira. |
-| `POST` | `/wallets/withdraw` | `protectedRoute` + rate limit `wallet-withdraw` | Mesma estrutura do depósito; valida saldo e bloqueios. |
+| `POST` | `/wallets/deposit` | `protectedRoute` + rate limit `wallet-deposit` | Body `{ amount, currency, description? }` (mínimo configurável via `WALLET_MIN_DEPOSIT`, default **R$ 1,00**). Responde 201 com `{ wallet, pix }`, onde `pix` traz `chargeId`, `reference`, `provider`, `status`, `qrCode`, `expiresAt`, `confirmedAt`. |
+| `POST` | `/wallets/withdraw` | `protectedRoute` + rate limit `wallet-withdraw` | Body `{ amount, currency, pixKey, description? }` (mínimo configurável via `WALLET_MIN_WITHDRAW`, default **R$ 100,00**). Retorna `{ wallet, pix }` com `payoutId`, `reference`, `provider`, `status`, `processedAt`. |
+
+> **Mock Pix provider:** os fluxos de depósito e saque usam o `PixProviderPort`, que no ambiente atual aponta para `MockPixProvider`. Ele gera QR Codes determinísticos e confirma o pagamento imediatamente, expondo todos os metadados no response (`pix.*`) e no histórico (`transactions[].metadata`). Nenhum valor sai do ambiente — é apenas uma simulação confiável para QA/integrações.
+
+> **Limites monetários:** `appConfig.wallet.limits` lê `WALLET_MIN_DEPOSIT` (default R$ 1,00) e `WALLET_MIN_WITHDRAW` (default R$ 100,00). Qualquer valor abaixo retorna `400 VALIDATION_ERROR`. Garanta que o front valide antes de enviar e mostre a mensagem "valor abaixo do mínimo" quando necessário.
+
+> **Toggles Pix:** use `PIX_ENABLE_DEPOSITS` / `PIX_ENABLE_WITHDRAWALS` para suspender fluxos rapidamente sem desligar o restante do backend. Quando `false`, o controller devolve `503 SERVICE_UNAVAILABLE` antes de chamar os use cases.
+
+#### Pix simulado (determinístico)
+
+- Provider atual: `MockPixProvider` (`PIX_PROVIDER=mock`), configurável via `PIX_PROVIDER_NAME`, `PIX_MOCK_LATENCY_MS` e `PIX_DEFAULT_KEY` (chave fallback exibida para usuários).
+- Depósitos expõem um QR Code fake pronto para copiar/colar e o backend já confirma o pagamento (`status: PAID`) para acelerar o fluxo de testes.
+- Saques exigem `pixKey` no payload e respondem com `pix.payoutId/reference` para rastreabilidade — as mesmas informações são persistidas em `transactions[].metadata` e replicadas na treasury para auditorias futuras.
+- Em produção, basta implementar outro adapter (`PixProviderPort`) e alterar `PIX_PROVIDER` para usar o gateway real, sem tocar nos controllers ou serviços.
+
+> **Política de encerramento:** antes de excluir uma conta de usuário, processe um saque integral aprovado para zerar o saldo. Se não houver dados suficientes para saque, transfira o valor remanescente para a carteira da casa (treasury) e registre o motivo para auditoria.
 
 ### Finanças (`/api/finance`)
 
@@ -156,9 +195,11 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 |--------|---------|-----------|
 | `GET` | `/finance/packages` | Lista pacotes ativos (`CreditPackageResponseDTO`). |
 | `POST` | `/finance/packages/:packageId/purchase` | Compra pacote, credita `base+bonus` e retorna `{ wallet, creditPackage }`. |
-| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes? }` e trava o saldo (`wallet.lock`). |
+| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes? }`, trava o saldo (`wallet.lock`) e coleta os dados de PIX/documentos/notas fiscais — se o usuário estava `PENDING_VERIFICATION`, ele é promovido para `ACTIVE` nesse momento. |
 | `GET` | `/finance/withdrawal-requests` | Lista pedidos do usuário com `approvalLogs`. |
 | `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"&#124;"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
+
+> **Tesouraria automática:** a faixa de destinação é dada pelos envs `TREASURY_MIN_PRIZE_RATIO` e `TREASURY_MAX_PRIZE_RATIO` (defaults 0.4–0.8). O alvo (`TREASURY_TARGET_PRIZE_RATIO`) é automaticamente "clampado" dentro dessa faixa sempre que chamamos `/api/admin/treasury/rebalance`, garantindo que o serviço nunca envie razões inválidas para o domínio.
 
 ### Apostas (`/api/bets`)
 
@@ -249,5 +290,5 @@ Proteja `/health`, `/readiness` e `/health/cache` via firewall ou reverse proxy 
 
 ---
 
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 4 de dezembro de 2025
 

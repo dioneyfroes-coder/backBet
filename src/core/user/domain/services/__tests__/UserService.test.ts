@@ -37,7 +37,7 @@ describe('UserService', () => {
       expect(result.email).toBeInstanceOf(Email);
       expect(result.email.toString()).toBe(mockCreateUserInput.email);
       expect(result.username).toBe(mockCreateUserInput.username);
-      expect(result.status).toBe('PENDING_VERIFICATION');
+      expect(result.status).toBe('ACTIVE');
       expect(mockUserRepository.save).toHaveBeenCalledWith(result);
     });
 

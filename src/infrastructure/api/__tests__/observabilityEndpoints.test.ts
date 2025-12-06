@@ -14,6 +14,10 @@ import {
   resetObservabilityToggles,
   getObservabilityToggles,
 } from '@/shared/observability/featureToggles';
+import {
+  redisCircuitBreaker,
+  mongoCircuitBreaker,
+} from '@/shared/resilience/dependencyCircuitBreakers';
 
 describe('Observability endpoints', () => {
   let app: Express;
@@ -22,6 +26,8 @@ describe('Observability endpoints', () => {
   let mongoMock: MongoMockHandle | undefined;
 
   beforeEach(() => {
+    redisCircuitBreaker.reset();
+    mongoCircuitBreaker.reset();
     const server = createApiServer(0);
     server.registerHealthCheck();
     server.registerMetricsEndpoint();
@@ -98,6 +104,7 @@ describe('Observability endpoints', () => {
 
   it('GET /readiness should report redis latency when cache is enabled', async () => {
     cacheConfig.enabled = true;
+    delete process.env.USE_MONGOOSE_PERSISTENCE;
     jest.spyOn(redisClient, 'ping').mockResolvedValue('PONG');
 
     const res = await request(app).get('/readiness');

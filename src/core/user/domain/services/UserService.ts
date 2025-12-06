@@ -16,7 +16,8 @@ export class UserService {
     }
 
     let passwordHash = '';
-    let status: UserStatus = 'PENDING_VERIFICATION';
+    const shouldAutoActivate = userConfig.autoActivateSignups;
+    let status: UserStatus = shouldAutoActivate ? 'ACTIVE' : 'PENDING_VERIFICATION';
 
     if (input.password) {
       if (input.password.length < userConfig.minPasswordLength) {
@@ -27,7 +28,7 @@ export class UserService {
         );
       }
       passwordHash = await bcrypt.hash(input.password, 12);
-      status = 'PENDING_VERIFICATION';
+      status = shouldAutoActivate ? 'ACTIVE' : 'PENDING_VERIFICATION';
     } else {
       // Accounts created via Clerk (lazy creation) do not store a local password
       // and are considered immediately active because identity is managed by Clerk.

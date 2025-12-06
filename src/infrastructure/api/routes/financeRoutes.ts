@@ -14,15 +14,19 @@ import {
   createCreditPackageRepository,
   createWalletRepository,
   createWithdrawalRequestRepository,
+  createUserRepository,
 } from '@/infrastructure/persistence/factory';
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
+import { UserService } from '@/core/user/domain/services/UserService';
 
 export type FinanceRoutesDeps = {
   walletRepository?: IWalletRepository;
   creditPackageRepository?: ICreditPackageRepository;
   withdrawalRequestRepository?: IWithdrawalRequestRepository;
+  userRepository?: IUserRepository;
 };
 
 export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise<Router> {
@@ -43,10 +47,13 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
     walletService,
   );
 
+  const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
+  const userService = new UserService(userRepository);
+
   const financeController = new FinanceController(
     new ListCreditPackages(creditPackageService),
     new PurchaseCreditPackage(creditPackageService, walletService),
-    new RequestWithdrawal(withdrawalRequestService),
+    new RequestWithdrawal(withdrawalRequestService, userService),
     new GetWithdrawalRequests(withdrawalRequestService),
     new ProcessWithdrawalRequest(withdrawalRequestService),
   );

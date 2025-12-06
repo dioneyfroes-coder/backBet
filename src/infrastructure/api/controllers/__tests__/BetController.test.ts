@@ -42,7 +42,11 @@ const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): Authentic
     params: {},
     query: {},
     headers: {},
-    auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
+    authContext: {
+      userId: 'user-1',
+      sessionId: 'sess-1',
+      ...(overrides?.authContext ?? {}),
+    },
     ...overrides,
   }) as AuthenticatedRequest;
 
@@ -84,7 +88,7 @@ describe('BetController', () => {
 
   it('requires auth before placing bets', async () => {
     const res = createResponse();
-    await controller.placeBet(createAuthRequest({ auth: undefined }), res);
+    await controller.placeBet(createAuthRequest({ authContext: undefined }), res);
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
@@ -125,7 +129,7 @@ describe('BetController', () => {
 
   it('requires auth before canceling bets', async () => {
     const res = createResponse();
-    await controller.cancelBet(createAuthRequest({ auth: undefined }), res);
+    await controller.cancelBet(createAuthRequest({ authContext: undefined }), res);
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
@@ -154,7 +158,7 @@ describe('BetController', () => {
 
   it('requires auth before listing personal bets', async () => {
     const res = createResponse();
-    await controller.getMyBets(createAuthRequest({ auth: undefined }), res);
+    await controller.getMyBets(createAuthRequest({ authContext: undefined }), res);
     expect(res.status).toHaveBeenCalledWith(401);
   });
 

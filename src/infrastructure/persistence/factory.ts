@@ -7,6 +7,7 @@ import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICr
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { IGameRoundRepository } from '@/core/game/domain/repositories/IGameRoundRepository';
+import { IHouseTreasuryRepository } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
@@ -91,4 +92,17 @@ export async function createGameRoundRepository(): Promise<IGameRoundRepository>
     '@/core/game/domain/repositories/InMemoryGameRoundRepository'
   );
   return new InMemoryGameRoundRepository();
+}
+
+export async function createHouseTreasuryRepository(): Promise<IHouseTreasuryRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseHouseTreasuryRepository } = await import(
+      './mongoose/repositories/MongooseHouseTreasuryRepository'
+    );
+    return new MongooseHouseTreasuryRepository();
+  }
+  const { HouseTreasuryRepository } = await import(
+    '@/core/treasury/domain/repositories/HouseTreasuryRepository'
+  );
+  return new HouseTreasuryRepository();
 }

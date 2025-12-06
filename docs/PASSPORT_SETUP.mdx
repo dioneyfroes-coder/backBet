@@ -1,0 +1,145 @@
+---
+title: "Autenticação Passport/JWT"
+description: "Configuração da autenticação baseada em passport-jwt no BackBet."
+slug: "/passport-setup"
+---
+
+# Autenticação Passport/JWT
+
+O BackBet agora utiliza **Passport** com a estratégia **passport-jwt** como mecanismo primário de autenticação. Em desenvolvimento/teste ainda oferecemos o bypass de bearer (`ALLOW_DEV_BEARER_BYPASS`) e o JWT local gerado pelo `JwtService`. Esta página descreve como habilitar cada modo, quais variáveis precisam ser definidas e como o backend valida os tokens emitidos.
+
+## 1. Modos de Autenticação
+
+| Ambiente | Configuração | Comportamento |
+|----------|--------------|---------------|
+| **Produção** | `JWT_SECRET` live, `ALLOW_DEV_BEARER_BYPASS=false`. | Toda requisição protegida passa pelo `passport.authenticate('jwt')`. O boot falha se `JWT_SECRET` não estiver definido. |
+| **Staging** | Mesmo segredo do ambiente ou um dedicado, mantendo `ALLOW_DEV_BEARER_BYPASS=false`. | Replica o comportamento de produção para validar integrações ponta a ponta. |
+| **Desenvolvimento/Teste** | `JWT_SECRET` pode ser `test-secret`. Opcionalmente `ALLOW_DEV_BEARER_BYPASS=true`. | Aceitamos `Authorization: Bearer <token JWT>` ou `Authorization: Bearer <userId>` quando o bypass estiver ligado. `JwtService` continua emitindo tokens para `/api/auth/login`. |
+
+> Se `appConfig.runtime.env === 'production'` e `JWT_SECRET` estiver ausente, o servidor encerra o boot com erro explícito.
+
+## 2. Configurando o Passport
+
+1. Gere um segredo forte (pelo menos 32 bytes) e armazene no cofre de segredos do ambiente.
+2. Defina emissor (`JWT_ISSUER`) e, opcionalmente, público (`JWT_AUDIENCE`) se quiser validar consumidores específicos.
+3. Confirme que o relógio do servidor está sincronizado; tokens expirados são rejeitados imediatamente.
+4. Reinicie o processo do BackBet após alterar qualquer variável JWT para garantir que o `JwtStrategy` seja reconstruído.
+
+A estratégia é registrada em `AuthMiddleware` e usa o `JwtService` para validar `sub`, `exp` e `iat`. Quando o token é aceito, ele popula `req.authContext` com `{ userId, roles, sessionId }`.
+
+## 3. Variáveis de ambiente
+
+Atualize `.env` (não versione) com os campos abaixo:
+
+```env
+# JWT principal
+JWT_SECRET=super-strong-secret
+JWT_ISSUER=backbet
+JWT_AUDIENCE=backbet-clients          # opcional
+JWT_EXPIRATION=15m                    # formato ms ou zeit/ms
+JWT_REFRESH_EXPIRATION=7d             # usado em /api/auth/refresh
+
+# Bypass (somente dev/test)
+ALLOW_DEV_BEARER_BYPASS=false         # true aceita Authorization: Bearer <userId>
+
+# Acesso administrativo
+ADMIN_USER_IDS=user_a,user_b          # CSV com IDs internos autorizados
+```
+
+Outras variáveis relevantes:
+- `CORS_ALLOWED_ORIGINS` e `ENABLE_HSTS` devem refletir as origens permitidas para evitar tokens expostos via HTTP.
+- `AUTH_*_RATE_LIMIT_*` limitam tentativas de login/refresh e ajudam a conter brute force.
+
+## 4. Como o backend consome os tokens
+
+### Middleware de autenticação
+
+`ApiServer` encadeia o `passport.initialize()` seguido do middleware `attachAuthContext`:
+
+```ts
+if (allowDevBypass && isDevBypassUser(req)) {
+  req.authContext = { userId: devUserId };
+  return next();
+}
+return passport.authenticate('jwt', { session: false })(req, res, next);
+```
+
+- `allowDevBypass` só fica `true` fora de produção quando `ALLOW_DEV_BEARER_BYPASS=true`.
+- A estratégia JWT confere assinatura, issuer e expiração usando `appConfig.auth.jwt`.
+- `protectedRoute` e `requireAdminRole` leem `req.authContext` para liberar recursos das rotas `users`, `wallets`, `bets`, `finance`, `games` etc.
+
+### JwtService
+
+`src/shared/services/JwtService.ts` centraliza a emissão e validação:
+- `signAccessToken(payload)` e `signRefreshToken(payload)` usam as durações definidas nas variáveis de ambiente.
+- `verify(token)` retorna o payload já validado; o Passport delega esse passo internamente.
+- Os controllers de autenticação (ex.: `AuthController.login`) chamam o serviço para emitir novos tokens após cada operação.
+
+## 5. Fluxos principais
+
+### Login/registro
+
+1. O frontend chama `/api/auth/register` ou `/api/auth/login` com as credenciais do BackBet.
+2. O controlador valida os dados, cria/consulta o usuário interno e emite `accessToken` + `refreshToken` via `JwtService`.
+3. O cliente envia `Authorization: Bearer <accessToken>` em todas as requisições seguintes.
+4. O Passport valida o token e popula `authContext`. Caso o token expire, o cliente usa `/api/auth/refresh` para obter um novo par.
+
+### Rotas protegidas
+
+```
+Client → Authorization: Bearer <JWT>
+  ↓
+Passport JwtStrategy valida assinatura/exp
+  ↓ req.authContext.userId definido
+protectedRoute & guards
+  ↓
+Controller + Use cases + caches
+```
+
+### Logout
+
+- `POST /api/auth/logout` apenas invalida o refresh no lado do cliente (não há blacklist server-side ainda).
+- Em aplicações SPA, remova o token do storage local após receber `204` ou `200` da rota.
+
+## 6. Integração Frontend (Next.js exemplo)
+
+```tsx
+export async function callApi(path: string, init?: RequestInit) {
+  const token = await getCurrentAccessToken(); // implemente como preferir
+  return fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+```
+
+Durante o desenvolvimento você pode usar o bypass enviando `Authorization: Bearer user_dev_001`, contanto que `ALLOW_DEV_BEARER_BYPASS=true` e `NODE_ENV` não seja `production`.
+
+## 7. Segurança
+
+- Rotacione `JWT_SECRET` periodicamente e reaplique `JWT_EXPIRATION` reduzido (15m recomendado).
+- Habilite HTTPS end-to-end (o Passport não valida protocolo; isso depende do deploy).
+- Nunca logue tokens completos. O `structuredLogger` já mascara campos sensíveis; mantenha essa convenção em logs customizados.
+- `requestContext` propaga `userId` para auditoria; use-o em qualquer log adicional para reconstruir fluxo de chamadas.
+
+## 8. Troubleshooting
+
+| Problema | Passos |
+|----------|--------|
+| `Missing required environment variables: JWT_SECRET` | Defina `JWT_SECRET` antes de iniciar o servidor (inclusive em pipelines de CI). |
+| `Unauthorized` em ambientes dev | Confirme se o token não expirou. Se estiver usando bypass, lembre-se de enviar uma string sem dots (não deve se parecer com JWT). |
+| `Forbidden` ao acessar `/api/admin/**` | Garanta que o `userId` esteja listado em `ADMIN_USER_IDS` e que o token realmente pertence a esse usuário. |
+| Token emitido mas Passport rejeita | Verifique `JWT_ISSUER`/`JWT_AUDIENCE`. Um mismatch faz a estratégia falhar mesmo com a assinatura correta. |
+
+## 9. Próximos passos
+
+1. Implementar revogação de refresh tokens e rotação automática.
+2. Adicionar testes e2e cobrindo Passport + dev bypass + refresh simultaneamente.
+3. Documentar como serviços internos (cronjobs, scripts) devem gerar tokens de serviço usando o mesmo `JwtService`.
+
+---
+
+**Última atualização:** 3 de dezembro de 2025

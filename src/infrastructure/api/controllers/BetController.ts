@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import { PlaceBetDTO, CancelBetDTO, PlaceBetDTOType, CancelBetDTOType } from '../dtos/BetDTOs';
 import { BetService } from '@core/betting/domain/services/BetService';
 import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseCase';
@@ -79,7 +79,7 @@ export class BetController extends BaseController {
    *         description: Dados inválidos
    */
   async placeBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
     const payload = this.validateSchema(PlaceBetDTO, req.body) as PlaceBetDTOType;
@@ -131,7 +131,7 @@ export class BetController extends BaseController {
    *         description: Não pode cancelar
    */
   async cancelBet(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
     const payload = this.validateSchema(CancelBetDTO, {
@@ -167,7 +167,7 @@ export class BetController extends BaseController {
    *               $ref: '#/components/schemas/BetListResponse'
    */
   async getMyBets(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
     const bets = await this.getUserBetsUseCase.execute(userId);

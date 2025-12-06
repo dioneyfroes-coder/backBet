@@ -241,7 +241,40 @@ const swaggerOptions = {
               type: 'object',
               properties: {
                 message: { type: 'string', example: 'Usuário registrado com sucesso' },
+                registrationRequestId: {
+                  type: 'string',
+                  format: 'uuid',
+                  example: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED'],
+                  example: 'ACTIVE',
+                },
+                isActive: { type: 'boolean', example: true },
+                accessToken: {
+                  type: ['string', 'null'],
+                  example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                },
+                refreshToken: {
+                  type: ['string', 'null'],
+                  example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                },
+                sessionId: {
+                  type: ['string', 'null'],
+                  example: 'session-uuid',
+                },
                 user: { $ref: '#/components/schemas/User' },
+                wallet: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', example: 'cadaeb28-c7f7-425b-91f7-73a27141ae49' },
+                    userId: { type: 'string', example: 'cadaeb28-c7f7-425b-91f7-73a27141ae49' },
+                    balance: { type: 'number', example: 0 },
+                    lockedBalance: { type: 'number', example: 0 },
+                    currency: { type: 'string', example: 'BRL' },
+                  },
+                },
               },
             },
             meta: {
@@ -255,12 +288,25 @@ const swaggerOptions = {
             success: true,
             data: {
               message: 'Usuário registrado com sucesso',
+              registrationRequestId: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
+              status: 'ACTIVE',
+              isActive: true,
+              accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              sessionId: 'session-uuid',
               user: {
                 id: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
                 email: 'user@example.com',
                 username: 'joaosilva',
                 status: 'PENDING_VERIFICATION',
                 createdAt: '2025-11-14T23:20:42.778Z',
+              },
+              wallet: {
+                id: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
+                userId: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
+                balance: 0,
+                lockedBalance: 0,
+                currency: 'BRL',
               },
             },
             meta: { timestamp: '2025-11-14T23:20:42.778Z' },

@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { BaseController } from './BaseController';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import {
   CreditPackagePurchaseDTO,
   CreateWithdrawalRequestDTO,
@@ -41,7 +41,7 @@ export class FinanceController extends BaseController {
   }
 
   async purchasePackage(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }
@@ -73,7 +73,7 @@ export class FinanceController extends BaseController {
   }
 
   async createWithdrawalRequest(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }
@@ -108,7 +108,7 @@ export class FinanceController extends BaseController {
   }
 
   async listWithdrawalRequests(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }
@@ -130,7 +130,7 @@ export class FinanceController extends BaseController {
   }
 
   async processWithdrawal(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }

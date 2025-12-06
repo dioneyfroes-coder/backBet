@@ -140,9 +140,8 @@ Gere tráfego e confira os spans no backend (Grafana Tempo, Jaeger, etc.).
 - `CACHE_ENABLED`, `REDIS_URL`, `CACHE_*_TTL_SECONDS`: controlam Redis, TTLs e, por consequência, o conteúdo de `cacheMetricsSnapshot` e `/health/cache`.
 - `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL`: determinam se o readiness pingará Mongo (e qual instância) para atualizar `dependencyHealthSnapshot`.
 - `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*`, `BET_*`: alteram o comportamento das rotas e tendem a impactar histogramas de HTTP; monitore após ajustar limites.
-- `APP_NAME`: nome do produto (exibido nos dashboards e reaproveitado por `NEW_RELIC_APP_NAME` quando não configurado diretamente).
+- `APP_NAME`: nome do produto exibido nos dashboards e logs.
 - `SERVICE_NAME`: identidade técnica do serviço; OpenTelemetry usa esse nome quando `OTEL_SERVICE_NAME` não é definido.
-- `NEW_RELIC_APP_NAME`: se ausente, herdará `APP_NAME`; configure um valor específico apenas se precisar separar o app visível do nome do serviço em New Relic.
 
 ## Dashboards e alertas
 

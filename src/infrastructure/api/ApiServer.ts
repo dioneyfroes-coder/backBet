@@ -1,5 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import { clerkMiddleware } from '@clerk/express';
+import passport from 'passport';
 import cors, { CorsOptions } from 'cors';
 import helmet, { HelmetOptions } from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -35,7 +35,7 @@ import {
 } from '@/infrastructure/observability/resilienceMetrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { getObservabilityToggles } from '@/shared/observability/featureToggles';
-import { AuthenticatedRequest } from './middleware/AuthMiddleware';
+import { attachAuthContext, configurePassportJwt } from './middleware/AuthMiddleware';
 import { RequestWithContext } from '@/types/http';
 
 const MONGO_PING_RETRY_OPTIONS = {
@@ -60,6 +60,7 @@ export class ApiServer {
     this.port = port;
     this.app = express();
     this.app.disable('x-powered-by');
+    this.app.disable('etag');
     this.setupMiddleware();
   }
 
@@ -131,41 +132,9 @@ export class ApiServer {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-    // Clerk authentication middleware - skip in development if not configured
-    const clerkSecret = process.env.CLERK_SECRET_KEY;
-    const isTestClerkSecret = Boolean(clerkSecret?.includes('sk_test'));
-    const hasClerkSecret = Boolean(clerkSecret && (isProduction ? !isTestClerkSecret : true));
-    if (isProduction && (!clerkSecret || isTestClerkSecret)) {
-      throw new Error('CLERK_SECRET_KEY must be a live key in production environments');
-    }
-
-    const shouldEnableDevBypass =
-      runtimeEnv === 'test' ||
-      (!hasClerkSecret && !isProduction) ||
-      (runtimeEnv === 'development' && appConfig.security.allowDevBearerBypass);
-
-    if (shouldEnableDevBypass) {
-      // Em desenvolvimento com valores mock, habilita header custom sem sobrescrever JWT
-      this.app.use((req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const token = authHeader.substring(7).trim();
-          const looksLikeJwt = token.split('.').length === 3;
-          if (!looksLikeJwt) {
-            req.auth = {
-              userId: token,
-              sessionId: 'dev-session',
-            };
-          }
-        }
-        next();
-      });
-    }
-
-    if (hasClerkSecret) {
-      // Em produção ou em desenvolvimento com valores reais, usar Clerk
-      this.app.use(clerkMiddleware());
-    }
+    configurePassportJwt();
+    this.app.use(passport.initialize());
+    this.app.use(attachAuthContext);
 
     // Request ID para tracing
     this.app.use(this.requestIdMiddleware);
@@ -212,7 +181,7 @@ export class ApiServer {
   ): void => {
     const start = process.hrtime();
     const requestId = req.id;
-    const userId = req.auth?.userId || req.user?.id;
+    const userId = req.authContext?.userId;
     const clientIpHeader = req.headers['x-forwarded-for'];
     const clientIp = Array.isArray(clientIpHeader)
       ? clientIpHeader[0]
@@ -350,7 +319,9 @@ export class ApiServer {
       });
     });
 
-    this.app.get('/readiness', this.readinessHandler);
+    this.app.get('/readiness', (req: Request, res: Response, next: NextFunction) => {
+      this.readinessHandler(req as RequestWithContext, res).catch(next);
+    });
 
     this.app.get('/health/cache', (_req: Request, res: Response) => {
       res.status(200).json({
@@ -385,12 +356,13 @@ export class ApiServer {
   }
 
   public registerErrorHandler(): void {
-    this.app.use((err: unknown, req: RequestWithContext, res: Response, _next: NextFunction) => {
+    this.app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+      const requestWithContext = req as RequestWithContext;
       const normalizedError = this.normalizeError(err);
       const statusCode = normalizedError.statusCode ?? normalizedError.status ?? 500;
       const code = normalizedError.code ?? 'INTERNAL_SERVER_ERROR';
       const requestContextSnapshot = getRequestContext();
-      const requestId = requestContextSnapshot?.requestId || req.id;
+      const requestId = requestContextSnapshot?.requestId || requestWithContext.id;
       const timestamp = new Date().toISOString();
       const message = normalizedError.message ?? 'Erro interno inesperado';
 

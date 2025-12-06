@@ -22,8 +22,8 @@ import { GetUserBetsUseCase } from '@/core/betting/aplication/use-cases/GetUserB
 import { GetEventBetsUseCase } from '@/core/betting/aplication/use-cases/GetEventUseCase';
 import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
 import { protectedRoute } from '@/infrastructure/api/middleware/AuthMiddleware';
-import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
+import { MockPixProvider } from '@/infrastructure/payments/pix/MockPixProvider';
 
 jest.setTimeout(20000);
 
@@ -33,7 +33,6 @@ describe('API integration tests', () => {
 
   beforeAll(() => {
     process.env.NODE_ENV = 'development';
-    process.env.CLERK_SECRET_KEY = 'sk_test_dummy';
 
     const server = createApiServer(0);
 
@@ -48,22 +47,17 @@ describe('API integration tests', () => {
 
     const registerUserUseCase = new RegisterUser(userService, walletService);
     const getWalletUC = new GetWallet(walletService);
-    const depositUC = new Deposit(walletService);
-    const withdrawUC = new Withdraw(walletService);
+    const pixProvider = new MockPixProvider({ latencyMs: 0 });
+    const depositUC = new Deposit(walletService, pixProvider);
+    const withdrawUC = new Withdraw(walletService, pixProvider);
     const historyUC = new GetHistory(walletService);
     const placeBetUC = new PlaceBetUseCase(betService);
     const cancelBetUC = new CancelBetUseCase(betService);
     const getUserBetsUC = new GetUserBetsUseCase(betService);
     const getEventBetsUC = new GetEventBetsUseCase(betService);
 
-    const clerkService = new ClerkService();
     const jwtService = new JwtService();
-    const authController = new AuthController(
-      registerUserUseCase,
-      userService,
-      clerkService,
-      jwtService,
-    );
+    const authController = new AuthController(registerUserUseCase, userService, jwtService);
     const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
@@ -96,6 +90,12 @@ describe('API integration tests', () => {
       '/wallets/deposit',
       protectedRoute,
       asyncHandler((req, res) => walletController.deposit(req as any, res)),
+    );
+
+    router.post(
+      '/wallets/withdraw',
+      protectedRoute,
+      asyncHandler((req, res) => walletController.withdraw(req as any, res)),
     );
 
     router.post(
@@ -177,6 +177,37 @@ describe('API integration tests', () => {
     expect(depositRes.body.data).toBeDefined();
     expect(depositRes.body.data.wallet).toBeDefined();
     expect(depositRes.body.data.wallet.balance).toBeDefined();
+  });
+
+  test('POST /api/wallets/deposit -> rejects amounts below the minimum', async () => {
+    const loginData = await registerAndLogin('walletlowdeposit');
+
+    const res = await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
+      .send({ amount: 0.5, currency: 'BRL' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error?.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('POST /api/wallets/withdraw -> rejects amounts below the minimum', async () => {
+    const loginData = await registerAndLogin('walletlowwithdraw');
+
+    await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
+      .send({ amount: 200, currency: 'BRL' });
+
+    const res = await request(app)
+      .post('/api/wallets/withdraw')
+      .set('Authorization', `Bearer ${loginData.accessToken}`)
+      .send({ amount: 50, currency: 'BRL', pixKey: 'user@pix' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error?.code).toBe('VALIDATION_ERROR');
   });
 
   test('POST /api/bets -> place a bet', async () => {

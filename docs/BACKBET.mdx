@@ -11,8 +11,8 @@ BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20
 ## Stack e princípios
 
 - **Linguagem/Runtime**: TypeScript 5.9 + Node 20 (`ts-node`/`tsx` em dev, `tsc` + `tsc-alias` para build)
-- **Nomes configuráveis**: `APP_NAME` declara o nome do produto exibido (é reaproveitado em `NEW_RELIC_APP_NAME` quando não há override) enquanto `SERVICE_NAME` identifica o serviço em métricas/tracing (`OTEL_SERVICE_NAME`). Mantemos ambos no `.env` para separar a identidade do app da identidade operacional.
-- **Configuração centralizada**: `BACKBET_RUNTIME_ENV` decide se as validações de produção devem exigir chaves live; mantenha em `development` para tolerar valores de `.env` mesmo quando ferramentas (PM2/New Relic) precisam que `NODE_ENV=production`.
+- **Nomes configuráveis**: `APP_NAME` declara o nome do produto exibido enquanto `SERVICE_NAME` identifica o serviço em métricas/tracing (`OTEL_SERVICE_NAME`). Mantemos ambos no `.env` para separar a identidade do app da identidade operacional.
+- **Configuração centralizada**: `BACKBET_RUNTIME_ENV` decide se as validações de produção devem exigir chaves live; mantenha em `development` para tolerar valores de `.env` mesmo quando ferramentas (PM2 e scripts de observabilidade) precisam que `NODE_ENV=production`.
 - **Arquitetura**: Monólito modular (API ▸ application ▸ domain ▸ infrastructure ▸ shared)
 - **Padrões**: DDD, Result pattern, repositories async, factories para troca de adapters
 - **Qualidade**: ESLint flat config, Jest + SWC, 350 testes (97% cobertura), CI local `npm run lint && npm run test --coverage && npm run build`

@@ -75,6 +75,13 @@ export abstract class BaseController {
     return this.error(res, 'INTERNAL_SERVER_ERROR', message, 500);
   }
 
+  protected serviceUnavailable(
+    res: Response,
+    message: string = 'Serviço temporariamente indisponível',
+  ): Response {
+    return this.error(res, 'SERVICE_UNAVAILABLE', message, 503);
+  }
+
   protected validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): T | null {
     try {
       return schema.parse(data);

@@ -1,65 +1,88 @@
 import request from 'supertest';
-
-jest.mock('@clerk/express', () => {
-  const middleware = jest.fn(() => (_req: unknown, _res: unknown, next: () => void) => next());
-  return {
-    clerkMiddleware: middleware,
-  };
-});
+import jwt from 'jsonwebtoken';
 
 describe('ApiServer authentication bootstrap', () => {
   const ORIGINAL_ENV = process.env;
-
-  const getClerkMiddlewareMock = () =>
-    jest.requireMock('@clerk/express').clerkMiddleware as jest.Mock;
 
   const applyEnv = (overrides: Partial<NodeJS.ProcessEnv> = {}) => {
     process.env = {
       ...ORIGINAL_ENV,
       JWT_SECRET: 'test-secret',
+      JWT_ISSUER: 'backbet',
       NODE_ENV: overrides.NODE_ENV ?? 'development',
       BACKBET_RUNTIME_ENV: overrides.BACKBET_RUNTIME_ENV ?? overrides.NODE_ENV ?? 'development',
+      ALLOW_DEV_BEARER_BYPASS: overrides.ALLOW_DEV_BEARER_BYPASS ?? 'true',
       ...overrides,
     };
+  };
+
+  const mountWhoAmIRoute = (app: import('express').Express) => {
+    app.get('/whoami', (req, res) => {
+      const authContext = (req as any).authContext;
+      if (!authContext?.userId) {
+        return res.sendStatus(401);
+      }
+      return res.status(200).json({ userId: authContext.userId });
+    });
   };
 
   beforeEach(() => {
     jest.resetModules();
     applyEnv();
-    getClerkMiddlewareMock().mockClear();
   });
 
   afterEach(() => {
     process.env = ORIGINAL_ENV;
   });
 
-  it('registers Clerk middleware when a test key exists outside production', async () => {
-    applyEnv({ CLERK_SECRET_KEY: 'sk_test_demo' });
+  it('allows dev bearer bypass when enabled outside production', async () => {
+    applyEnv({ ALLOW_DEV_BEARER_BYPASS: 'true' });
 
     await jest.isolateModulesAsync(async () => {
       const { ApiServer } = await import('../ApiServer');
       const server = new ApiServer(0);
       const app = server.getExpressApp();
-      app.get('/ping', (_req, res) => res.sendStatus(204));
+      mountWhoAmIRoute(app);
 
-      await request(app).get('/ping').expect(204);
+      await request(app)
+        .get('/whoami')
+        .set('Authorization', 'Bearer dev-user-123')
+        .expect(200, { userId: 'dev-user-123' });
     });
-
-    expect(getClerkMiddlewareMock()).toHaveBeenCalled();
   });
 
-  it('falls back to dev bearer bypass when no Clerk secret is provided', async () => {
-    applyEnv({ CLERK_SECRET_KEY: '', CLERK_API_KEY: '' });
+  it('rejects non-JWT bearer tokens when bypass is disabled', async () => {
+    applyEnv({ ALLOW_DEV_BEARER_BYPASS: 'false' });
+
     await jest.isolateModulesAsync(async () => {
       const { ApiServer } = await import('../ApiServer');
       const server = new ApiServer(0);
       const app = server.getExpressApp();
+      mountWhoAmIRoute(app);
 
-      app.get('/whoami', (_req, res) => res.sendStatus(204));
-
-      await request(app).get('/whoami').set('Authorization', 'Bearer user_dev_123').expect(204);
+      await request(app).get('/whoami').set('Authorization', 'Bearer plain-user').expect(401);
     });
+  });
 
-    expect(getClerkMiddlewareMock()).not.toHaveBeenCalled();
+  it('accepts valid JWT bearer tokens when bypass is disabled', async () => {
+    applyEnv({ ALLOW_DEV_BEARER_BYPASS: 'false' });
+
+    await jest.isolateModulesAsync(async () => {
+      const { ApiServer } = await import('../ApiServer');
+      const server = new ApiServer(0);
+      const app = server.getExpressApp();
+      mountWhoAmIRoute(app);
+
+      const token = jwt.sign(
+        { userId: 'jwt-user', sessionId: 'session-1', kind: 'access' },
+        'test-secret',
+        { issuer: 'backbet', expiresIn: '15m' },
+      );
+
+      await request(app)
+        .get('/whoami')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200, { userId: 'jwt-user' });
+    });
   });
 });

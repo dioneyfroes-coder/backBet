@@ -1,4 +1,6 @@
 // users/config/user-config.ts
+import { appConfig } from '@/shared/config/appConfig';
+
 const userConfig = {
   minPasswordLength: 8,
   maxLoginAttempts: 5,
@@ -8,6 +10,7 @@ const userConfig = {
   maxDepositAmount: 5000,
   minWithdrawalAmount: 20,
   maxWithdrawalAmount: 10000,
+  autoActivateSignups: appConfig.auth.autoActivateSignups,
 } as const;
 
 export { userConfig };

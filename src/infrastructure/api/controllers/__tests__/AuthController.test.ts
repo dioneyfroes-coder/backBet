@@ -14,6 +14,8 @@ type MockResponse = Response & {
   body?: any;
   status: jest.MockedFunction<(code: number) => Response>;
   json: jest.MockedFunction<(payload: any) => Response>;
+  cookie: jest.MockedFunction<(name: string, value: string, options?: any) => Response>;
+  clearCookie: jest.MockedFunction<(name: string, options?: any) => Response>;
 };
 
 const createResponse = (): MockResponse => {
@@ -26,6 +28,8 @@ const createResponse = (): MockResponse => {
     res.body = payload;
     return res as MockResponse;
   });
+  res.cookie = jest.fn().mockReturnValue(res as MockResponse);
+  res.clearCookie = jest.fn().mockReturnValue(res as MockResponse);
   return res as MockResponse;
 };
 
@@ -44,7 +48,11 @@ const createAuthRequest = (overrides?: Partial<AuthenticatedRequest>): Authentic
     params: {},
     query: {},
     headers: {},
-    auth: { userId: 'user-1', ...(overrides?.auth ?? {}) },
+    authContext: {
+      userId: 'user-1',
+      sessionId: 'session-uuid',
+      ...(overrides?.authContext ?? {}),
+    },
     ...overrides,
   }) as AuthenticatedRequest;
 
@@ -66,11 +74,6 @@ describe('AuthController', () => {
     comparePassword: jest.fn(),
     findById: jest.fn(),
   };
-  const clerkService = {
-    isEnabled: jest.fn(),
-    createUser: jest.fn(),
-    getUser: jest.fn(),
-  };
   const jwtService = {
     signAccessToken: jest.fn(),
     signRefreshToken: jest.fn(),
@@ -81,12 +84,12 @@ describe('AuthController', () => {
     new AuthController(
       registerUserUseCase as unknown as any,
       userService as unknown as any,
-      clerkService as unknown as any,
       jwtService as unknown as any,
     );
 
   beforeEach(() => {
     jest.clearAllMocks();
+    userService.findById.mockResolvedValue(makeUser());
   });
 
   it('returns bad request when register payload is invalid', async () => {
@@ -100,7 +103,7 @@ describe('AuthController', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('registers user and swallows Clerk sync failures', async () => {
+  it('registers user and returns created payload', async () => {
     const controller = buildController();
     const res = createResponse();
     const req = createRequest({
@@ -112,13 +115,13 @@ describe('AuthController', () => {
         username: 'me_user',
       },
     });
-    registerUserUseCase.execute.mockResolvedValue({
+    const registerResult = {
       user: makeUser(),
       wallet: { userId: 'user-1', balance: 0, lockedBalance: 0, currency: 'BRL' },
-    });
-    clerkService.isEnabled.mockReturnValue(true);
-    clerkService.createUser.mockRejectedValue(new Error('clerk down'));
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    };
+    registerUserUseCase.execute.mockResolvedValue(registerResult);
+    jwtService.signAccessToken.mockReturnValue('access');
+    jwtService.signRefreshToken.mockReturnValue('refresh');
 
     await controller.register(req, res);
 
@@ -128,11 +131,64 @@ describe('AuthController', () => {
       password: 'Password123!',
       currency: 'BRL',
     });
-    expect(clerkService.createUser).toHaveBeenCalledWith(
-      expect.objectContaining({ externalUserId: 'user-1', email: 'me@example.com' }),
-    );
     expect(res.status).toHaveBeenCalledWith(201);
-    warnSpy.mockRestore();
+    expect(res.cookie).toHaveBeenCalledTimes(2);
+    expect(res.body?.data).toMatchObject({
+      registrationRequestId: 'user-1',
+      status: 'ACTIVE',
+      isActive: true,
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      sessionId: 'session-uuid',
+      wallet: {
+        id: 'user-1',
+        userId: 'user-1',
+        balance: 0,
+        lockedBalance: 0,
+        currency: 'BRL',
+      },
+      user: {
+        id: 'user-1',
+        firstName: 'me',
+      },
+    });
+  });
+
+  it('register returns pending status but still issues tokens', async () => {
+    const controller = buildController();
+    const res = createResponse();
+    const req = createRequest({
+      body: {
+        email: 'other@example.com',
+        password: 'Password123!',
+        firstName: 'Other',
+        lastName: 'User',
+        username: 'other_user',
+      },
+    });
+    const pendingUser = makeUser();
+    pendingUser.status = 'PENDING_VERIFICATION' as any;
+    registerUserUseCase.execute.mockResolvedValue({
+      user: pendingUser,
+      wallet: { userId: 'user-1', balance: 0, lockedBalance: 0, currency: 'BRL' },
+    });
+    userService.findById.mockResolvedValue(pendingUser);
+    jwtService.signAccessToken.mockReturnValue('pending-access');
+    jwtService.signRefreshToken.mockReturnValue('pending-refresh');
+
+    await controller.register(req, res);
+
+    expect(res.cookie).toHaveBeenCalledTimes(2);
+    expect(res.body?.data).toMatchObject({
+      status: 'PENDING_VERIFICATION',
+      isActive: false,
+      accessToken: 'pending-access',
+      refreshToken: 'pending-refresh',
+      sessionId: 'session-uuid',
+      wallet: {
+        id: 'user-1',
+      },
+    });
   });
 
   it('login returns unauthorized when user does not exist', async () => {
@@ -165,28 +221,46 @@ describe('AuthController', () => {
     const user = makeUser();
     userService.findByEmail.mockResolvedValue(user);
     userService.comparePassword.mockResolvedValue(true);
-    clerkService.getUser.mockResolvedValue({
-      username: 'clerkUser',
-      firstName: 'Clerk',
-      lastName: 'User',
-    });
     jwtService.signAccessToken.mockReturnValue('access');
     jwtService.signRefreshToken.mockReturnValue('refresh');
 
     await controller.login(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.cookie).toHaveBeenCalledTimes(2);
     expect(res.body?.data).toMatchObject({
       accessToken: 'access',
       refreshToken: 'refresh',
+      sessionId: 'session-uuid',
       user: {
         id: 'user-1',
-        username: 'clerkUser',
-        firstName: 'Clerk',
-        lastName: 'User',
+        username: 'me.user',
+        firstName: 'me',
+        lastName: 'user',
       },
     });
     expect(randomUUID).toHaveBeenCalled();
+  });
+
+  it('login allows pending verification users', async () => {
+    const controller = buildController();
+    const res = createResponse();
+    const req = createRequest({ body: { email: 'me@example.com', password: 'secret' } });
+    const user = makeUser();
+    user.status = 'PENDING_VERIFICATION' as any;
+    userService.findByEmail.mockResolvedValue(user);
+    userService.comparePassword.mockResolvedValue(true);
+    jwtService.signAccessToken.mockReturnValue('pending-access');
+    jwtService.signRefreshToken.mockReturnValue('pending-refresh');
+
+    await controller.login(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.cookie).toHaveBeenCalledTimes(2);
+    expect(res.body?.data).toMatchObject({
+      accessToken: 'pending-access',
+      refreshToken: 'pending-refresh',
+    });
   });
 
   it('refreshToken returns bad request when payload is invalid', async () => {
@@ -219,16 +293,17 @@ describe('AuthController', () => {
     const user = makeUser();
     jwtService.verifyRefreshToken.mockReturnValue({ userId: 'user-1', sessionId: undefined });
     userService.findById.mockResolvedValue(user);
-    clerkService.getUser.mockResolvedValue(null);
     jwtService.signAccessToken.mockReturnValue('new-access');
     jwtService.signRefreshToken.mockReturnValue('new-refresh');
 
     await controller.refreshToken(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.cookie).toHaveBeenCalledTimes(2);
     expect(res.body?.data).toMatchObject({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
+      sessionId: 'session-uuid',
       user: {
         username: 'me.user',
         firstName: 'me',
@@ -241,7 +316,7 @@ describe('AuthController', () => {
     const controller = buildController();
     const res = createResponse();
 
-    await controller.me(createAuthRequest({ auth: undefined }), res);
+    await controller.me(createAuthRequest({ authContext: undefined }), res);
     expect(res.status).toHaveBeenCalledWith(401);
 
     userService.findById.mockResolvedValue(null);
@@ -254,16 +329,32 @@ describe('AuthController', () => {
     const res = createResponse();
     const user = makeUser();
     userService.findById.mockResolvedValue(user);
-    clerkService.getUser.mockResolvedValue({
-      username: 'clerkUser',
-      firstName: 'Clerk',
-      lastName: 'User',
-    });
 
     await controller.me(createAuthRequest(), res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.body?.data).toMatchObject({ username: 'clerkUser' });
+    expect(res.body?.data).toMatchObject({ username: 'me.user' });
+  });
+
+  it('returns registration status snapshot', async () => {
+    const controller = buildController();
+    const res = createResponse();
+    const pendingUser = makeUser();
+    pendingUser.status = 'PENDING_VERIFICATION' as any;
+    userService.findById.mockResolvedValue(pendingUser);
+
+    await controller.registrationStatus(
+      createRequest({ params: { userId: 'user-1' } }) as Request<{ userId: string }>,
+      res,
+    );
+
+    expect(userService.findById).toHaveBeenCalledWith('user-1');
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.body?.data).toMatchObject({
+      userId: 'user-1',
+      status: 'PENDING_VERIFICATION',
+      isActive: false,
+    });
   });
 
   it('logout always returns success message', async () => {
@@ -274,5 +365,6 @@ describe('AuthController', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.body?.data).toEqual({ message: 'Logout realizado com sucesso' });
+    expect(res.clearCookie).toHaveBeenCalledTimes(2);
   });
 });

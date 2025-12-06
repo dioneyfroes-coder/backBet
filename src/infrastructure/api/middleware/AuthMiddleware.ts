@@ -1,8 +1,16 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import { ParamsDictionary } from 'express-serve-static-core';
 import { ParsedQs } from 'qs';
-import { JwtService } from '@/shared/services/JwtService';
+import passport from 'passport';
+import { ExtractJwt, Strategy as JwtStrategy } from 'passport-jwt';
+import type { StrategyOptionsWithoutRequest } from 'passport-jwt';
 import { appConfig } from '@/shared/config/appConfig';
+import type { JwtPayload } from '@/shared/services/JwtService';
+
+export type AuthContext = {
+  userId: string;
+  sessionId: string;
+};
 
 export interface AuthenticatedRequest<
   Params extends ParamsDictionary = ParamsDictionary,
@@ -11,51 +19,78 @@ export interface AuthenticatedRequest<
   ReqQuery = ParsedQs,
   Locals extends Record<string, unknown> = Record<string, unknown>,
 > extends Request<Params, ResBody, ReqBody, ReqQuery, Locals> {
-  auth?: {
-    userId: string;
-    sessionId: string;
-    orgId?: string;
-  };
-  user?: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-  };
+  authContext?: AuthContext;
 }
-
-const jwtService = new JwtService();
 const looksLikeJwt = (token: string): boolean => token.split('.').length === 3;
-const devBypassEnabled =
-  process.env.NODE_ENV === 'development' && appConfig.security.allowDevBearerBypass;
+const isDevBypassEnabled = (): boolean =>
+  appConfig.runtime.env !== 'production' && appConfig.security.allowDevBearerBypass;
 
-const assignAuthFromHeader = (req: AuthenticatedRequest): void => {
-  if (req.auth?.userId) {
-    return;
+const applyDevBypass = (req: AuthenticatedRequest): boolean => {
+  if (!isDevBypassEnabled()) {
+    return false;
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return;
+    return false;
   }
 
   const token = authHeader.substring(7).trim();
-
   if (looksLikeJwt(token)) {
-    const decoded = jwtService.verifyAccessToken(token);
-    req.auth = {
-      userId: decoded.userId,
-      sessionId: decoded.sessionId,
-    };
+    return false;
+  }
+
+  req.authContext = {
+    userId: token,
+    sessionId: 'dev-session',
+  };
+  return true;
+};
+
+let passportConfigured = false;
+
+export const configurePassportJwt = (): void => {
+  if (passportConfigured) {
     return;
   }
 
-  if (devBypassEnabled) {
-    req.auth = {
-      userId: token,
-      sessionId: 'dev-session',
-    };
+  const options: StrategyOptionsWithoutRequest = {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: appConfig.jwt.secret,
+    issuer: appConfig.jwt.issuer,
+  };
+
+  passport.use(
+    new JwtStrategy(options, (payload: JwtPayload, done) => {
+      if (!payload?.userId || payload.kind !== 'access') {
+        return done(null, false);
+      }
+      return done(null, {
+        userId: payload.userId,
+        sessionId: payload.sessionId,
+      });
+    }),
+  );
+
+  passportConfigured = true;
+};
+
+export const attachAuthContext: RequestHandler = (req, res, next) => {
+  const authedReq = req as AuthenticatedRequest;
+
+  if (applyDevBypass(authedReq)) {
+    return next();
   }
+
+  passport.authenticate('jwt', { session: false }, (err: unknown, auth: AuthContext | false) => {
+    if (err) {
+      return next(err);
+    }
+
+    authedReq.authContext = auth || undefined;
+
+    next();
+  })(req, res, next);
 };
 
 const unauthorizedResponse = (res: Response) =>
@@ -67,35 +102,28 @@ const unauthorizedResponse = (res: Response) =>
     },
   });
 
-export const protectedRoute = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    assignAuthFromHeader(req);
-  } catch (_error) {
-    return unauthorizedResponse(res);
-  }
+export const protectedRoute: RequestHandler = (req, res, next) => {
+  const authedReq = req as AuthenticatedRequest;
 
-  if (!req.auth?.userId) {
+  if (!authedReq.authContext?.userId) {
     return unauthorizedResponse(res);
   }
 
   return next();
 };
 
-export const optionalAuth = (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
-  try {
-    assignAuthFromHeader(req);
-  } finally {
-    next();
-  }
+export const optionalAuth: RequestHandler = (_req, _res, next) => {
+  next();
 };
 
-export const requireAdminRole = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+export const requireAdminRole: RequestHandler = (req, res, next) => {
+  const authedReq = req as AuthenticatedRequest;
   const allowedIds = appConfig.admin?.allowedUserIds ?? [];
-  if (!req.auth?.userId) {
+  if (!authedReq.authContext?.userId) {
     return unauthorizedResponse(res);
   }
 
-  if (allowedIds.length === 0 || !allowedIds.includes(req.auth.userId)) {
+  if (allowedIds.length === 0 || !allowedIds.includes(authedReq.authContext.userId)) {
     return res.status(403).json({
       error: {
         code: 'FORBIDDEN',
@@ -106,4 +134,8 @@ export const requireAdminRole = (req: AuthenticatedRequest, res: Response, next:
   }
 
   return next();
+};
+
+export const getRequestUserId = (req: AuthenticatedRequest): string | undefined => {
+  return req.authContext?.userId;
 };

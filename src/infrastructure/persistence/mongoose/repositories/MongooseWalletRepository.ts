@@ -37,6 +37,7 @@ const parseTransactions = (transactions: WalletTransactionRecord[] = []): Transa
         tx.currency,
         tx.description ?? undefined,
         tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
+        tx.metadata ?? undefined,
       ),
   );
 
@@ -168,6 +169,7 @@ export class MongooseWalletRepository implements IWalletRepository {
           createdAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
           userId: tx.userId,
           currency: tx.currency,
+          metadata: tx.metadata ?? undefined,
         })),
         total: transactions.length,
       };

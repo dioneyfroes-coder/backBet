@@ -4,7 +4,7 @@ import { PlayCoinFlipUseCase } from '@core/game/aplication/use-cases/PlayCoinFli
 import { ListAvailableGamesUseCase } from '@core/game/aplication/use-cases/ListAvailableGamesUseCase';
 import { GetGameHistoryUseCase } from '@core/game/aplication/use-cases/GetGameHistoryUseCase';
 import { ListRecentRoundsUseCase } from '@core/game/aplication/use-cases/ListRecentRoundsUseCase';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import { PlayCoinFlipDTO, PlayCoinFlipDTOType, ListHistoryQueryDTO } from '../dtos/GameDTOs';
 import { CoinFlipConfig } from '@core/game/domain/services/CoinFlipGameService';
 
@@ -86,7 +86,7 @@ export class GameController extends BaseController {
      *       '200':
      *         description: Resultado da rodada
      */
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }
@@ -124,7 +124,7 @@ export class GameController extends BaseController {
      *       '200':
      *         description: Histórico recente
      */
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
     if (!userId) {
       return this.unauthorized(res);
     }

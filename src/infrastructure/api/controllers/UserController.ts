@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import {
   UpdateProfileDTO,
   ChangeEmailDTO,
@@ -55,7 +55,7 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/ErrorResponse'
    */
   async getMe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');
@@ -126,7 +126,7 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async updateProfile(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');
@@ -219,7 +219,7 @@ export class UserController extends BaseController {
    *               $ref: '#/components/schemas/ConflictError'
    */
   async changeEmail(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');

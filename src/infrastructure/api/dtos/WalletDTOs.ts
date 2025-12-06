@@ -1,11 +1,16 @@
 import { z } from 'zod';
+import { appConfig } from '@/shared/config/appConfig';
+
+const { minDeposit, minWithdraw } = appConfig.wallet.limits;
+const depositMinMessage = `Depósito mínimo: ${minDeposit} BRL`;
+const withdrawMinMessage = `Saque mínimo: ${minWithdraw} BRL`;
 
 /**
  * DTO para depósito na carteira
  * Valida: amount (número positivo), currency (moeda)
  */
 export const DepositDTO = z.object({
-  amount: z.number().positive().min(0.01, 'Depósito mínimo: 0.01'),
+  amount: z.number().positive().min(minDeposit, depositMinMessage),
   currency: z.enum(['BRL', 'USD', 'EUR']).default('BRL'),
   description: z.string().optional(),
 });
@@ -17,9 +22,10 @@ export type DepositDTOType = z.infer<typeof DepositDTO>;
  * Valida: amount (número positivo), currency (moeda)
  */
 export const WithdrawDTO = z.object({
-  amount: z.number().positive().min(0.01, 'Saque mínimo: 0.01'),
+  amount: z.number().positive().min(minWithdraw, withdrawMinMessage),
   currency: z.enum(['BRL', 'USD', 'EUR']).default('BRL'),
   description: z.string().optional(),
+  pixKey: z.string().min(5, 'Chave Pix obrigatória'),
 });
 
 export type WithdrawDTOType = z.infer<typeof WithdrawDTO>;

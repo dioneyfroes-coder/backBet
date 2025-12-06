@@ -50,6 +50,7 @@ export type LogoutDTOType = z.infer<typeof LogoutDTO>;
 export const AuthResponseDTO = z.object({
   accessToken: z.string(),
   refreshToken: z.string().optional(),
+  sessionId: z.string(),
   user: z.object({
     id: z.string().uuid(),
     email: z.string().email(),

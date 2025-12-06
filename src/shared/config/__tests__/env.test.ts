@@ -57,9 +57,14 @@ describe('env config loader', () => {
     const { env } = loadModule();
 
     expect(env.JWT_SECRET).toBe('test-secret');
-    expect(env.CLERK_SECRET_KEY).toBe('sk_test_dummy');
     expect(env.MONGODB_URI).toBe('mongodb://localhost:27017/backbet-test');
     expect(env.REDIS_URL).toBe('redis://localhost:6379');
+    expect(env.ALLOW_DEV_BEARER_BYPASS).toBe('false');
+    expect(env.WALLET_MIN_DEPOSIT).toBe('1');
+    expect(env.WALLET_MIN_WITHDRAW).toBe('100');
+    expect(env.PIX_ENABLE_DEPOSITS).toBe('true');
+    expect(env.PIX_ENABLE_WITHDRAWALS).toBe('true');
+    expect(env.TREASURY_TARGET_PRIZE_RATIO).toBe('0.6');
   });
 
   it('throws when required environment variables are missing', () => {
@@ -68,26 +73,23 @@ describe('env config loader', () => {
     expect(() => loadModule()).toThrow('Missing required environment variables: JWT_SECRET');
   });
 
-  it('validates production-only secrets and enforces live keys', () => {
+  it('validates required production variables', () => {
     process.env = {
       NODE_ENV: 'production',
       JWT_SECRET: 'live-secret',
-      CLERK_SECRET_KEY: 'sk_test_dummy',
-      CLERK_PUBLISHABLE_KEY: 'pk_live_dummy',
-      MONGODB_URI: 'mongodb://prod',
-      REDIS_URL: 'redis://prod',
     } as any;
 
-    expect(() => loadModule()).toThrow('CLERK_SECRET_KEY deve usar uma chave live em produção');
-
-    process.env.CLERK_SECRET_KEY = 'sk_live_dummy';
-    process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_dummy';
-
     expect(() => loadModule()).toThrow(
-      'CLERK_PUBLISHABLE_KEY deve usar uma chave live em produção',
+      'Missing required production environment variables: MONGODB_URI, REDIS_URL',
     );
 
-    process.env.CLERK_PUBLISHABLE_KEY = 'pk_live_dummy';
+    process.env.MONGODB_URI = 'mongodb://prod';
+
+    expect(() => loadModule()).toThrow(
+      'Missing required production environment variables: REDIS_URL',
+    );
+
+    process.env.REDIS_URL = 'redis://prod';
 
     expect(() => loadModule()).not.toThrow();
   });

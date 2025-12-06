@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import { DepositDTO, WithdrawDTO } from '../dtos/WalletDTOs';
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
+import { appConfig } from '@/shared/config/appConfig';
 
 /**
  * Controller de carteiras
@@ -52,7 +53,7 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/ErrorResponse'
    */
   async getMe(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');
@@ -62,6 +63,22 @@ export class WalletController extends BaseController {
     if (!wallet) {
       return this.notFound(res, 'Carteira não encontrada');
     }
+
+    const setHeader = (headers: Record<string, string>) => {
+      if (typeof res.set === 'function') {
+        res.set(headers);
+        return;
+      }
+      if (typeof (res as Response).header === 'function') {
+        (res as Response).header(headers);
+      }
+    };
+
+    setHeader({
+      'Cache-Control': 'no-store, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
 
     return this.ok(res, {
       userId: wallet.userId,
@@ -89,7 +106,7 @@ export class WalletController extends BaseController {
    *             properties:
    *               amount:
    *                 type: number
-   *                 minimum: 0.01
+   *                 minimum: 1
    *                 example: 100.00
    *               currency:
    *                 type: string
@@ -122,10 +139,14 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async deposit(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    if (!appConfig.payments.pix.features.depositsEnabled) {
+      return this.serviceUnavailable(res, 'Depósitos via Pix estão temporariamente indisponíveis');
     }
 
     const payload = this.validateSchema(DepositDTO, req.body);
@@ -133,13 +154,31 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const updatedWallet = await this.depositUseCase.execute(userId, payload.amount);
+    const {
+      wallet: updatedWallet,
+      pixCharge,
+      pixConfirmation,
+    } = await this.depositUseCase.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      payload.description,
+    );
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
 
     return this.created(res, {
       message: 'Depósito realizado com sucesso',
+      pix: {
+        chargeId: pixCharge.chargeId,
+        reference: pixCharge.reference,
+        status: pixConfirmation.status,
+        provider: pixConfirmation.provider,
+        qrCode: pixCharge.qrCode,
+        expiresAt: pixCharge.expiresAt,
+        confirmedAt: pixConfirmation.confirmedAt,
+      },
       wallet: {
         userId: updatedWallet.userId,
         balance: updatedWallet.balance,
@@ -167,8 +206,8 @@ export class WalletController extends BaseController {
    *             properties:
    *               amount:
    *                 type: number
-   *                 minimum: 0.01
-   *                 example: 50.00
+   *                 minimum: 100
+   *                 example: 150.00
    *               currency:
    *                 type: string
    *                 enum: [BRL, USD, EUR]
@@ -200,10 +239,14 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async withdraw(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    if (!appConfig.payments.pix.features.withdrawalsEnabled) {
+      return this.serviceUnavailable(res, 'Saques via Pix estão temporariamente indisponíveis');
     }
 
     const payload = this.validateSchema(WithdrawDTO, req.body);
@@ -211,13 +254,26 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const updatedWallet = await this.withdrawUseCase.execute(userId, payload.amount);
+    const { wallet: updatedWallet, pixPayout } = await this.withdrawUseCase.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      payload.pixKey,
+      payload.description,
+    );
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
 
     return this.created(res, {
       message: 'Saque realizado com sucesso',
+      pix: {
+        payoutId: pixPayout.payoutId,
+        reference: pixPayout.reference,
+        status: pixPayout.status,
+        provider: pixPayout.provider,
+        processedAt: pixPayout.processedAt,
+      },
       wallet: {
         userId: updatedWallet.userId,
         balance: updatedWallet.balance,
@@ -264,7 +320,7 @@ export class WalletController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async getHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
-    const userId = req.auth?.userId;
+    const userId = getRequestUserId(req);
 
     if (!userId) {
       return this.unauthorized(res, 'Autenticação requerida');

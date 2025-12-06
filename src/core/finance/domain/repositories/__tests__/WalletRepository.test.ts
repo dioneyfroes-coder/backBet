@@ -30,8 +30,8 @@ describe('WalletRepository', () => {
 
   it('returns paginated history for an existing wallet', async () => {
     await repository.save(wallet);
-    wallet.withdraw(10, 'first');
-    wallet.withdraw(20, 'second');
+    wallet.withdraw(10, { description: 'first' });
+    wallet.withdraw(20, { description: 'second' });
 
     const history = await repository.getHistory('user-1', 1, 0);
     expect(history.total).toBe(3); // initial deposit + 2 withdraws

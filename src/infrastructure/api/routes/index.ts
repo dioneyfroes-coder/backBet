@@ -17,19 +17,13 @@ import {
   createWithdrawalRequestRepository,
   createRiskRepository,
 } from '@/infrastructure/persistence/factory';
-import { ClerkService } from '@/shared/services/ClerkService';
 import { JwtService } from '@/shared/services/JwtService';
-import { RegisterUser } from '@/core/user/application/use-cases/RegisterUser';
-import { UserService } from '@/core/user/domain/services/UserService';
-import { WalletService } from '@/core/finance/domain/services/WalletService';
-import { randomUUID } from 'crypto';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@/core/betting/domain/repositories/IEventRepository';
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
 import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
-import { AuthenticatedRequest } from '../middleware/AuthMiddleware';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 
 export type ApiRoutesDeps = {
@@ -46,7 +40,6 @@ export type ApiRoutesDeps = {
 
 export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router> {
   const router = Router();
-  const clerkService = new ClerkService();
   const jwtService = new JwtService();
 
   const userRepository: IUserRepository =
@@ -66,79 +59,6 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
   const riskRepository: IRiskRepository =
     deps.admin?.riskRepository || (await createRiskRepository());
 
-  // SERVICES for lazy user creation
-  const userService = new UserService(userRepository);
-  const walletService = new WalletService(walletRepository);
-  const registerUserUseCase = new RegisterUser(userService, walletService);
-
-  // Middleware: lazy-create internal user when request authenticated by Clerk
-  router.use(async (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
-    try {
-      const ensureAuthContext = () => {
-        if (!req.auth) {
-          req.auth = {
-            userId: '',
-            sessionId: 'clerk-session',
-          };
-        }
-        return req.auth;
-      };
-
-      const authUserId = req.auth?.userId;
-      if (!authUserId) return;
-
-      // Try to fetch Clerk user
-      const clerk = await clerkService.getUser(authUserId);
-      if (!clerk) return;
-
-      // If Clerk user already has internalUserId in publicMetadata, ensure req.auth points to it
-      const metadataValue = clerk.publicMetadata?.internalUserId;
-      const internalIdFromMetadata = typeof metadataValue === 'string' ? metadataValue : undefined;
-      if (internalIdFromMetadata) {
-        ensureAuthContext().userId = internalIdFromMetadata;
-        return;
-      }
-
-      // Try to find by email
-      const email =
-        clerk.emailAddresses?.[0]?.emailAddress || clerk.primaryEmailAddress?.emailAddress;
-      if (email) {
-        const existing = await userRepository.findByEmail(email);
-        if (existing) {
-          ensureAuthContext().userId = existing.id;
-          // Link back to Clerk for future requests
-          if (clerk.id && clerkService.isEnabled()) {
-            await clerkService.linkInternalUserId(clerk.id, existing.id);
-          }
-          return;
-        }
-      }
-
-      // Lazy create: construct reasonable username (do NOT save a local password)
-      const usernameCandidate =
-        clerk.username || (email ? email.split('@')[0] : `user-${randomUUID().slice(0, 8)}`);
-
-      // Execute registration to create internal user + wallet without a local password
-      const result = await registerUserUseCase.execute({
-        email: email || `${usernameCandidate}@example.internal`,
-        username: usernameCandidate,
-        currency: 'BRL',
-      });
-
-      // Link clerk user publicMetadata with internal id if possible
-      if (clerk.id && clerkService.isEnabled()) {
-        await clerkService.linkInternalUserId(clerk.id, result.user.id);
-      }
-
-      // Ensure downstream handlers see internal user id
-      ensureAuthContext().userId = result.user.id;
-    } catch (err) {
-      console.warn('Lazy user middleware error:', err);
-    } finally {
-      next();
-    }
-  });
-
   router.use('/', createBaseRoutes(deps.base ?? {}));
 
   router.use(
@@ -146,7 +66,6 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
     await createAuthRoutes({
       userRepository,
       walletRepository,
-      clerkService,
       jwtService,
       ...(deps.auth || {}),
     }),

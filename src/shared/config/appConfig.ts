@@ -2,7 +2,6 @@ import { env } from './env';
 
 const projectAppName = env.APP_NAME || 'backbet';
 const projectServiceName = env.SERVICE_NAME || 'backbet-backend';
-const newRelicAppName = env.NEW_RELIC_APP_NAME || projectAppName;
 const otelServiceName = env.OTEL_SERVICE_NAME || projectServiceName;
 const defaultLogFilePath = env.LOG_FILE_PATH || 'logs/backbet.log';
 
@@ -30,11 +29,40 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
   return parsed;
 };
 
+const clampNumber = (value: number, min: number, max: number): number => {
+  if (Number.isNaN(value)) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+};
+
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
   if (typeof value === 'undefined') {
     return fallback;
   }
   return value.toLowerCase() === 'true';
+};
+
+const parseRatio = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseFloat(value ?? '');
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return Math.min(Math.max(parsed, 0.01), 0.99);
+};
+
+const parseRatioRange = (
+  minValue: string | undefined,
+  maxValue: string | undefined,
+  fallbackMin: number,
+  fallbackMax: number,
+): { min: number; max: number } => {
+  const minRatio = parseRatio(minValue, fallbackMin);
+  const maxRatio = parseRatio(maxValue, fallbackMax);
+  if (minRatio >= maxRatio) {
+    return { min: fallbackMin, max: fallbackMax };
+  }
+  return { min: minRatio, max: maxRatio };
 };
 
 const parseList = (value: string | undefined, fallback: string[]): string[] => {
@@ -61,6 +89,37 @@ const parseHeaders = (value: string | undefined): Record<string, string> => {
   }, {});
 };
 
+const parseSameSite = (
+  value: string | undefined,
+  fallback: 'lax' | 'strict' | 'none',
+): 'lax' | 'strict' | 'none' => {
+  if (!value) {
+    return fallback;
+  }
+  const normalized = value.toLowerCase();
+  if (normalized === 'lax' || normalized === 'strict' || normalized === 'none') {
+    return normalized;
+  }
+  return fallback;
+};
+
+const walletMinDeposit = parsePositiveNumber(env.WALLET_MIN_DEPOSIT, 1);
+const walletMinWithdraw = Math.max(
+  parsePositiveNumber(env.WALLET_MIN_WITHDRAW, 100),
+  walletMinDeposit,
+);
+const prizeRatioRange = parseRatioRange(
+  env.TREASURY_MIN_PRIZE_RATIO,
+  env.TREASURY_MAX_PRIZE_RATIO,
+  0.4,
+  0.8,
+);
+const targetPrizeRatio = clampNumber(
+  parseRatio(env.TREASURY_TARGET_PRIZE_RATIO, 0.6),
+  prizeRatioRange.min,
+  prizeRatioRange.max,
+);
+
 /**
  * CONFIGURAÇÃO CENTRALIZADA DA APLICAÇÃO
  *
@@ -75,7 +134,6 @@ export const appConfig = {
   project: {
     appName: projectAppName,
     serviceName: projectServiceName,
-    newRelicAppName,
   },
   logging: {
     level: env.LOG_LEVEL || 'info',
@@ -98,6 +156,18 @@ export const appConfig = {
   security: {
     allowDevBearerBypass: parseBoolean(env.ALLOW_DEV_BEARER_BYPASS, false),
     enableHsts: parseBoolean(env.ENABLE_HSTS, env.NODE_ENV === 'production'),
+  },
+  auth: {
+    autoActivateSignups: parseBoolean(env.AUTO_ACTIVATE_SIGNUPS, true),
+    cookies: {
+      refreshTokenName: env.AUTH_REFRESH_COOKIE_NAME || 'backbet_refresh_token',
+      sessionIdName: env.AUTH_SESSION_COOKIE_NAME || 'backbet_session_id',
+      domain: env.AUTH_COOKIE_DOMAIN,
+      path: env.AUTH_COOKIE_PATH || '/',
+      sameSite: parseSameSite(env.AUTH_COOKIE_SAMESITE, 'lax'),
+      secure: parseBoolean(env.AUTH_COOKIE_SECURE, env.NODE_ENV === 'production'),
+      maxAgeMs: parsePositiveInt(env.AUTH_REFRESH_COOKIE_MAX_AGE_DAYS, 7) * 24 * 60 * 60 * 1000,
+    },
   },
   cors: {
     allowedOrigins: parseList(env.CORS_ALLOWED_ORIGINS, [
@@ -140,6 +210,12 @@ export const appConfig = {
         'Você excedeu o limite de refresh tokens. Tente novamente em breve.',
     },
   },
+  wallet: {
+    limits: {
+      minDeposit: walletMinDeposit,
+      minWithdraw: walletMinWithdraw,
+    },
+  },
   walletRateLimit: {
     deposit: {
       windowMs: parsePositiveInt(env.WALLET_DEPOSIT_RATE_LIMIT_WINDOW_MS, 60_000),
@@ -155,6 +231,15 @@ export const appConfig = {
         env.WALLET_WITHDRAW_RATE_LIMIT_MESSAGE ||
         'Muitas tentativas de saque. Aguarde um momento e tente novamente.',
     },
+  },
+  treasury: {
+    walletId: env.TREASURY_WALLET_ID || 'house-primary',
+    currency: (env.TREASURY_CURRENCY as 'BRL' | 'USD' | 'EUR') || 'BRL',
+    targetPrizeRatio,
+    prizeRatioRange,
+    minProfitBuffer: parsePositiveNumber(env.TREASURY_MIN_PROFIT_BUFFER, 100_000),
+    maxTransferPerRun: parsePositiveNumber(env.TREASURY_MAX_TRANSFER_PER_RUN, 250_000),
+    rebalanceIntervalMs: parsePositiveInt(env.TREASURY_REBALANCE_INTERVAL_MS, 300_000),
   },
   betRateLimit: {
     place: {
@@ -186,6 +271,18 @@ export const appConfig = {
     integration: {
       webhookEnabled: parseBoolean(env.GAME_INTEGRATION_WEBHOOK_ENABLED, false),
       webhookUrl: env.GAME_INTEGRATION_WEBHOOK_URL,
+    },
+  },
+  payments: {
+    pix: {
+      provider: (env.PIX_PROVIDER as 'mock') || 'mock',
+      providerName: env.PIX_PROVIDER_NAME || 'backbet-mock-pix',
+      mockLatencyMs: parsePositiveInt(env.PIX_MOCK_LATENCY_MS, 25),
+      defaultPixKey: env.PIX_DEFAULT_KEY || 'pix@backbet.mock',
+      features: {
+        depositsEnabled: parseBoolean(env.PIX_ENABLE_DEPOSITS, true),
+        withdrawalsEnabled: parseBoolean(env.PIX_ENABLE_WITHDRAWALS, true),
+      },
     },
   },
   jwt: {

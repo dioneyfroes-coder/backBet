@@ -10,6 +10,7 @@ import {
   createEventRepository,
   createRiskRepository,
   createWalletRepository,
+  createHouseTreasuryRepository,
 } from '@/infrastructure/persistence/factory';
 import { AdminController } from '../controllers/AdminController';
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
@@ -22,12 +23,23 @@ import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { EventCatalogService } from '@core/betting/domain/services/EventCatalogService';
 import { ResolveBetUseCase } from '@core/betting/aplication/use-cases/ResolveBetUseCase';
 import { UpdateEventStatusUseCase } from '@core/betting/aplication/use-cases/UpdateEventStatusUseCase';
+import { TreasuryController } from '../controllers/TreasuryController';
+import { IHouseTreasuryRepository } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
+import { HouseTreasuryService } from '@/core/treasury/domain/services/HouseTreasuryService';
+import { GetTreasurySummary } from '@/core/treasury/application/use-cases/GetTreasurySummary';
+import { GetTreasuryLedger } from '@/core/treasury/application/use-cases/GetTreasuryLedger';
+import { RecordTreasuryProfit } from '@/core/treasury/application/use-cases/RecordTreasuryProfit';
+import { TransferProfitToPrize } from '@/core/treasury/application/use-cases/TransferProfitToPrize';
+import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/TransferPrizeToProfit';
+import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
+import { appConfig } from '@/shared/config/appConfig';
 
 export type AdminRoutesDeps = {
   betRepository?: IBetRepository;
   eventRepository?: IEventRepository;
   riskRepository?: IRiskRepository;
   walletRepository?: IWalletRepository;
+  houseTreasuryRepository?: IHouseTreasuryRepository;
   dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>;
 };
 
@@ -39,11 +51,17 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
   const riskRepository: IRiskRepository = deps.riskRepository ?? (await createRiskRepository());
+  const houseTreasuryRepository: IHouseTreasuryRepository =
+    deps.houseTreasuryRepository ?? (await createHouseTreasuryRepository());
 
   const walletService = new WalletService(walletRepository);
   const riskService = new RiskService(riskRepository, betRepository);
   const eventCatalogService = new EventCatalogService(eventRepository);
   const betService = new BetService(betRepository, eventRepository, walletService, riskService);
+  const treasuryService = new HouseTreasuryService(houseTreasuryRepository, {
+    walletId: appConfig.treasury.walletId,
+    currency: appConfig.treasury.currency,
+  });
 
   const adminController = new AdminController(
     new ResolveBetUseCase(betService),
@@ -51,6 +69,14 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     riskService,
     eventCatalogService,
     deps.dependencyHealthProvider,
+  );
+  const treasuryController = new TreasuryController(
+    new GetTreasurySummary(treasuryService),
+    new GetTreasuryLedger(treasuryService),
+    new RecordTreasuryProfit(treasuryService),
+    new TransferProfitToPrize(treasuryService),
+    new TransferPrizeToProfit(treasuryService),
+    new RebalanceTreasury(treasuryService),
   );
 
   // Admin endpoints
@@ -80,6 +106,52 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     protectedRoute,
     requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => adminController.updateEventStatus(req, res)),
+  );
+
+  router.get(
+    '/treasury/summary',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => treasuryController.getSummary(req, res)),
+  );
+
+  router.get(
+    '/treasury/ledger',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => treasuryController.getLedger(req, res)),
+  );
+
+  router.post(
+    '/treasury/profit',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => treasuryController.recordProfit(req, res)),
+  );
+
+  router.post(
+    '/treasury/profit-to-prize',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) =>
+      treasuryController.transferProfitToPrize(req, res),
+    ),
+  );
+
+  router.post(
+    '/treasury/prize-to-profit',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) =>
+      treasuryController.transferPrizeToProfit(req, res),
+    ),
+  );
+
+  router.post(
+    '/treasury/rebalance',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => treasuryController.rebalance(req, res)),
   );
 
   return router;

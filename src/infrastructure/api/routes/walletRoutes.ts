@@ -15,12 +15,15 @@ import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { appConfig } from '@/shared/config/appConfig';
+import { createPixProvider } from '@/infrastructure/payments/pix';
+import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
  */
 export type WalletRoutesDeps = {
   walletRepository?: IWalletRepository;
+  pixProvider?: PixProviderPort;
 };
 
 export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<Router> {
@@ -29,11 +32,12 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository);
+  const pixProvider: PixProviderPort = deps.pixProvider ?? (await createPixProvider());
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
-  const depositUseCase = new Deposit(walletService);
-  const withdrawUseCase = new Withdraw(walletService);
+  const depositUseCase = new Deposit(walletService, pixProvider);
+  const withdrawUseCase = new Withdraw(walletService, pixProvider);
   const getHistoryUseCase = new GetHistory(walletService);
 
   const walletController = new WalletController(
