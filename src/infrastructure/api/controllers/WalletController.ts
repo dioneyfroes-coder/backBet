@@ -8,6 +8,7 @@ import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
 import { appConfig } from '@/shared/config/appConfig';
+import { UserService } from '@core/user/domain/services/UserService';
 
 /**
  * Controller de carteiras
@@ -19,6 +20,7 @@ export class WalletController extends BaseController {
     private depositUseCase: Deposit,
     private withdrawUseCase: Withdraw,
     private getHistoryUseCase: GetHistory,
+    private userService: UserService,
   ) {
     super();
   }
@@ -215,6 +217,10 @@ export class WalletController extends BaseController {
    *               description:
    *                 type: string
    *                 example: Saque para conta bancária
+   *               pixKey:
+   *                 type: string
+   *                 example: user@pix
+   *                 description: Opcional quando o usuário possui chave padrão cadastrada
    *             required:
    *               - amount
    *               - currency
@@ -254,11 +260,23 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
+    let effectivePixKey = payload.pixKey?.trim();
+    if (!effectivePixKey) {
+      const user = await this.userService.findById(userId);
+      if (!user?.pixKey) {
+        return this.badRequest(
+          res,
+          'Informe uma chave Pix válida ou cadastre uma chave padrão antes de solicitar saque.',
+        );
+      }
+      effectivePixKey = user.pixKey;
+    }
+
     const { wallet: updatedWallet, pixPayout } = await this.withdrawUseCase.execute(
       userId,
       payload.amount,
       payload.currency,
-      payload.pixKey,
+      effectivePixKey,
       payload.description,
     );
     await flushWalletCache(userId).catch((error) =>

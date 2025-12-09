@@ -2099,6 +2099,19 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WalletResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+                    "balance": 150.25,
+                    "lockedBalance": 20,
+                    "currency": "BRL"
+                  },
+                  "meta": {
+                    "timestamp": "2025-12-08T14:50:37.177Z",
+                    "requestId": "req-1765205437143-mffj7bd"
+                  }
                 }
               }
             }
@@ -2178,6 +2191,31 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WalletResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "message": "Depósito realizado com sucesso",
+                    "pix": {
+                      "chargeId": "charge-1",
+                      "reference": "ref-1",
+                      "status": "PAID",
+                      "provider": "mock",
+                      "qrCode": "00020126PIXCHARGE...",
+                      "expiresAt": "2025-12-08T14:55:00.000Z",
+                      "confirmedAt": "2025-12-08T14:50:34.559Z"
+                    },
+                    "wallet": {
+                      "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+                      "balance": 300.5,
+                      "lockedBalance": 20,
+                      "currency": "BRL"
+                    }
+                  },
+                  "meta": {
+                    "timestamp": "2025-12-08T14:50:34.560Z",
+                    "requestId": "req-1765205434578-fjmy4nc"
+                  }
                 }
               }
             }
@@ -2240,6 +2278,12 @@
                   "description": {
                     "type": "string",
                     "example": "Saque para conta bancária"
+                  },
+                  "pixKey": {
+                    "type": "string",
+                    "minLength": 5,
+                    "description": "Opcional quando o usuário já cadastrou uma chave padrão",
+                    "example": "user@pix"
                   }
                 },
                 "required": [
@@ -2257,6 +2301,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WalletResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "message": "Saque realizado com sucesso",
+                    "pix": {
+                      "payoutId": "payout-1",
+                      "reference": "ref-2",
+                      "status": "PROCESSING",
+                      "provider": "mock",
+                      "processedAt": "2025-12-08T14:50:36.593Z"
+                    },
+                    "wallet": {
+                      "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+                      "balance": 100.5,
+                      "lockedBalance": 20,
+                      "currency": "BRL"
+                    }
+                  },
+                  "meta": {
+                    "timestamp": "2025-12-08T14:50:36.594Z",
+                    "requestId": "req-1765205436494-7tmtcvm"
+                  }
                 }
               }
             }

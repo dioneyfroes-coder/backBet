@@ -71,7 +71,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 | Use case | Responsabilidade | Entrada | Saída |
 |----------|------------------|---------|-------|
 | `GetWallet` | Busca carteira do usuário e propaga `null` se inexistente | `userId` | `Wallet | null` |
-| `Deposit` / `Withdraw` | Orquestram Pix charge/payout antes de tocar a carteira | `Deposit`: `userId`, `amount`, `currency`, `description?` – `Withdraw`: `userId`, `amount`, `currency`, `pixKey`, `description?` | `Deposit` retorna `{ wallet, pixCharge, pixConfirmation }`; `Withdraw` retorna `{ wallet, pixPayout }` |
+| `Deposit` / `Withdraw` | Orquestram Pix charge/payout antes de tocar a carteira | `Deposit`: `userId`, `amount`, `currency`, `description?` – `Withdraw`: `userId`, `amount`, `currency`, `pixKey?`, `description?` (usa a chave padrão do usuário quando ausente) | `Deposit` retorna `{ wallet, pixCharge, pixConfirmation }`; `Withdraw` retorna `{ wallet, pixPayout }` |
 | `GetHistory` | Retorna histórico paginado (`limit`, `offset`) | `userId`, `limit`, `offset` | `{ transactions, total }` |
 | `ListCreditPackages` | Lista pacotes ativos | — | `CreditPackage[]` |
 | `PurchaseCreditPackage` | Deposita `base + bônus` após validar pacote | `userId`, `packageId` | `{ creditPackage, wallet }` |
@@ -114,7 +114,7 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 |--------|---------|----------|------------------|-------------|
 | `GET` | `/api/wallets/me` | `protectedRoute` | `cacheWalletBalanceMiddleware` (Redis) | Retorna `wallet.toDTO()` sempre com `Cache-Control: no-store` (sem ETag) e 404 se carteira não existir.
 | `POST` | `/api/wallets/deposit` | `protectedRoute` | `createRouteRateLimiter` usando `WALLET_DEPOSIT_RATE_LIMIT_*` | Payload `DepositDTO`; dispara `flushWalletCache`.
-| `POST` | `/api/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aplica validações de saldo.
+| `POST` | `/api/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aceita `pixKey` opcional e cai para a chave padrão do usuário antes de rejeitar o saque.
 | `GET` | `/api/wallets/history` | `protectedRoute` | `cacheWalletHistoryMiddleware` (cache por `limit/offset`) | Responde `{ transactions, pagination }`.
 
 ### Rotas financeiras (`src/infrastructure/api/routes/financeRoutes.ts`)
@@ -129,9 +129,85 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 
 ## DTOs e validação
 
-- `DepositDTO` / `WithdrawDTO` (`src/infrastructure/api/dtos/WalletDTOs.ts`): exigem `amount > 0`, `currency ∈ {BRL,USD,EUR}` e `description?`.
+- `DepositDTO` / `WithdrawDTO` (`src/infrastructure/api/dtos/WalletDTOs.ts`): exigem `amount > 0`, `currency ∈ {BRL,USD,EUR}` e `description?`. `pixKey` passa a ser opcional; quando não vier no payload, o controller busca a chave salva no perfil do usuário antes de negar o fluxo.
 - `FinanceDTOs.ts` contém: `CreditPackagePurchaseDTO`, `CreateWithdrawalRequestDTO` (mínimo 0.01), `ProcessWithdrawalRequestDTO`, `CreditPackageResponseDTO`, `WithdrawalRequestResponseDTO`.
 - Todos os controllers usam `BaseController.validateSchema` para retornar `AppError` padronizado (`code`, `message`, `status`).
+
+### Esquemas sugeridos para o frontend (Zod)
+
+O backend sempre envolve payloads em `{ success, data?, error?, meta }`. Abaixo estão sugestões de schemas para as rotas mais usadas pelo app:
+
+```ts
+import { z } from 'zod';
+
+const MetaSchema = z.object({
+  timestamp: z.string(),
+  requestId: z.string().optional(),
+});
+
+const WalletSnapshotSchema = z.object({
+  userId: z.string().uuid(),
+  balance: z.number(),
+  lockedBalance: z.number(),
+  currency: z.enum(['BRL', 'USD', 'EUR']),
+});
+
+export const WalletBalanceResponseSchema = z.object({
+  success: z.literal(true),
+  data: WalletSnapshotSchema,
+  meta: MetaSchema,
+});
+
+const PixChargeSchema = z.object({
+  chargeId: z.string(),
+  reference: z.string(),
+  status: z.string(),
+  provider: z.string(),
+  qrCode: z.string(),
+  expiresAt: z.string(),
+  confirmedAt: z.string().nullable().optional(),
+});
+
+export const WalletDepositResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    message: z.string(),
+    pix: PixChargeSchema,
+    wallet: WalletSnapshotSchema,
+  }),
+  meta: MetaSchema,
+});
+
+const PixPayoutSchema = z.object({
+  payoutId: z.string(),
+  reference: z.string(),
+  status: z.string(),
+  provider: z.string(),
+  processedAt: z.string().nullable().optional(),
+});
+
+export const WalletWithdrawResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    message: z.string(),
+    pix: PixPayoutSchema,
+    wallet: WalletSnapshotSchema,
+  }),
+  meta: MetaSchema,
+});
+
+export const ApiErrorSchema = z.object({
+  success: z.literal(false),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.record(z.string()).optional(),
+  }),
+  meta: MetaSchema,
+});
+```
+
+> Se quiser validar `pix.status` com enums específicos, use `z.enum(['PENDING','PAID','EXPIRED','FAILED'])` para depósitos e `z.enum(['PROCESSING','COMPLETED','FAILED'])` para saques. Como provedores reais podem adicionar novos estados, mantenha `z.string()` ou `z.union([z.enum(...), z.string()])` quando for prudente.
 
 ## Cache e consistência
 
@@ -190,4 +266,4 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 
 ---
 
-**Última atualização:** 4 de dezembro de 2025
+**Última atualização:** 8 de dezembro de 2025

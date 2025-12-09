@@ -164,6 +164,8 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | `GET` | `/users/me` | Retorna perfil completo; servido do Redis quando `CACHE_ENABLED=true`. |
 | `PATCH` | `/users/me` | Atualiza `firstName/lastName` (o backend recalcula `username` e `updatedAt`). |
 | `PATCH` | `/users/me/email` | Troca email após validar unicidade e VO `Email`. Limpa cache de perfil. |
+| `GET` | `/users/me/pix-key` | Retorna a chave Pix padrão vinculada ao usuário (vazio quando não configurada). |
+| `PUT` | `/users/me/pix-key` | Aceita `{ pixKey }`, valida comprimento/formato e salva como fallback para saques e PIX automáticos. |
 
 ### Carteiras (`/api/wallets`)
 
@@ -172,13 +174,147 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | `GET` | `/wallets/me` | `protectedRoute` + `cacheWalletBalanceMiddleware` | Carteira atual `{ userId, balance, lockedBalance, currency }`. |
 | `GET` | `/wallets/history?limit&offset` | `protectedRoute` + `cacheWalletHistoryMiddleware` | Histórico paginado (`transactions`, `pagination`). |
 | `POST` | `/wallets/deposit` | `protectedRoute` + rate limit `wallet-deposit` | Body `{ amount, currency, description? }` (mínimo configurável via `WALLET_MIN_DEPOSIT`, default **R$ 1,00**). Responde 201 com `{ wallet, pix }`, onde `pix` traz `chargeId`, `reference`, `provider`, `status`, `qrCode`, `expiresAt`, `confirmedAt`. |
-| `POST` | `/wallets/withdraw` | `protectedRoute` + rate limit `wallet-withdraw` | Body `{ amount, currency, pixKey, description? }` (mínimo configurável via `WALLET_MIN_WITHDRAW`, default **R$ 100,00**). Retorna `{ wallet, pix }` com `payoutId`, `reference`, `provider`, `status`, `processedAt`. |
+| `POST` | `/wallets/withdraw` | `protectedRoute` + rate limit `wallet-withdraw` | Body `{ amount, currency, pixKey?, description? }`. Quando `pixKey` não é enviado usamos a chave padrão do usuário (configure em `/users/me/pix-key`). Mínimo ajustável via `WALLET_MIN_WITHDRAW` (default **R$ 100,00**). Retorna `{ wallet, pix }` com `payoutId`, `reference`, `provider`, `status`, `processedAt`. |
 
 > **Mock Pix provider:** os fluxos de depósito e saque usam o `PixProviderPort`, que no ambiente atual aponta para `MockPixProvider`. Ele gera QR Codes determinísticos e confirma o pagamento imediatamente, expondo todos os metadados no response (`pix.*`) e no histórico (`transactions[].metadata`). Nenhum valor sai do ambiente — é apenas uma simulação confiável para QA/integrações.
 
 > **Limites monetários:** `appConfig.wallet.limits` lê `WALLET_MIN_DEPOSIT` (default R$ 1,00) e `WALLET_MIN_WITHDRAW` (default R$ 100,00). Qualquer valor abaixo retorna `400 VALIDATION_ERROR`. Garanta que o front valide antes de enviar e mostre a mensagem "valor abaixo do mínimo" quando necessário.
 
 > **Toggles Pix:** use `PIX_ENABLE_DEPOSITS` / `PIX_ENABLE_WITHDRAWALS` para suspender fluxos rapidamente sem desligar o restante do backend. Quando `false`, o controller devolve `503 SERVICE_UNAVAILABLE` antes de chamar os use cases.
+
+#### Contratos detalhados (Wallet)
+
+##### GET /api/wallets/me
+
+**200 OK**
+
+```json
+{
+  "success": true,
+  "data": {
+    "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+    "balance": 150.25,
+    "lockedBalance": 20,
+    "currency": "BRL"
+  },
+  "meta": {
+    "timestamp": "2025-12-08T14:50:37.177Z",
+    "requestId": "req-1765205437143-mffj7bd"
+  }
+}
+```
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `balance` | number | Saldo disponível em moeda inteira (sem centavos extras). |
+| `lockedBalance` | number | Quantia reservada (apostas abertas, saques manuais). |
+| `currency` | `BRL \| USD \| EUR` | Mesma moeda usada nos demais fluxos financeiros. |
+
+**Erros comuns**
+
+| HTTP | `error.code` | Cenário |
+|------|--------------|---------|
+| 401 | `UNAUTHORIZED` | Token ausente ou inválido. |
+| 404 | `NOT_FOUND` | O usuário ainda não possui carteira (falha rara durante onboarding). |
+
+##### POST /api/wallets/deposit
+
+**Body válido**
+
+```json
+{
+  "amount": 150.5,
+  "currency": "BRL",
+  "description": "Depósito via cartão"
+}
+```
+
+**201 Created**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Depósito realizado com sucesso",
+    "pix": {
+      "chargeId": "charge-1",
+      "reference": "ref-1",
+      "status": "PAID",
+      "provider": "mock",
+      "qrCode": "00020126...",
+      "expiresAt": "2025-12-08T14:55:00.000Z",
+      "confirmedAt": "2025-12-08T14:50:34.559Z"
+    },
+    "wallet": {
+      "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+      "balance": 300.5,
+      "lockedBalance": 20,
+      "currency": "BRL"
+    }
+  },
+  "meta": { "timestamp": "2025-12-08T14:50:34.560Z" }
+}
+```
+
+`pix.status` vem diretamente do provider (`PENDING`, `PAID`, etc.). Para implementações reais, siga o enum retornado pela integração do gateway.
+
+**Erros comuns**
+
+| HTTP | `error.code` | Cenário |
+|------|--------------|---------|
+| 400 | `VALIDATION_ERROR` | `amount` abaixo de `WALLET_MIN_DEPOSIT` ou payload inválido. |
+| 401 | `UNAUTHORIZED` | Falta de bearer token. |
+| 503 | `SERVICE_UNAVAILABLE` | `PIX_ENABLE_DEPOSITS=false` ou provedor temporariamente desligado. |
+
+##### POST /api/wallets/withdraw
+
+**Body válido**
+
+```json
+{
+  "amount": 200,
+  "currency": "BRL",
+  "pixKey": "user@pix",
+  "description": "Saque manual"
+}
+```
+
+Se `pixKey` não for enviado, o backend procura a chave salva em `/api/users/me/pix-key` e retorna `400 BAD_REQUEST` caso nenhuma esteja disponível.
+
+**201 Created**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Saque realizado com sucesso",
+    "pix": {
+      "payoutId": "payout-1",
+      "reference": "ref-2",
+      "status": "PROCESSING",
+      "provider": "mock",
+      "processedAt": "2025-12-08T14:50:36.593Z"
+    },
+    "wallet": {
+      "userId": "9fe1b5b9-d187-4453-af45-292c175436a6",
+      "balance": 100.5,
+      "lockedBalance": 20,
+      "currency": "BRL"
+    }
+  },
+  "meta": { "timestamp": "2025-12-08T14:50:36.594Z" }
+}
+```
+
+**Erros comuns**
+
+| HTTP | `error.code` | Cenário |
+|------|--------------|---------|
+| 400 | `VALIDATION_ERROR` | `amount` abaixo de `WALLET_MIN_WITHDRAW`, `currency` inválida ou payload mal formatado. |
+| 400 | `WALLET_INSUFFICIENT_FUNDS` | Saldo insuficiente. `error.details.attempted` traz o valor solicitado. |
+| 400 | `BAD_REQUEST` | Nenhuma `pixKey` disponível (payload vazio e usuário sem chave padrão). |
+| 401 | `UNAUTHORIZED` | Token ausente ou inválido. |
+| 503 | `SERVICE_UNAVAILABLE` | `PIX_ENABLE_WITHDRAWALS=false` ou provedor indisponível. |
 
 #### Pix simulado (determinístico)
 
@@ -290,5 +426,5 @@ Proteja `/health`, `/readiness` e `/health/cache` via firewall ou reverse proxy 
 
 ---
 
-**Última atualização:** 4 de dezembro de 2025
+**Última atualização:** 8 de dezembro de 2025
 

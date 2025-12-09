@@ -13,7 +13,7 @@ slug: "/docs/user"
 ```
 src/core/user/
   application/
-    use-cases/{RegisterUser,GetUserProfile,UpdateProfile,ChangeEmail}.ts
+    use-cases/{RegisterUser,GetUserProfile,UpdateProfile,ChangeEmail,UpdatePixKey}.ts
   config/user-config.ts
   domain/
     entities/User.ts
@@ -41,8 +41,8 @@ shared/services/{ClerkService,JwtService}.ts
 ## Modelo de domínio
 
 ### Entidade `User` (`src/core/user/domain/entities/User.ts`)
-- Campos: `id`, `email: Email`, `username`, `passwordHash`, `status`, `createdAt`, `updatedAt`.
-- Métodos: `canOperate`, `suspend`, `activate`, `toDTO`.
+- Campos: `id`, `email: Email`, `username`, `passwordHash`, `status`, `pixKey?`, `createdAt`, `updatedAt`.
+- Métodos: `canOperate`, `suspend`, `activate`, `updatePixKey`, `toDTO`.
 - Estados (`UserStatus`): `PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`.
 
 ### Value Object `Email`
@@ -60,6 +60,7 @@ shared/services/{ClerkService,JwtService}.ts
 - `suspendUser` / `activateUser`: validam estado antes de atualizar para evitar operações redundantes.
 - `updateProfile`: altera `username` (derivado de first/last name enviados) e atualiza `updatedAt`.
 - `changeEmail`: verifica unicidade, recria VO `Email` e persiste.
+- `updatePixKey`: normaliza/valida a chave, persiste no usuário e dispara `flushUserProfileCache` para que carteiras possam reutilizar o valor.
 - `comparePassword`: usa `bcrypt.compare` durante o login legado.
 
 ### Use cases
@@ -67,6 +68,7 @@ shared/services/{ClerkService,JwtService}.ts
 - `GetUserProfile`: provê dados para `/api/users/me` e `/api/auth/me`.
 - `UpdateProfile`: encapsula regras de mutação de perfil.
 - `ChangeEmail`: executa fluxo de troca de email.
+- `UpdatePixKey`: salva/limpa a chave Pix padrão reutilizada em fluxos de saque.
 
 ## Persistência e factories
 
@@ -94,6 +96,8 @@ shared/services/{ClerkService,JwtService}.ts
 | `GET` | `/api/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; divide `username` em `firstName`/`lastName` para respostas.
 | `PATCH` | `/api/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
 | `PATCH` | `/api/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
+| `GET` | `/api/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
+| `PUT` | `/api/users/me/pix-key` | `protectedRoute` | — | Valida `UpdatePixKeyDTO`; permite cadastrar/remover a chave que será utilizada como fallback em `/api/wallets/withdraw`.
 
 ### Rotas de autenticação (`src/infrastructure/api/routes/authRoutes.ts`)
 
@@ -111,13 +115,13 @@ shared/services/{ClerkService,JwtService}.ts
 ## DTOs e validações
 
 - `RegisterDTO`, `LoginDTO`, `RefreshTokenDTO` (Zod) vivem em `src/infrastructure/api/dtos/AuthDTOs.ts`.
-- `UpdateProfileDTO` e `ChangeEmailDTO` (`src/infrastructure/api/dtos/UserDTOs.ts`) garantem tamanho mínimo de nomes, limite de bio (500 chars) e emails válidos.
+- `UpdateProfileDTO`, `ChangeEmailDTO` e `UpdatePixKeyDTO` (`src/infrastructure/api/dtos/UserDTOs.ts`) garantem tamanho mínimo de nomes, limite de bio (500 chars), emails válidos e chaves Pix entre 5 e 255 caracteres (aceitando alfanumérico, telefone, CPF/CNPJ ou emails).
 - Toda validação utiliza `BaseController.validateSchema`, que retorna `AppError` padronizado (`code`, `message`, `status`).
 
 ## Cache e consistência
 
 - `cacheUserProfileMiddleware` atende `GET /users/me` reutilizando Redis (`cacheKeys.userProfile`). TTL configurado em `shared/config/cacheConfig.ts`.
-- Mutadores (`PATCH /users/me`, `/users/me/email`) chamam `flushUserProfileCache(userId)` para evitar servir dados obsoletos.
+- Mutadores (`PATCH /users/me`, `/users/me/email`, `PUT /users/me/pix-key`) chamam `flushUserProfileCache(userId)` para evitar servir dados obsoletos.
 - Caso novos fluxos alterem perfil (ex.: upgrade de plano), reutilize os helpers de cache para manter consistência.
 
 ## Configuração
@@ -159,4 +163,4 @@ shared/services/{ClerkService,JwtService}.ts
 
 ---
 
-**Última atualização:** 3 de dezembro de 2025
+**Última atualização:** 8 de dezembro de 2025

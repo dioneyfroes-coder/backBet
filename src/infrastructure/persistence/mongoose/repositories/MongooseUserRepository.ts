@@ -14,6 +14,7 @@ export class MongooseUserRepository implements IUserRepository {
         passwordHash: user.passwordHash,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        pixKey: user.pixKey ?? null,
       };
 
       await UserModel.findByIdAndUpdate(user.id, userData, { upsert: true });
@@ -71,6 +72,7 @@ export class MongooseUserRepository implements IUserRepository {
         username: user.username,
         status: user.status,
         updatedAt: user.updatedAt,
+        pixKey: user.pixKey ?? null,
       };
 
       const result = await UserModel.findByIdAndUpdate(user.id, userData, { new: true });
@@ -96,7 +98,8 @@ export class MongooseUserRepository implements IUserRepository {
       data.passwordHash,
       data.status,
       data.createdAt,
-      data.updatedAt,
+        data.updatedAt,
+        data.pixKey ?? null,
     );
   }
 }

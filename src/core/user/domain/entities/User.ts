@@ -10,6 +10,7 @@ export class User {
     public status: UserStatus,
     public readonly createdAt: Date,
     public updatedAt: Date,
+    public pixKey: string | null = null,
   ) {}
 
   canOperate(): boolean {
@@ -26,6 +27,11 @@ export class User {
     this.updatedAt = new Date();
   }
 
+  updatePixKey(pixKey: string | null): void {
+    this.pixKey = pixKey ? pixKey.trim() : null;
+    this.updatedAt = new Date();
+  }
+
   toDTO(): IUserDTO {
     return {
       id: this.id,
@@ -34,6 +40,7 @@ export class User {
       status: this.status,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
+      pixKey: this.pixKey,
     };
   }
 }

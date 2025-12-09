@@ -44,6 +44,7 @@ export class UserService {
       status,
       new Date(),
       new Date(),
+      null,
     );
 
     await this.userRepository.save(user);
@@ -90,6 +91,21 @@ export class UserService {
     await this.userRepository.update(user);
   }
 
+  async updatePixKey(userId: string, pixKey: string | null | undefined): Promise<User> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AppError('NOT_FOUND', 'User not found', 404);
+    }
+    if (user.status === 'SUSPENDED') {
+      throw new AppError('BAD_REQUEST', 'User is suspended', 400);
+    }
+
+    const sanitizedKey = this.normalizePixKey(pixKey);
+    user.updatePixKey(sanitizedKey);
+    await this.userRepository.update(user);
+    return user;
+  }
+
   async findById(userId: string): Promise<User | null> {
     return this.userRepository.findById(userId);
   }
@@ -100,5 +116,23 @@ export class UserService {
 
   async comparePassword(user: User, password: string): Promise<boolean> {
     return bcrypt.compare(password, user.passwordHash);
+  }
+
+  private normalizePixKey(pixKey: string | null | undefined): string | null {
+    if (pixKey === null || pixKey === undefined) {
+      return null;
+    }
+    const trimmed = pixKey.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+    if (trimmed.length < 5 || trimmed.length > 140) {
+      throw new AppError('BAD_REQUEST', 'Chave Pix deve ter entre 5 e 140 caracteres', 400);
+    }
+    const allowed = /^[A-Za-z0-9@.+\-_:]{3,}$/;
+    if (!allowed.test(trimmed)) {
+      throw new AppError('BAD_REQUEST', 'Chave Pix contém caracteres inválidos', 400);
+    }
+    return trimmed;
   }
 }

@@ -25,7 +25,7 @@ export const WithdrawDTO = z.object({
   amount: z.number().positive().min(minWithdraw, withdrawMinMessage),
   currency: z.enum(['BRL', 'USD', 'EUR']).default('BRL'),
   description: z.string().optional(),
-  pixKey: z.string().min(5, 'Chave Pix obrigatória'),
+  pixKey: z.string().min(5, 'Chave Pix inválida').optional(),
 });
 
 export type WithdrawDTOType = z.infer<typeof WithdrawDTO>;

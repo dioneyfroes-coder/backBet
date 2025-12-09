@@ -9,6 +9,7 @@ export interface IUserDTO {
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
+  pixKey?: string | null;
 }
 
 export interface ICreateUserDTO {

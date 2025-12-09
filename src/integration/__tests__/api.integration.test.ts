@@ -58,7 +58,13 @@ describe('API integration tests', () => {
 
     const jwtService = new JwtService();
     const authController = new AuthController(registerUserUseCase, userService, jwtService);
-    const walletController = new WalletController(getWalletUC, depositUC, withdrawUC, historyUC);
+    const walletController = new WalletController(
+      getWalletUC,
+      depositUC,
+      withdrawUC,
+      historyUC,
+      userService,
+    );
     const betController = new BetController(placeBetUC, cancelBetUC, getUserBetsUC, getEventBetsUC);
 
     const router = Router();

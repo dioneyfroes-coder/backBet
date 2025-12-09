@@ -11,6 +11,7 @@ export interface IUserDocument extends Document<string> {
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED';
   createdAt: Date;
   updatedAt: Date;
+  pixKey?: string | null;
 }
 
 export const userSchema = new Schema<IUserDocument>(
@@ -51,6 +52,10 @@ export const userSchema = new Schema<IUserDocument>(
       type: String,
       enum: ['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED'],
       default: 'PENDING_VERIFICATION',
+    },
+    pixKey: {
+      type: String,
+      default: null,
     },
   },
   { timestamps: true },

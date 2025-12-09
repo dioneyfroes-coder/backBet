@@ -12,6 +12,7 @@ describe('User Entity', () => {
     status: 'ACTIVE' as UserStatus,
     createdAt: new Date(),
     updatedAt: new Date(),
+    pixKey: 'user@pix.key',
   };
 
   beforeEach(() => {
@@ -23,6 +24,7 @@ describe('User Entity', () => {
       mockData.status,
       mockData.createdAt,
       mockData.updatedAt,
+      mockData.pixKey,
     );
   });
 
@@ -62,6 +64,20 @@ describe('User Entity', () => {
     });
   });
 
+  describe('updatePixKey', () => {
+    it('should store a trimmed pix key and update updatedAt', () => {
+      const beforeUpdate = user.updatedAt;
+      user.updatePixKey('  key@example.com  ');
+      expect(user.pixKey).toBe('key@example.com');
+      expect(user.updatedAt.getTime()).toBeGreaterThan(beforeUpdate.getTime());
+    });
+
+    it('should clear pix key when null provided', () => {
+      user.updatePixKey(null);
+      expect(user.pixKey).toBeNull();
+    });
+  });
+
   describe('activate', () => {
     it('should change user status to ACTIVE and update updatedAt', () => {
       user.status = 'SUSPENDED';
@@ -82,6 +98,7 @@ describe('User Entity', () => {
         status: mockData.status,
         createdAt: mockData.createdAt,
         updatedAt: mockData.updatedAt,
+        pixKey: mockData.pixKey,
       });
     });
   });

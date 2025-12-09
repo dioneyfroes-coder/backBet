@@ -6,10 +6,13 @@ import {
   ChangeEmailDTO,
   UpdateProfileDTOType,
   ChangeEmailDTOType,
+  UpdatePixKeyDTO,
+  UpdatePixKeyDTOType,
 } from '../dtos/UserDTOs';
 import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile';
 import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
 import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
+import { UpdatePixKey } from '@core/user/application/use-cases/UpdatePixKey';
 import { flushUserProfileCache } from '@/infrastructure/cache/cacheHooks';
 
 /**
@@ -21,6 +24,7 @@ export class UserController extends BaseController {
     private getUserProfileUseCase: GetUserProfile,
     private updateProfileUseCase: UpdateProfile,
     private changeEmailUseCase: ChangeEmail,
+    private updatePixKeyUseCase: UpdatePixKey,
   ) {
     super();
   }
@@ -74,6 +78,7 @@ export class UserController extends BaseController {
       lastName: user.username.split('.')[1] || '',
       status: user.status,
       createdAt: user.createdAt,
+      pixKey: user.pixKey ?? null,
     });
   }
 
@@ -163,6 +168,7 @@ export class UserController extends BaseController {
         lastName: payload.lastName || user.username.split('.')[1] || '',
         status: user.status,
         createdAt: user.createdAt,
+        pixKey: user.pixKey ?? null,
       },
     });
   }
@@ -248,8 +254,55 @@ export class UserController extends BaseController {
             lastName: updatedUser.username.split('.')[1] || '',
             status: updatedUser.status,
             createdAt: updatedUser.createdAt,
+            pixKey: updatedUser.pixKey ?? null,
           }
         : null,
+    });
+  }
+
+  async getPixKey(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    const user = await this.getUserProfileUseCase.execute(userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    return this.ok(res, {
+      pixKey: user.pixKey ?? null,
+    });
+  }
+
+  async updatePixKey(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    const payload = this.validateSchema(UpdatePixKeyDTO, req.body) as UpdatePixKeyDTOType;
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    const normalizedPixKey = payload.pixKey === '' ? null : payload.pixKey;
+    await this.updatePixKeyUseCase.execute(userId, normalizedPixKey ?? null);
+    await flushUserProfileCache(userId).catch((error) =>
+      console.warn('Failed to flush user cache', error),
+    );
+
+    const user = await this.getUserProfileUseCase.execute(userId);
+    if (!user) {
+      return this.notFound(res, 'Usuário não encontrado');
+    }
+
+    return this.ok(res, {
+      message: 'Chave Pix atualizada com sucesso',
+      pixKey: user.pixKey ?? null,
     });
   }
 }

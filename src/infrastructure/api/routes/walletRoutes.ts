@@ -8,7 +8,7 @@ import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddlewa
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
-import { createWalletRepository } from '@/infrastructure/persistence/factory';
+import { createWalletRepository, createUserRepository } from '@/infrastructure/persistence/factory';
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
@@ -17,6 +17,8 @@ import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepo
 import { appConfig } from '@/shared/config/appConfig';
 import { createPixProvider } from '@/infrastructure/payments/pix';
 import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
+import { UserService } from '@core/user/domain/services/UserService';
+import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -24,6 +26,7 @@ import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
 export type WalletRoutesDeps = {
   walletRepository?: IWalletRepository;
   pixProvider?: PixProviderPort;
+  userRepository?: IUserRepository;
 };
 
 export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<Router> {
@@ -33,6 +36,8 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     deps.walletRepository ?? (await createWalletRepository());
   const walletService = new WalletService(walletRepository);
   const pixProvider: PixProviderPort = deps.pixProvider ?? (await createPixProvider());
+  const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
+  const userService = new UserService(userRepository);
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
@@ -45,6 +50,7 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     depositUseCase,
     withdrawUseCase,
     getHistoryUseCase,
+    userService,
   );
 
   const depositLimiter = createRouteRateLimiter({

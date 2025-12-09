@@ -21,6 +21,19 @@ export const ChangeEmailDTO = z.object({
 
 export type ChangeEmailDTOType = z.infer<typeof ChangeEmailDTO>;
 
+const pixKeySchema = z
+  .string()
+  .trim()
+  .min(5, 'Chave Pix deve ter pelo menos 5 caracteres')
+  .max(140, 'Chave Pix deve ter no máximo 140 caracteres')
+  .regex(/^[A-Za-z0-9@.+\-_:]+$/, 'Chave Pix contém caracteres inválidos');
+
+export const UpdatePixKeyDTO = z.object({
+  pixKey: z.union([pixKeySchema, z.literal(''), z.null()]),
+});
+
+export type UpdatePixKeyDTOType = z.infer<typeof UpdatePixKeyDTO>;
+
 /**
  * Response DTO para usuário
  */
@@ -33,6 +46,7 @@ export const UserResponseDTO = z.object({
   bio: z.string().optional(),
   status: z.enum(['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED']),
   createdAt: z.string().datetime(),
+  pixKey: z.string().nullable().optional(),
 });
 
 export type UserResponseDTOType = z.infer<typeof UserResponseDTO>;

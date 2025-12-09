@@ -48,6 +48,7 @@ describe('WalletController', () => {
   const depositUseCase = { execute: jest.fn() };
   const withdrawUseCase = { execute: jest.fn() };
   const getHistoryUseCase = { execute: jest.fn() };
+  const userService = { findById: jest.fn() };
   const flushWalletCacheMock = flushWalletCache as jest.MockedFunction<typeof flushWalletCache>;
 
   const buildController = () =>
@@ -56,11 +57,13 @@ describe('WalletController', () => {
       depositUseCase as any,
       withdrawUseCase as any,
       getHistoryUseCase as any,
+      userService as any,
     );
 
   beforeEach(() => {
     jest.clearAllMocks();
     flushWalletCacheMock.mockResolvedValue(undefined);
+    userService.findById.mockReset();
   });
 
   describe('getMe', () => {
@@ -320,6 +323,69 @@ describe('WalletController', () => {
       ).rejects.toBeInstanceOf(AppError);
     });
 
+    it('returns 400 when pixKey is missing and user has no stored key', async () => {
+      const controller = buildController();
+      userService.findById.mockResolvedValueOnce(null);
+      const res = createResponse();
+
+      await controller.withdraw(
+        createAuthRequest({
+          body: {
+            amount: 150,
+            currency: 'BRL',
+          },
+        }),
+        res,
+      );
+
+      expect(userService.findById).toHaveBeenCalledWith('user-1');
+      expect(withdrawUseCase.execute).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('uses stored pix key when payload omits it', async () => {
+      const controller = buildController();
+      userService.findById.mockResolvedValueOnce({ pixKey: 'stored@pix' });
+      const pixPayout = {
+        payoutId: 'payout-2',
+        reference: 'ref-3',
+        status: 'PROCESSING',
+        provider: 'mock',
+        processedAt: new Date('2025-01-02T00:02:00.000Z'),
+      };
+      withdrawUseCase.execute.mockResolvedValueOnce({
+        wallet: {
+          userId: 'user-1',
+          balance: 70,
+          lockedBalance: 5,
+          currency: 'BRL',
+        },
+        pixPayout,
+      });
+      const res = createResponse();
+
+      await controller.withdraw(
+        createAuthRequest({
+          body: {
+            amount: 200,
+            currency: 'BRL',
+          },
+        }),
+        res,
+      );
+
+      expect(userService.findById).toHaveBeenCalledWith('user-1');
+      expect(withdrawUseCase.execute).toHaveBeenCalledWith(
+        'user-1',
+        200,
+        'BRL',
+        'stored@pix',
+        undefined,
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.body?.data?.wallet.balance).toBe(70);
+    });
+
     it('calls use case and flushes cache on success', async () => {
       const controller = buildController();
       const pixPayout = {
@@ -359,6 +425,7 @@ describe('WalletController', () => {
         'user@pix',
         'Manual cashout',
       );
+      expect(userService.findById).not.toHaveBeenCalled();
       expect(flushWalletCacheMock).toHaveBeenCalledWith('user-1');
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.body?.data?.pix).toEqual({

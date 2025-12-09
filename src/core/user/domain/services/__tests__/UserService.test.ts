@@ -398,4 +398,65 @@ describe('UserService', () => {
       await expect(userService.comparePassword(user, password)).resolves.toBe(true);
     });
   });
+
+  describe('updatePixKey', () => {
+    const userId = 'user-with-pix';
+
+    it('updates pix key when provided', async () => {
+      const user = new User(
+        userId,
+        new Email('pix@example.com'),
+        'userpix',
+        'hash',
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+      );
+      mockUserRepository.findById.mockResolvedValue(user);
+
+      const result = await userService.updatePixKey(userId, ' user@pix ');
+
+      expect(result.pixKey).toBe('user@pix');
+      expect(mockUserRepository.update).toHaveBeenCalledWith(user);
+    });
+
+    it('clears pix key when null', async () => {
+      const user = new User(
+        userId,
+        new Email('pix@example.com'),
+        'userpix',
+        'hash',
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+        'old@pix',
+      );
+      mockUserRepository.findById.mockResolvedValue(user);
+
+      await userService.updatePixKey(userId, null);
+
+      expect(user.pixKey).toBeNull();
+    });
+
+    it('throws when user not found', async () => {
+      mockUserRepository.findById.mockResolvedValue(null);
+
+      await expect(userService.updatePixKey(userId, 'key')).rejects.toThrow('User not found');
+    });
+
+    it('throws when pix key invalid', async () => {
+      const user = new User(
+        userId,
+        new Email('pix@example.com'),
+        'userpix',
+        'hash',
+        'ACTIVE' as UserStatus,
+        new Date(),
+        new Date(),
+      );
+      mockUserRepository.findById.mockResolvedValue(user);
+
+      await expect(userService.updatePixKey(userId, '??')).rejects.toThrow('Chave Pix');
+    });
+  });
 });
