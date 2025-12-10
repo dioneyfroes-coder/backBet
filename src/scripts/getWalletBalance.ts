@@ -19,8 +19,12 @@ function usage(message?: string): never {
   if (message) {
     console.error(`\n${message}\n`);
   }
-  console.info(`Uso: npm run wallet:balance -- [--userId <id> | --email <email>] [--history <limit>]`);
-  console.info('Obs.: também é possível passar o identificador diretamente (ex.: npm run wallet:balance -- <userId>).');
+  console.info(
+    `Uso: npm run wallet:balance -- [--userId <id> | --email <email>] [--history <limit>]`,
+  );
+  console.info(
+    'Obs.: também é possível passar o identificador diretamente (ex.: npm run wallet:balance -- <userId>).',
+  );
   process.exit(1);
 }
 

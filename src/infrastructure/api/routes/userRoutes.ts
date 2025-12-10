@@ -66,7 +66,9 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   router.put(
     '/me/pix-key',
     protectedRoute,
-    asyncHandler((req: AuthenticatedRequest, res: Response) => userController.updatePixKey(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      userController.updatePixKey(req, res),
+    ),
   );
 
   return router;

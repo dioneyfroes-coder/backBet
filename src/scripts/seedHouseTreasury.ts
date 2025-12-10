@@ -20,7 +20,9 @@ function parseArgs(): ParsedArgs {
   const amount = Number(amountArg);
 
   if (!Number.isFinite(amount) || amount <= 0) {
-    console.error('✗ Informe um valor numérico positivo. Ex: npm run seed:treasury -- 5000 "Seed inicial"');
+    console.error(
+      '✗ Informe um valor numérico positivo. Ex: npm run seed:treasury -- 5000 "Seed inicial"',
+    );
     process.exit(1);
   }
 

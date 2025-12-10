@@ -98,8 +98,8 @@ export class MongooseUserRepository implements IUserRepository {
       data.passwordHash,
       data.status,
       data.createdAt,
-        data.updatedAt,
-        data.pixKey ?? null,
+      data.updatedAt,
+      data.pixKey ?? null,
     );
   }
 }
