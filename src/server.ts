@@ -12,6 +12,8 @@ import '@/infrastructure/observability/cacheMetrics';
 import { createHouseTreasuryRepository } from '@/infrastructure/persistence/factory';
 import { HouseTreasuryService } from '@/core/treasury/domain/services/HouseTreasuryService';
 import { TreasuryRebalanceJob } from '@/infrastructure/jobs/TreasuryRebalanceJob';
+import { startContactWorker } from '@/infrastructure/mailer/ContactWorker';
+import type { Queue as BullQueue } from 'bull';
 // route creators are loaded dynamically (may be async factories)
 
 /**
@@ -19,9 +21,16 @@ import { TreasuryRebalanceJob } from '@/infrastructure/jobs/TreasuryRebalanceJob
  */
 async function main() {
   let treasuryJob: TreasuryRebalanceJob | undefined;
+  let contactQueue: BullQueue | undefined;
+
   const stopJobs = () => {
     treasuryJob?.stop();
     treasuryJob = undefined;
+    if (contactQueue) {
+      // close asynchronously but don't block stopJobs
+      void contactQueue.close().catch(() => undefined);
+      contactQueue = undefined;
+    }
   };
 
   try {
@@ -93,6 +102,24 @@ async function main() {
 
     // Iniciar servidor
     apiServer.start();
+
+    // Optionally start the contact worker in-process when requested via env
+    if (process.env.START_CONTACT_WORKER === 'true') {
+      try {
+        contactQueue = startContactWorker();
+        const closeQueue = async () => {
+          try {
+            await contactQueue?.close();
+          } catch (err) {
+            // ignore
+          }
+        };
+        process.on('SIGINT', closeQueue);
+        process.on('SIGTERM', closeQueue);
+      } catch (err) {
+        console.error('Failed to start contact worker in-process', err);
+      }
+    }
   } catch (error) {
     console.error('Erro ao iniciar servidor:', error);
     stopJobs();
