@@ -7,7 +7,7 @@ describe('ContactWorker.processContactPayload', () => {
   const sendMailMock = jest.fn().mockResolvedValue({ accepted: ['support@example.com'] });
 
   beforeAll(() => {
-    // @ts-ignore - mock createTransport
+    // @ts-expect-error Mocking createTransport for tests
     nodemailer.createTransport.mockReturnValue({ sendMail: sendMailMock });
   });
 

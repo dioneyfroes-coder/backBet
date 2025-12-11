@@ -2,7 +2,10 @@ import { ContactDTOType } from '@/infrastructure/api/dtos/ContactDTOs';
 import { randomUUID } from 'crypto';
 import { getMailerQueue } from '@/infrastructure/mailer';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { contactSpamCounter, contactValidationCounter } from '@/infrastructure/observability/metrics';
+import {
+  contactSpamCounter,
+  contactValidationCounter,
+} from '@/infrastructure/observability/metrics';
 
 function sanitizeMessage(input: string): string {
   // Simple sanitization: strip HTML tags and trim
@@ -34,8 +37,16 @@ export class CreateContactMessage {
     // Optional recaptcha verification
     const recaptchaOk = await verifyRecaptchaIfEnabled((payload as any).recaptchaToken);
     if (!recaptchaOk) {
-      try { contactValidationCounter.inc(); } catch (_) {}
-      throw new (await import('@/shared/errors/AppError')).AppError('BAD_REQUEST', 'reCAPTCHA verification failed', 400);
+      try {
+        contactValidationCounter.inc();
+      } catch (err) {
+        // ignore metric increment failures in environments without metrics
+      }
+      throw new (await import('@/shared/errors/AppError')).AppError(
+        'BAD_REQUEST',
+        'reCAPTCHA verification failed',
+        400,
+      );
     }
 
     const ticketId = randomUUID();
@@ -47,8 +58,16 @@ export class CreateContactMessage {
     const lower = sanitized.toLowerCase();
     const found = FORBIDDEN_WORDS.find((w) => lower.includes(w));
     if (found) {
-      try { contactSpamCounter.inc(); } catch (_) {}
-      throw new (await import('@/shared/errors/AppError')).AppError('BAD_REQUEST', 'Mensagem bloqueada por conteúdo', 400);
+      try {
+        contactSpamCounter.inc();
+      } catch (err) {
+        // ignore metric increment failures
+      }
+      throw new (await import('@/shared/errors/AppError')).AppError(
+        'BAD_REQUEST',
+        'Mensagem bloqueada por conteúdo',
+        400,
+      );
     }
 
     const entry = {

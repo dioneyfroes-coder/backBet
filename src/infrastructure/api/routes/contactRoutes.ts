@@ -4,7 +4,7 @@ import { CreateContactMessage } from '@/core/contact/application/use-cases/Creat
 import { ContactController } from '@/infrastructure/api/controllers/ContactController';
 import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
 
-export type ContactRoutesDeps = {};
+export type ContactRoutesDeps = Record<string, unknown>;
 
 export async function createContactRoutes(_deps: ContactRoutesDeps = {}): Promise<Router> {
   const router = Router();
@@ -18,10 +18,15 @@ export async function createContactRoutes(_deps: ContactRoutesDeps = {}): Promis
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
-    handler: (_req, res) => res.status(429).json({ success: false, error: { message: 'Too Many Requests' } }),
+    handler: (_req, res) =>
+      res.status(429).json({ success: false, error: { message: 'Too Many Requests' } }),
   });
 
-  router.post('/', limiter, asyncHandler((req, res) => contactController.create(req, res)));
+  router.post(
+    '/',
+    limiter,
+    asyncHandler((req, res) => contactController.create(req, res)),
+  );
 
   return router;
 }

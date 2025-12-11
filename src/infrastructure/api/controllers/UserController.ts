@@ -336,7 +336,9 @@ export class UserController extends BaseController {
     };
 
     await this.addUserDocumentUseCase.execute(userId, doc);
-    await flushUserProfileCache(userId).catch((error) => console.warn('Failed to flush user cache', error));
+    await flushUserProfileCache(userId).catch((error) =>
+      console.warn('Failed to flush user cache', error),
+    );
 
     return this.ok(res, { message: 'Documento enviado com sucesso', document: doc });
   }

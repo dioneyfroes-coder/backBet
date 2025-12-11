@@ -83,7 +83,9 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     '/me/documents',
     protectedRoute,
     uploadMiddleware,
-    asyncHandler((req: AuthenticatedRequest, res: Response) => userController.uploadDocument(req, res)),
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      userController.uploadDocument(req, res),
+    ),
   );
 
   return router;

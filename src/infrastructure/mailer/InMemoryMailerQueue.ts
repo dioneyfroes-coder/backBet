@@ -14,7 +14,11 @@ const queue: ContactPayload[] = [];
 export const InMemoryMailerQueue = {
   async enqueueContact(payload: ContactPayload): Promise<void> {
     queue.push(payload);
-    writeStructuredLog({ event: 'contact_enqueued', ticketId: payload.ticketId, email: payload.email });
+    writeStructuredLog({
+      event: 'contact_enqueued',
+      ticketId: payload.ticketId,
+      email: payload.email,
+    });
     try {
       contactEnqueuedCounter.inc();
     } catch (_) {

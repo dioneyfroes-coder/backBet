@@ -33,14 +33,24 @@ describe('User uploads integration', () => {
       const { User } = await import('@core/user/domain/entities/User');
       const { Email } = await import('@core/user/domain/value-objects/Email');
       const userRepo = new UserRepository();
-      const testUser = new User('dev-user-123', new Email('dev@example.com'), 'dev.user', '', 'ACTIVE', new Date(), new Date(), null);
+      const testUser = new User(
+        'dev-user-123',
+        new Email('dev@example.com'),
+        'dev.user',
+        '',
+        'ACTIVE',
+        new Date(),
+        new Date(),
+        null,
+      );
       await userRepo.save(testUser);
 
       const userRoutes = await createUserRoutes({ userRepository: userRepo });
       app.use('/api/users', userRoutes);
 
-      const whoami = await request(app).get('/api/users/me').set('Authorization', 'Bearer dev-user-123');
-      // eslint-disable-next-line no-console
+      const whoami = await request(app)
+        .get('/api/users/me')
+        .set('Authorization', 'Bearer dev-user-123');
       console.log('GET /me =>', whoami.status, whoami.body || whoami.text);
 
       const response = await request(app)
@@ -48,16 +58,20 @@ describe('User uploads integration', () => {
         .set('Authorization', 'Bearer dev-user-123')
         .attach('document', path.join(__dirname, '../../__fixtures__/test-image.png'));
 
-        // debug output to help CI
-        // eslint-disable-next-line no-console
-        console.log('UPLOAD RES STATUS', response.status, 'BODY:', response.body ? response.body : response.text);
+      // debug output to help CI
+      console.log(
+        'UPLOAD RES STATUS',
+        response.status,
+        'BODY:',
+        response.body ? response.body : response.text,
+      );
 
-        expect(response.status).toBe(200);
-        expect(response.body).toHaveProperty('data');
-        expect(response.body.data).toHaveProperty('message', 'Documento enviado com sucesso');
-        expect(response.body.data).toHaveProperty('document');
-        expect(response.body.data.document).toHaveProperty('id');
-        expect(response.body.data.document).toHaveProperty('url');
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('data');
+      expect(response.body.data).toHaveProperty('message', 'Documento enviado com sucesso');
+      expect(response.body.data).toHaveProperty('document');
+      expect(response.body.data.document).toHaveProperty('id');
+      expect(response.body.data.document).toHaveProperty('url');
     });
   }, 20000);
 });

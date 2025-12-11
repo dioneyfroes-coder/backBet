@@ -1,15 +1,13 @@
 import { InMemoryMailerQueue } from './InMemoryMailerQueue';
+import { BullMailerQueue } from './BullMailerQueue';
 
-let adapter: typeof InMemoryMailerQueue | null = null;
+let adapter: any = null;
 
 export function getMailerQueue() {
   if (adapter) return adapter;
 
   if (process.env.USE_REDIS_QUEUE === 'true') {
     try {
-      // lazy require to avoid forcing dependency when not configured
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { BullMailerQueue } = require('./BullMailerQueue');
       const instance = new BullMailerQueue();
       adapter = instance as any;
       return adapter;

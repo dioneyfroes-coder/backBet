@@ -25,7 +25,11 @@ export function createUploadMiddleware(
   const upload = multer({
     storage: memory,
     limits: { fileSize: options.maxFileSizeBytes ?? 5 * 1024 * 1024 },
-    fileFilter: (req: Request, file: Express.Multer.File, cb: (error: Error | null, accept?: boolean) => void) => {
+    fileFilter: (
+      req: Request,
+      file: Express.Multer.File,
+      cb: (error: Error | null, accept?: boolean) => void,
+    ) => {
       if (!file || !file.mimetype) return cb(new Error('Invalid file'));
       if (allowed.includes(file.mimetype)) return cb(null, true);
       const err: any = new Error('File type not allowed');

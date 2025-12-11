@@ -96,6 +96,7 @@ describe('User Entity', () => {
         email: mockData.email.toString(),
         username: mockData.username,
         status: mockData.status,
+        documents: [],
         createdAt: mockData.createdAt,
         updatedAt: mockData.updatedAt,
         pixKey: mockData.pixKey,

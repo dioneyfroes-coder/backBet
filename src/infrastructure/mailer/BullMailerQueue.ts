@@ -16,7 +16,11 @@ export class BullMailerQueue {
 
   async enqueueContact(payload: ContactPayload): Promise<void> {
     await this.queue.add('contact', payload, { removeOnComplete: true, removeOnFail: true });
-    writeStructuredLog({ event: 'contact_enqueued', ticketId: payload.ticketId, email: payload.email });
+    writeStructuredLog({
+      event: 'contact_enqueued',
+      ticketId: payload.ticketId,
+      email: payload.email,
+    });
     try {
       contactEnqueuedCounter.inc();
     } catch (_) {

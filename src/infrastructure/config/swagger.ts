@@ -473,10 +473,17 @@ const swaggerOptions = {
               type: 'object',
               properties: {
                 message: { type: 'string', example: 'Mensagem recebida' },
-                ticketId: { type: 'string', format: 'uuid', example: 'a02d9f52-2636-4ef7-9aeb-04e8ea145693' },
+                ticketId: {
+                  type: 'string',
+                  format: 'uuid',
+                  example: 'a02d9f52-2636-4ef7-9aeb-04e8ea145693',
+                },
               },
             },
-            meta: { type: 'object', properties: { timestamp: { type: 'string', format: 'date-time' } } },
+            meta: {
+              type: 'object',
+              properties: { timestamp: { type: 'string', format: 'date-time' } },
+            },
           },
         },
         UploadDocumentRequest: {
@@ -508,7 +515,10 @@ const swaggerOptions = {
                 },
               },
             },
-            meta: { type: 'object', properties: { timestamp: { type: 'string', format: 'date-time' } } },
+            meta: {
+              type: 'object',
+              properties: { timestamp: { type: 'string', format: 'date-time' } },
+            },
           },
         },
         // Bets schemas
@@ -778,8 +788,18 @@ const swaggerOptions = {
         },
       },
       responses: {
-        '202': { description: 'Accepted', content: { 'application/json': { schema: { $ref: '#/components/schemas/ContactResponse' } } } },
-        '400': { description: 'Bad Request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+        '202': {
+          description: 'Accepted',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ContactResponse' } },
+          },
+        },
+        '400': {
+          description: 'Bad Request',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
       },
     },
   },
@@ -797,9 +817,24 @@ const swaggerOptions = {
         },
       },
       responses: {
-        '200': { description: 'Uploaded', content: { 'application/json': { schema: { $ref: '#/components/schemas/UploadDocumentResponse' } } } },
-        '400': { description: 'Bad Request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
-        '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/UnauthorizedError' } } } },
+        '200': {
+          description: 'Uploaded',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/UploadDocumentResponse' } },
+          },
+        },
+        '400': {
+          description: 'Bad Request',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+        '401': {
+          description: 'Unauthorized',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/UnauthorizedError' } },
+          },
+        },
       },
     },
   },

@@ -28,7 +28,9 @@ export async function processContactPayload(payload: ContactPayload): Promise<vo
 
   try {
     contactEnqueuedCounter.inc();
-  } catch (_) {}
+  } catch (err) {
+    // ignore metric increment failures in environments without metrics
+  }
 
   writeStructuredLog({ event: 'contact_sent', ticketId: payload.ticketId, email: payload.email });
 }
@@ -41,13 +43,21 @@ export function startContactWorker(): BullQueue {
       await processContactPayload(job.data as ContactPayload);
       return Promise.resolve();
     } catch (err) {
-      writeStructuredLog({ event: 'contact_send_failed', ticketId: (job.data as any)?.ticketId, err });
+      writeStructuredLog({
+        event: 'contact_send_failed',
+        ticketId: (job.data as any)?.ticketId,
+        err,
+      });
       return Promise.reject(err);
     }
   });
 
   queue.on('failed', (job, err) => {
-    writeStructuredLog({ event: 'contact_job_failed', ticketId: (job?.data as any)?.ticketId, err });
+    writeStructuredLog({
+      event: 'contact_job_failed',
+      ticketId: (job?.data as any)?.ticketId,
+      err,
+    });
   });
 
   return queue;

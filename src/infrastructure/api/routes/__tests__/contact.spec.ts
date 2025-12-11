@@ -1,5 +1,8 @@
 import request from 'supertest';
 
+// Increase timeout for server bootstrap in CI/slow machines
+jest.setTimeout(15000);
+
 describe('Contact endpoint', () => {
   const ORIGINAL_ENV = process.env;
 

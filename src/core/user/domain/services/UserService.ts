@@ -106,17 +106,20 @@ export class UserService {
     return user;
   }
 
-  async addDocument(userId: string, document: {
-    id: string;
-    type?: string | null;
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    url: string;
-    uploadedAt: string;
-    verified?: boolean;
-  }): Promise<void> {
+  async addDocument(
+    userId: string,
+    document: {
+      id: string;
+      type?: string | null;
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      size: number;
+      url: string;
+      uploadedAt: string;
+      verified?: boolean;
+    },
+  ): Promise<void> {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
     if (user.status === 'SUSPENDED') throw new AppError('BAD_REQUEST', 'User is suspended', 400);
