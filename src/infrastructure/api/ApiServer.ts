@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import path from 'path';
 import passport from 'passport';
 import cors, { CorsOptions } from 'cors';
 import helmet, { HelmetOptions } from 'helmet';
@@ -131,6 +132,14 @@ export class ApiServer {
     // Body parsing
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+    // Serve uploaded files in local development via /uploads
+    try {
+      const uploadsPath = path.join(process.cwd(), 'uploads');
+      this.app.use('/uploads', express.static(uploadsPath));
+    } catch (err) {
+      console.warn('Failed to mount uploads static route', err);
+    }
 
     configurePassportJwt();
     this.app.use(passport.initialize());

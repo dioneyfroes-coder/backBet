@@ -8,6 +8,7 @@ import { createBaseRoutes, BaseRoutesDeps } from './baseRoutes';
 import { createEventRoutes, EventRoutesDeps } from './eventRoutes';
 import { createAdminRoutes, AdminRoutesDeps } from './adminRoutes';
 import { createGameRoutes, GameRoutesDeps } from './gameRoutes';
+import { createContactRoutes } from './contactRoutes';
 import {
   createUserRepository,
   createWalletRepository,
@@ -116,6 +117,8 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
       ...(deps.games || {}),
     }),
   );
+  // Public contact endpoint
+  router.use('/contact', await createContactRoutes());
   router.use(
     '/admin',
     await createAdminRoutes({

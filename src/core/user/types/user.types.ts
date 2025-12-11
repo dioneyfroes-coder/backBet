@@ -10,6 +10,7 @@ export interface IUserDTO {
   createdAt: Date;
   updatedAt: Date;
   pixKey?: string | null;
+  documents?: IUserDocumentDTO[];
 }
 
 export interface ICreateUserDTO {
@@ -22,4 +23,16 @@ export interface ICreateUserDTO {
 export interface IUserResponseDTO {
   user: IUserDTO;
   wallet: IWalletDTO;
+}
+
+export interface IUserDocumentDTO {
+  id: string;
+  type?: string | null;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  uploadedAt: string;
+  verified?: boolean;
 }

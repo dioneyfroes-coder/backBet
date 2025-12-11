@@ -9,6 +9,9 @@ import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile'
 import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
 import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
 import { UpdatePixKey } from '@core/user/application/use-cases/UpdatePixKey';
+import { AddUserDocument } from '@core/user/application/use-cases/AddUserDocument';
+import { LocalStorageAdapter } from '@/infrastructure/storage/LocalStorageAdapter';
+import { createUploadMiddleware } from '../middleware/uploadMiddleware';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
 
 /**
@@ -29,13 +32,18 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   const updateProfileUseCase = new UpdateProfile(userService);
   const changeEmailUseCase = new ChangeEmail(userService);
   const updatePixKeyUseCase = new UpdatePixKey(userService);
+  const addUserDocumentUseCase = new AddUserDocument(userService);
 
   const userController = new UserController(
     getUserProfileUseCase,
     updateProfileUseCase,
     changeEmailUseCase,
     updatePixKeyUseCase,
+    addUserDocumentUseCase,
   );
+
+  const storageAdapter = new LocalStorageAdapter();
+  const uploadMiddleware = createUploadMiddleware(storageAdapter, 'document');
 
   // Rotas protegidas
   router.get(
@@ -69,6 +77,13 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     asyncHandler((req: AuthenticatedRequest, res: Response) =>
       userController.updatePixKey(req, res),
     ),
+  );
+
+  router.post(
+    '/me/documents',
+    protectedRoute,
+    uploadMiddleware,
+    asyncHandler((req: AuthenticatedRequest, res: Response) => userController.uploadDocument(req, res)),
   );
 
   return router;

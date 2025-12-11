@@ -25,6 +25,7 @@ export class UserController extends BaseController {
     private updateProfileUseCase: UpdateProfile,
     private changeEmailUseCase: ChangeEmail,
     private updatePixKeyUseCase: UpdatePixKey,
+    private addUserDocumentUseCase?: any,
   ) {
     super();
   }
@@ -304,5 +305,39 @@ export class UserController extends BaseController {
       message: 'Chave Pix atualizada com sucesso',
       pixKey: user.pixKey ?? null,
     });
+  }
+
+  async uploadDocument(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    const stored = (req as any).storedFile;
+    if (!stored) {
+      return this.badRequest(res, 'Arquivo não enviado');
+    }
+
+    if (!this.addUserDocumentUseCase) {
+      return this.internalError(res, 'Upload handler não disponível');
+    }
+
+    const doc = {
+      id: stored.id,
+      type: null,
+      filename: stored.filename,
+      originalName: stored.originalName,
+      mimeType: stored.mimeType,
+      size: stored.size,
+      url: stored.url,
+      uploadedAt: new Date().toISOString(),
+      verified: false,
+    };
+
+    await this.addUserDocumentUseCase.execute(userId, doc);
+    await flushUserProfileCache(userId).catch((error) => console.warn('Failed to flush user cache', error));
+
+    return this.ok(res, { message: 'Documento enviado com sucesso', document: doc });
   }
 }

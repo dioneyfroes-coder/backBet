@@ -455,6 +455,62 @@ const swaggerOptions = {
             meta: { timestamp: '2025-11-14T23:21:00.000Z' },
           },
         },
+        ContactRequest: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', example: 'User' },
+            email: { type: 'string', format: 'email', example: 'user@example.com' },
+            message: { type: 'string', example: 'Hello support', minLength: 3 },
+            recaptchaToken: { type: 'string', example: 'token-or-null' },
+          },
+          required: ['message'],
+        },
+        ContactResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', example: 'Mensagem recebida' },
+                ticketId: { type: 'string', format: 'uuid', example: 'a02d9f52-2636-4ef7-9aeb-04e8ea145693' },
+              },
+            },
+            meta: { type: 'object', properties: { timestamp: { type: 'string', format: 'date-time' } } },
+          },
+        },
+        UploadDocumentRequest: {
+          type: 'object',
+          properties: {
+            document: { type: 'string', format: 'binary' },
+          },
+        },
+        UploadDocumentResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            data: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', example: 'Documento enviado com sucesso' },
+                document: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string', example: 'file-uuid' },
+                    filename: { type: 'string' },
+                    originalName: { type: 'string' },
+                    mimeType: { type: 'string' },
+                    size: { type: 'integer' },
+                    url: { type: 'string' },
+                    uploadedAt: { type: 'string', format: 'date-time' },
+                    verified: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+            meta: { type: 'object', properties: { timestamp: { type: 'string', format: 'date-time' } } },
+          },
+        },
         // Bets schemas
         PlaceBetRequest: {
           type: 'object',
@@ -704,6 +760,49 @@ const swaggerOptions = {
     ],
   },
   apis: ['./src/infrastructure/api/routes/*.ts', './src/infrastructure/api/controllers/*.ts'],
+};
+
+// Add explicit paths for contact and upload (helps generators and docs)
+// Note: controllers already contain detailed JSDoc, but explicit paths improve visibility
+(swaggerOptions.definition as any).paths = {
+  '/contact': {
+    post: {
+      tags: ['Contact'],
+      summary: 'Send a contact message',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/ContactRequest' },
+          },
+        },
+      },
+      responses: {
+        '202': { description: 'Accepted', content: { 'application/json': { schema: { $ref: '#/components/schemas/ContactResponse' } } } },
+        '400': { description: 'Bad Request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+      },
+    },
+  },
+  '/users/me/documents': {
+    post: {
+      tags: ['Users'],
+      summary: 'Upload identity document for the authenticated user',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: { $ref: '#/components/schemas/UploadDocumentRequest' },
+          },
+        },
+      },
+      responses: {
+        '200': { description: 'Uploaded', content: { 'application/json': { schema: { $ref: '#/components/schemas/UploadDocumentResponse' } } } },
+        '400': { description: 'Bad Request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+        '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/UnauthorizedError' } } } },
+      },
+    },
+  },
 };
 
 /**

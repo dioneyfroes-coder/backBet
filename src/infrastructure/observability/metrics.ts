@@ -47,6 +47,24 @@ const dependencyHealthGauge = new Gauge({
   registers: [registry],
 });
 
+const contactEnqueuedCounter = new Counter({
+  name: 'backbet_contact_enqueued_total',
+  help: 'Total de mensagens de contato enfileiradas',
+  registers: [registry],
+});
+
+const contactSpamCounter = new Counter({
+  name: 'backbet_contact_spam_total',
+  help: 'Total de mensagens de contato classificadas como spam/blocked',
+  registers: [registry],
+});
+
+const contactValidationCounter = new Counter({
+  name: 'backbet_contact_validation_errors_total',
+  help: 'Total de mensagens de contato rejeitadas por validação',
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -55,4 +73,7 @@ export {
   httpErrorCounter,
   httpActiveRequests,
   dependencyHealthGauge,
+  contactEnqueuedCounter,
+  contactSpamCounter,
+  contactValidationCounter,
 };

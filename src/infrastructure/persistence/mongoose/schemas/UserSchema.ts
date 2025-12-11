@@ -12,6 +12,17 @@ export interface IUserDocument extends Document<string> {
   createdAt: Date;
   updatedAt: Date;
   pixKey?: string | null;
+  documents?: Array<{
+    id: string;
+    type?: string | null;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    url: string;
+    uploadedAt: string;
+    verified?: boolean;
+  }>;
 }
 
 export const userSchema = new Schema<IUserDocument>(
@@ -56,6 +67,22 @@ export const userSchema = new Schema<IUserDocument>(
     pixKey: {
       type: String,
       default: null,
+    },
+    documents: {
+      type: [
+        {
+          id: { type: String, required: true },
+          type: { type: String, default: null },
+          filename: { type: String, required: true },
+          originalName: { type: String, required: true },
+          mimeType: { type: String, required: true },
+          size: { type: Number, required: true },
+          url: { type: String, required: true },
+          uploadedAt: { type: String, required: true },
+          verified: { type: Boolean, default: false },
+        },
+      ],
+      default: [],
     },
   },
   { timestamps: true },

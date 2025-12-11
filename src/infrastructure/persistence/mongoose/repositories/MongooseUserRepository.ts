@@ -15,6 +15,7 @@ export class MongooseUserRepository implements IUserRepository {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
+        documents: user.documents ?? [],
       };
 
       await UserModel.findByIdAndUpdate(user.id, userData, { upsert: true });
@@ -73,6 +74,7 @@ export class MongooseUserRepository implements IUserRepository {
         status: user.status,
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
+        documents: user.documents ?? [],
       };
 
       const result = await UserModel.findByIdAndUpdate(user.id, userData, { new: true });
@@ -100,6 +102,7 @@ export class MongooseUserRepository implements IUserRepository {
       data.createdAt,
       data.updatedAt,
       data.pixKey ?? null,
+      data.documents ?? [],
     );
   }
 }
