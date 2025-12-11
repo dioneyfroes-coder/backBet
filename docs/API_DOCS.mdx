@@ -155,6 +155,33 @@ Content-Type: application/json
 
 > Toda conta criada recebe imediatamente uma carteira BRL com saldo inicial `0`, garantindo que não exista crédito prévio antes do primeiro depósito.
 
+### Contact (`/api/contact`)
+
+Contato público para mensagens ao time de suporte/ops. O endpoint valida payload mínimo e enfileira a mensagem para processamento assíncrono por um worker (Bull + Redis) ou por um adaptador em memória em ambientes de teste.
+
+| Método | Caminho | Notas |
+|--------|---------|-------|
+| `POST` | `/contact` | Aceita `{ name?, email?, message, recaptchaToken? }`. `message` é obrigatório (mínimo 3 caracteres). A requisição é validada via Zod e, em caso de sucesso, o payload é enfileirado para a fila `contact_queue` e um `ticketId` é retornado com HTTP `202 Accepted`. |
+
+Comportamento importante:
+- ReCAPTCHA: se `RECAPTCHA_SECRET` estiver configurada, o backend valida o token recebido em `recaptchaToken`. Rejeições retornam `400 BAD_REQUEST`.
+- Anti-spam: heurísticas simples (palavras proibidas) podem bloquear a mensagem e gerar `400 BAD_REQUEST` com `Mensagem bloqueada por conteúdo`.
+- Fila/worker: por padrão o projeto usa `InMemoryMailerQueue` em `test`/`dev`. Para produção, habilite `USE_REDIS_QUEUE=true` e rode o worker (veja Quickstart). O worker consome jobs `contact` e envia emails via `nodemailer`.
+
+Exemplos (curl):
+
+```bash
+# Enviar uma mensagem de contato simples
+curl -X POST http://localhost:3000/api/contact \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Jane","email":"jane@example.com","message":"Olá suporte"}'
+
+# Enviar com token reCAPTCHA (quando habilitado)
+curl -X POST http://localhost:3000/api/contact \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Jane","email":"jane@example.com","message":"Olá suporte","recaptchaToken":"TOKEN_AQUI"}'
+```
+
 ### Usuários (`/api/users`)
 
 Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`).
@@ -166,6 +193,18 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | `PATCH` | `/users/me/email` | Troca email após validar unicidade e VO `Email`. Limpa cache de perfil. |
 | `GET` | `/users/me/pix-key` | Retorna a chave Pix padrão vinculada ao usuário (vazio quando não configurada). |
 | `PUT` | `/users/me/pix-key` | Aceita `{ pixKey }`, valida comprimento/formato e salva como fallback para saques e PIX automáticos. |
+
+| `POST` | `/users/me/documents` | `protectedRoute` + multipart upload. Aceita campo `document` (imagem ou PDF, até 5MB). Armazena metadados do arquivo no perfil do usuário e devolve `{ document }` com `id, url, mimeType, size, uploadedAt`. No ambiente local os arquivos são servidos em `/uploads` (LocalStorageAdapter); em produção recomendamos usar object storage (S3/GCS) e URLs assinadas. |
+
+Exemplo (curl multipart):
+
+```bash
+# upload de documento (requere Authorization: Bearer <userId|token>)
+curl -X POST http://localhost:3000/api/users/me/documents \
+  -H "Authorization: Bearer dev-user-123" \
+  -F "document=@/path/to/id.jpg" \
+  -v
+```
 
 ### Carteiras (`/api/wallets`)
 

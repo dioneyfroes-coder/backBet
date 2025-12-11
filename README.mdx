@@ -124,6 +124,13 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 | Médio prazo | Instrumentar tracing OTEL em staging, remover fallback in-memory em produção, formalizar eventos/outbox (`UserCreated`, `BetPlaced`, `FundsWithdrawn`). |
 | Pré-produção | Security review completa, testes de performance/stress automatizados, ativação dos alertas via PM2 WebUI + e-mail de saúde, checklist de rollout/rollback. |
 
+## Novidades recentes
+
+- `POST /api/contact`: novo endpoint público para contato. Mensagens são enfileiradas e processadas assincronamente por um worker (Bull+Redis em produção, adaptador em memória em dev/test).
+- Worker de contato: `src/infrastructure/mailer/ContactWorker.ts` e script `src/scripts/start-contact-worker.ts`. Em dev rode `npm run worker:contact` ou use `ecosystem.contact.dev.config.cjs` com PM2.
+- Upload de documentos: `POST /api/users/me/documents` (multipart, imagem/PDF, max 5MB). LocalStorageAdapter serve arquivos em `/uploads` para desenvolvimento.
+
+
 ---
 
 **Versão atual:** 0.1.0 (pre-alpha)  

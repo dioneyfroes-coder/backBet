@@ -100,6 +100,37 @@ npm run dev
 | `GET /api/docs` | Swagger UI |
 | `GET /api/docs.json` | OpenAPI 3.1 |
 
+### Contact worker (fila de emails)
+
+O sistema enfileira mensagens de contato em `contact_queue` e requer um worker para processá-las em produção.
+
+- Em desenvolvimento você pode rodar o worker TypeScript diretamente com `tsx`:
+
+```bash
+npm run worker:contact
+```
+
+- Com PM2 (desenvolvimento, sem build):
+
+```bash
+pm2 start ecosystem.contact.dev.config.cjs --env development
+```
+
+- Em produção (após `npm run build`):
+
+```bash
+npm run build
+pm2 start ecosystem.contact.config.cjs --env production
+```
+
+Variáveis relevantes:
+
+- `USE_REDIS_QUEUE=true` — ativar Bull+Redis em produção.
+- `REDIS_URL` — conexão Redis para a fila.
+- `MAILER_SMTP_URL` — URL SMTP (opcional; se ausente o worker usa `jsonTransport` para não enviar emails reais em dev).
+- `CONTACT_TO_EMAIL` — destino padrão das mensagens de suporte.
+
+
 ## 6. Scripts essenciais
 
 | Comando | Uso |
