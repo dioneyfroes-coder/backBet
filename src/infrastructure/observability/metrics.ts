@@ -65,6 +65,36 @@ const contactValidationCounter = new Counter({
   registers: [registry],
 });
 
+const withdrawalRequestCreatedCounter = new Counter({
+  name: 'backbet_withdrawal_requests_created_total',
+  help: 'Total de withdrawal requests criadas',
+  registers: [registry],
+});
+
+const withdrawalRequestApprovedCounter = new Counter({
+  name: 'backbet_withdrawal_requests_approved_total',
+  help: 'Total de withdrawal requests aprovadas',
+  registers: [registry],
+});
+
+const withdrawalRequestProcessingFailedCounter = new Counter({
+  name: 'backbet_withdrawal_requests_processing_failed_total',
+  help: 'Total de falhas no processamento de withdrawal requests',
+  registers: [registry],
+});
+
+const withdrawalPayoutSuccessCounter = new Counter({
+  name: 'backbet_withdrawal_payout_success_total',
+  help: 'Total de pagamentos (payouts) de saque bem-sucedidos',
+  registers: [registry],
+});
+
+const withdrawalPayoutFailedCounter = new Counter({
+  name: 'backbet_withdrawal_payout_failed_total',
+  help: 'Total de pagamentos (payouts) de saque que falharam',
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -76,4 +106,9 @@ export {
   contactEnqueuedCounter,
   contactSpamCounter,
   contactValidationCounter,
+  withdrawalRequestCreatedCounter,
+  withdrawalRequestApprovedCounter,
+  withdrawalRequestProcessingFailedCounter,
+  withdrawalPayoutSuccessCounter,
+  withdrawalPayoutFailedCounter,
 };

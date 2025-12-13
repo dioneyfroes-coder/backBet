@@ -5,7 +5,8 @@ module.exports = {
   apps: [
     {
       name: 'backbet-mailer',
-      script: './dist/src/scripts/start-contact-worker.js',
+      // Production: use built dist JS. Do not fallback to TS in production.
+      script: './dist/scripts/start-contact-worker.js',
       cwd: path.resolve(__dirname),
       instances: 1,
       autorestart: true,

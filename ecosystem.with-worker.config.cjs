@@ -17,6 +17,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: process.env.PORT || 3000,
         START_CONTACT_WORKER: 'true',
+        START_WITHDRAWAL_WORKER: 'true',
       },
     },
   ],

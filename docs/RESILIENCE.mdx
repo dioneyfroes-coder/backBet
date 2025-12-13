@@ -7,7 +7,7 @@ slug: "/docs/resilience"
 # Resiliência operando em camadas
 
 :::note Visão geral
-O BackBet é projetado para sobreviver a falhas externas (Clerk, Redis, Mongo), picos de autenticação e indisponibilidade parcial. A seguir detalhamos como API, cache, persistência e observabilidade se combinam para evitar downtime e acelerar a recuperação.
+O BackBet é projetado para sobreviver a falhas externas (provedores de identidade, Redis, Mongo), picos de autenticação e indisponibilidade parcial. A seguir detalhamos como API, cache, persistência e observabilidade se combinam para evitar downtime e acelerar a recuperação.
 :::
 
 ## 1. API e experiência do cliente
@@ -15,7 +15,7 @@ O BackBet é projetado para sobreviver a falhas externas (Clerk, Redis, Mongo), 
 | Proteção | Resultado | Onde configurar |
 |----------|-----------|-----------------|
 | Rate limiting global/por rota | Contém spikes em `POST /auth/login`, `/wallets/deposit`, `/bets` e propaga `RateLimit-*` headers para o cliente | `rateLimit` e `createRouteRateLimiter` em `src/shared/config/appConfig.ts` |
-| Fallback de autenticação | Permite JWT local ou `Bearer <userId>` em dev quando Clerk está indisponível | `ALLOW_DEV_BEARER_BYPASS=true` |
+| Fallback de autenticação | Permite JWT local ou `Bearer <userId>` em dev quando o provedor de identidade está indisponível | `ALLOW_DEV_BEARER_BYPASS=true` |
 | Timeouts + abort signals | Respostas rápidas mesmo quando serviços externos degradam; adicione notas no README ao incluir novos SDKs | Middlewares + `walletService`/`betService` |
 | Retries / circuit breakers | Isola Redis/Mongo quando instáveis antes que afetem usuários | `src/shared/resilience/*`, `src/infrastructure/observability/resilienceMetrics.ts` |
 
@@ -54,9 +54,9 @@ Provedores como Nginx/ALB podem usar `/health/cache` e `/readiness` para retirar
 
 ## 5. Estratégias de tolerância a falhas futuras
 
-1. **Retries inteligentes**: adicione libs como `p-retry` aos adaptadores de Clerk/Redis para backoff exponencial.
-2. **Circuit breaker dedicado**: um por integração crítica (Clerk, Redis, Mongo) com limites ajustados a cada SLA.
-3. **Resposta degradê**: quando Clerk falhar, devolva mensagem orientando o usuário (ex.: `418` com instruções) enquanto o monitor dispara alertas automáticos.
+1. **Retries inteligentes**: adicione libs como `p-retry` aos adaptadores de provedores externos/Redis para backoff exponencial.
+2. **Circuit breaker dedicado**: um por integração crítica (provedor de identidade, Redis, Mongo) com limites ajustados a cada SLA.
+3. **Resposta degradê**: quando o provedor de identidade falhar, devolva mensagem orientando o usuário (ex.: `418` com instruções) enquanto o monitor dispara alertas automáticos.
 4. **Chaos testing**: roteiros que derrubam Redis/Mongo em staging e verificam `/readiness` + `/health/cache` garantem confiança nas rotas de fallback.
 
 ## 6. Checklist de resiliência

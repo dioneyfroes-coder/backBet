@@ -49,7 +49,7 @@ Ajuste os principais toggles:
 | `MONGODB_URI` / `MONGODB_DB_NAME` | Conexão Mongo | `mongodb://localhost:27017` / `backbet-dev` |
 | `CACHE_ENABLED` / `REDIS_URL` | Libera cache Redis + métricas | `false` quando não houver Redis |
 | `ALLOW_DEV_BEARER_BYPASS` | Permite `Authorization: Bearer <userId>` sem JWT | `true` | 
-| `CLERK_*` | Credenciais Clerk | Use valores reais só em staging/prod |
+| `IDENTITY_PROVIDER_*` | Credenciais do provedor de identidade | Use valores reais só em staging/prod |
 | `JWT_*` | Segredo/local auth | Necessário para `/auth/login` e `/auth/refresh` |
 | `RATE_LIMIT_*` | Rate limit global | Defaults altos (5k req/10 min) |
 | `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry | Ative apenas se tiver collector |
@@ -178,7 +178,7 @@ curl -sf http://localhost:3000/health/cache
 | `ERR_UNKNOWN_FILE_EXTENSION` | Garanta que `package.json` **não** tenha `"type": "module"`. |
 | `MongoNetworkError` | Suba Mongo (`docker ps`), revise URI ou use `USE_MONGOOSE_PERSISTENCE=false`. |
 | `Redis connection refused` | Corrija `REDIS_URL` ou desligue cache (`CACHE_ENABLED=false`). |
-| `CLERK_*` faltando | Use chaves reais ou habilite `ALLOW_DEV_BEARER_BYPASS` (apenas em dev/test). |
+| `IDENTITY_PROVIDER_*` faltando | Use chaves reais do provedor de identidade ou habilite `ALLOW_DEV_BEARER_BYPASS` (apenas em dev/test). |
 | Testes instáveis | `npm test -- --clearCache && npm test`. Confira se serviços externos não estão caindo. |
 | Porta 3000 ocupada | Ajuste `PORT` ou finalize processo (`lsof -i :3000`). |
 
@@ -186,7 +186,7 @@ curl -sf http://localhost:3000/health/cache
 
 1. Rodar `npm run lint && npm run test -- --coverage && npm run build` antes de commitar.
 2. Atualizar documentação do módulo tocado em `docs/*.mdx` quando necessário.
-3. Em staging/prod: ative Redis real, conecte Mongo definitivo, defina `CLERK_*`, configure OTLP (`TRACING_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT`) e proteja `/health/cache` + `/readiness` via proxy (`/metrics` responde 410 até que `OBS_ENABLE_PROMETHEUS=true`).
+3. Em staging/prod: ative Redis real, conecte Mongo definitivo, defina variáveis do provedor de identidade (ex.: `IDENTITY_PROVIDER_*`), configure OTLP (`TRACING_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT`) e proteja `/health/cache` + `/readiness` via proxy (`/metrics` responde 410 até que `OBS_ENABLE_PROMETHEUS=true`).
 
 ---
 

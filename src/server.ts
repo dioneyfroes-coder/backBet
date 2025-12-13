@@ -13,6 +13,7 @@ import { createHouseTreasuryRepository } from '@/infrastructure/persistence/fact
 import { HouseTreasuryService } from '@/core/treasury/domain/services/HouseTreasuryService';
 import { TreasuryRebalanceJob } from '@/infrastructure/jobs/TreasuryRebalanceJob';
 import { startContactWorker } from '@/infrastructure/mailer/ContactWorker';
+import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
 import type { Queue as BullQueue } from 'bull';
 // route creators are loaded dynamically (may be async factories)
 
@@ -22,6 +23,7 @@ import type { Queue as BullQueue } from 'bull';
 async function main() {
   let treasuryJob: TreasuryRebalanceJob | undefined;
   let contactQueue: BullQueue | undefined;
+  let withdrawalQueue: BullQueue | undefined;
 
   const stopJobs = () => {
     treasuryJob?.stop();
@@ -31,6 +33,10 @@ async function main() {
       void contactQueue.close().catch(() => undefined);
       contactQueue = undefined;
     }
+      if (withdrawalQueue) {
+        void withdrawalQueue.close().catch(() => undefined);
+        withdrawalQueue = undefined;
+      }
   };
 
   try {
@@ -118,6 +124,24 @@ async function main() {
         process.on('SIGTERM', closeQueue);
       } catch (err) {
         console.error('Failed to start contact worker in-process', err);
+      }
+    }
+
+    // Optionally start the withdrawal payout worker in-process when requested via env
+    if (process.env.START_WITHDRAWAL_WORKER === 'true') {
+      try {
+        withdrawalQueue = startWithdrawalWorker();
+        const closeWithdrawal = async () => {
+          try {
+            await withdrawalQueue?.close();
+          } catch (err) {
+            // ignore
+          }
+        };
+        process.on('SIGINT', closeWithdrawal);
+        process.on('SIGTERM', closeWithdrawal);
+      } catch (err) {
+        console.error('Failed to start withdrawal worker in-process', err);
       }
     }
   } catch (error) {

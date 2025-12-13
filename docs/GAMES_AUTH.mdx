@@ -13,7 +13,7 @@ Este guia explica como autenticar clientes e orquestrar chamadas ao módulo de m
 | Ambiente | Base URL | Observações |
 |----------|----------|-------------|
 | Desenvolvimento local | `https://backbet.onrender.com/api` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
-| Homologação/Produção | `https://backbet.onrender.com/api` | Requer JWT válido emitido pelo Clerk ou pelo fluxo `/api/auth/login`. |
+| Homologação/Produção | `https://backbet.onrender.com/api` | Requer JWT válido emitido pelo provedor de identidade configurado ou pelo fluxo `/api/auth/login`. |
 
 Os recursos de games ficam em `/api/games/**`:
 
@@ -25,15 +25,15 @@ Os recursos de games ficam em `/api/games/**`:
 
 ## 2. Autenticação correta
 
-1. **Produção/Staging (Clerk + JWT)**
-   - O frontend autentica via Clerk (OAuth, OTP etc.).
-   - Requisções ao backend enviam `Authorization: Bearer <jwt>` com `userId` e `sessionId` emitidos pelos nossos serviços (`JwtService` valida o token).
-   - Tokens expirados devem ser renovados com `/api/auth/refresh` ou pelo Clerk.
+1. **Produção/Staging (provedor de identidade + JWT)**
+  - O frontend autentica via provedor de identidade configurado (OAuth, OTP etc.).
+  - Requisções ao backend enviam `Authorization: Bearer <jwt>` com `userId` e `sessionId` emitidos pelos nossos serviços (`JwtService` valida o token).
+  - Tokens expirados devem ser renovados com `/api/auth/refresh` ou pelo provedor de identidade quando aplicável.
 
 2. **Ambiente local com bypass**
-   - Defina `ALLOW_DEV_BEARER_BYPASS=true` no `.env` (já sugerido no Quickstart).
-   - Envie `Authorization: Bearer <qualquer-user-id>`; o middleware trata o valor como `userId` quando o token **não** tem formato JWT e o bypass está ativo.
-   - Útil para testar o fluxo completo sem provisionar o Clerk.
+  - Defina `ALLOW_DEV_BEARER_BYPASS=true` no `.env` (já sugerido no Quickstart).
+  - Envie `Authorization: Bearer <qualquer-user-id>`; o middleware trata o valor como `userId` quando o token **não** tem formato JWT e o bypass está ativo.
+  - Útil para testar o fluxo completo sem provisionar um provedor de identidade externo.
 
 3. **Boas práticas**
    - Sempre prefira JWT em ambientes compartilhados.
@@ -61,7 +61,7 @@ Para que o frontend converse corretamente com o módulo de Coin Flip, garanta os
 ### 3.1 Pré-requisitos técnicos
 
 - Cliente HTTP configurável (fetch/axios) capaz de definir `baseURL`, headers e timeouts.
-- Armazenamento seguro do JWT (Memory/HTTP-only cookie). Use refresh automático quando o Clerk sinalizar expiração.
+  - Armazenamento seguro do JWT (Memory/HTTP-only cookie). Use refresh automático quando o provedor de identidade sinalizar expiração.
 - Relógio em UTC para exibir `createdAt` e ordenar rounds.
 - Possibilidade de ler as flags de ambiente (por exemplo, usar `process.env.NEXT_PUBLIC_API_URL`).
 
@@ -79,7 +79,7 @@ api.interceptors.request.use((config) => {
 
 ### 3.2 Estados que o frontend precisa manter
 
-- `accessToken` vigente + forma de renovação (`/api/auth/refresh` ou Clerk SDK).
+- `accessToken` vigente + forma de renovação (`/api/auth/refresh` ou SDK do provedor de identidade / fluxo local de JWT).
 - `userId` do jogador para correlacionar carteira, histórico e feed.
 - Saldo atual via `/api/wallets/me` para validar `wager` antes do POST.
 - Configuração do jogo (`minBet`, `maxBet`, `payoutMultiplier`, `fixedWinAmount`, `enabled`). Atualize quando o usuário abrir o modal ou ao receber erro 503.
@@ -87,7 +87,7 @@ api.interceptors.request.use((config) => {
 
 ### 3.3 Sequência mínima de chamadas
 
-1. **Autenticar**: obter JWT pelo Clerk ou `/api/auth/login` (usar bypass apenas em dev).
+1. **Autenticar**: obter JWT pelo provedor de identidade configurado (ou via `/api/auth/login` quando usando o fluxo local de JWT) — use bypass apenas em dev.
 2. **Sincronizar carteira**: `GET /wallets/me` para mostrar saldo e moeda.
 3. **Carregar config**: `GET /games/coin-flip` e cache local até expirar (ex.: 60s) ou até receber `GAME_DISABLED`.
 4. **Mostrar histórico**: `GET /games/coin-flip/history?limit=20` para preencher a tabela inicial.

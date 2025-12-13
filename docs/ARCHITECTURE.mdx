@@ -20,7 +20,7 @@ A seguir detalhamos cada área funcional e as decisões de engenharia que susten
 
 | Contexto | Diretório | Responsabilidades chave | Principais agregados |
 |----------|-----------|-------------------------|----------------------|
-| User Core | `src/core/user` | Cadastro, autenticação local, sincronização com Clerk, atualização de perfil e e-mail. | `User`, `Email` VO |
+| User Core | `src/core/user` | Cadastro, autenticação local, sincronização com provedores de identidade, atualização de perfil e e-mail. | `User`, `Email` VO |
 | Finance Core | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito e workflow de solicitações de saque (locks/unlock). | `Wallet`, `Money`, `Currency` |
 | Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `BetAmount`, `Odds` |
 | Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados e contratos genéricos. | - |
@@ -33,7 +33,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 - **`ApiServer.ts`** monta Express 5 com `helmet`, CORS dinâmico, `express-rate-limit`, parsers, Swagger UI (`/api/docs`) e endpoints de saúde.
 - Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware` e handlers de erro padronizados.
 - Autenticação:
-  - Produção: Clerk (`@clerk/express` + `requireAuth`).
+  - Produção: Passport (`passport-jwt`) ou outro provedor de identidade configurado.
   - Dev/Test: bypass opcional (`ALLOW_DEV_BEARER_BYPASS`) que aceita `Authorization: Bearer <userId>` sem JWT.
 - Rotas residem em `routes/*.ts` e importam controllers do respectivo módulo (`controllers/*Controller.ts`). Todas são registradas via `createApiRouter` no `server.ts` por prefixos: `/auth`, `/users`, `/wallets`, `/finance`, `/bets`.
 
@@ -50,7 +50,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 ### 4. Infraestrutura
 - **Persistência (`src/infrastructure/persistence`)**: factories (`factory.ts`) escolhem Mongoose (`persistence/mongoose/*`) ou adaptadores in-memory.
 - **Cache (`src/infrastructure/cache`)**: `RedisClient` (ioredis), métricas internas e hooks declarativos. TTLs configurados em `shared/config/cacheConfig.ts`.
-- **Autenticação (`src/infrastructure/auth`)**: `JwtService`, helpers Clerk e middlewares complementares.
+- **Autenticação (`src/infrastructure/auth`)**: `JwtService`, adaptadores para provedores de identidade (ex.: Passport) e middlewares complementares.
 - **Observabilidade (`src/infrastructure/observability`)**: snapshots (cache/resiliência/dependências) e tracing OpenTelemetry (`tracing.ts`).
 - **Config (`src/shared/config/*.ts`)**: single source of truth para envs, rate limit, CORS, security, cache e OTLP.
 
@@ -61,7 +61,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 ## Fluxo de Requisição
 
 1. **Entrada HTTP** – `ApiServer` aplica middlewares (helmet, CORS, rate-limit, request-id, logging).
-2. **Autenticação** – Clerk ou bypass preenche `req.auth.userId`; rotas críticas usam `protectedRoute` para validar token.
+2. **Autenticação** – Passport/JWT (ou outro provedor configurado) ou bypass preenche `req.auth.userId`; rotas críticas usam `protectedRoute` para validar token.
 3. **Controller/DTO** – Envelopes `BaseController` + Zod validam input e produzem resposta uniforme.
 4. **Use Case** – Execução de `RegisterUser`, `DepositFunds`, `PlaceBet`, etc., orquestrando domínios e cache.
 5. **Repositórios** – Factories resolvem `create<User|Wallet|Bet>Repository()` e tocam Mongo ou memória.
@@ -72,7 +72,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 
 | Recurso | Interface | Implementações | Observações |
 |---------|-----------|----------------|-------------|
-| Usuários | `IUserRepository` | `MongooseUserRepository`, `UserRepository` (in-memory) | Índices únicos em email/username; sincroniza Clerk IDs. |
+| Usuários | `IUserRepository` | `MongooseUserRepository`, `UserRepository` (in-memory) | Índices únicos em email/username; sincroniza IDs do provedor de identidade quando aplicável. |
 | Carteiras | `IWalletRepository` | `MongooseWalletRepository`, `WalletRepository` | Histórico embutido e locks de saque. |
 | Apostas/Eventos | `IBetRepository`, `IEventRepository` | `MongooseBetRepository`, `BetRepository`, `EventRepository` | Índices por `status`/`userId`/`eventId`. |
 | Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository`, `CreditPackageRepository` | Mantém catálogos com tiers, bônus e ativos/inativos. |
@@ -131,7 +131,7 @@ POST /api/bets
 
 ## Segurança
 
-- Autenticação: Clerk (produção) ou JWT/bypass dev.
+- Autenticação: Passport/JWT (produção) ou JWT/bypass em dev.
 - Autorização: `protectedRoute` + guardas adicionais (ex.: aprovação de withdraw).
 - Segurança HTTP: `helmet`, CORS com allowlist, HSTS opcional, `x-request-id` obrigatório.
 - Configurações sensíveis carregadas por `shared/config/env.ts`, mantendo secrets fora do código.
@@ -165,7 +165,7 @@ src/
 1. **Eventos de domínio/Outbox** – formalizar `UserCreated`, `BetPlaced`, `FundsWithdrawn` e publicar para integrações futuras.
 2. **Persistência única (Mongo)** – remover fallback in-memory em produção e habilitar migrações automáticas.
 3. **Feature Flags** – mover toggles críticos (bypass auth, cache) para um provider dedicado.
-4. **Escala Horizontal** – preparar `ApiServer` para múltiplas instâncias atrás de um ingress e externalizar sessões Clerk.
+4. **Escala Horizontal** – preparar `ApiServer` para múltiplas instâncias atrás de um ingress e externalizar sessões do provedor de identidade.
 5. **Observabilidade avançada** – completar integração PM2 WebUI + alertas por e-mail usando os snapshots operacionais.
 
 ---

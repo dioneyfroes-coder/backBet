@@ -23,7 +23,7 @@ Domain (interfaces) → Persistence factory → Mongoose repo → Schema → Mon
 
 | Contexto | Interface | Implementação Mongo | Schema principal | Observações |
 | --- | --- | --- | --- | --- |
-| Usuários | `IUserRepository` | `src/infrastructure/persistence/mongoose/repositories/MongooseUserRepository.ts` | `schemas/UserSchema.ts` | Índices únicos em `email` e `username`; sincroniza IDs do Clerk. |
+| Usuários | `IUserRepository` | `src/infrastructure/persistence/mongoose/repositories/MongooseUserRepository.ts` | `schemas/UserSchema.ts` | Índices únicos em `email` e `username`; sincroniza IDs do provedor de identidade quando configurado. |
 | Carteiras | `IWalletRepository` | `MongooseWalletRepository.ts` | `schemas/WalletSchema.ts` | Mantém `transactions[]` embutidas; usa projeções para histórico paginado. |
 | Apostas | `IBetRepository` | `MongooseBetRepository.ts` | `schemas/BetSchema.ts` | Índices combinados por `status`, `userId`, `eventId`. |
 | Eventos | `IEventRepository` | *(in-memory apenas)* | — | Planejado para futura coleção. |

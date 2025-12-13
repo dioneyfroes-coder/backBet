@@ -24,7 +24,7 @@ docs/PM2-WEBUI-MIGRATION.md                      (plano da nova stack de observa
 Ordem de middlewares em `ApiServer`:
 
 1. `requestIdMiddleware` gera ou propaga `X-Request-ID` e inicia o contexto com `runWithRequestContext`.
-2. `loggingMiddleware` registra `request_start` / `request_end` com duração, IP e userId derivado de Clerk/JWT.
+2. `loggingMiddleware` registra `request_start` / `request_end` com duração, IP e userId derivado do token de autenticação (JWT) ou provedor configurado.
 3. Controle de erros (`registerErrorHandler`) fecha o circuito emitindo logs JSON e payload padronizado.
 
 > As métricas HTTP que antes eram coletadas por `metricsMiddleware` agora estão suspensas. Os dados necessários seguirão para a PM2 WebUI através dos snapshots descritos abaixo.
@@ -51,7 +51,7 @@ O backend mantém pequenas estruturas em memória para expor o estado atual de c
 
 - `cacheMetricsSnapshot` (exportado por `src/infrastructure/observability/cacheMetrics.ts`) agrega hits, misses, writes, errors e latência média reportada pelo `RedisClient`.
 - `resilienceMetricsSnapshot` (`src/infrastructure/observability/resilienceMetrics.ts`) acumula tentativas de retry, circuitos abertos e falhas de operação.
-- `dependencyHealthSnapshot` (mantido em `ApiServer`) guarda o último status de Redis/Mongo/Clerk sempre que `readiness` roda; cada item registra `status`, `latencyMs` e timestamp.
+- `dependencyHealthSnapshot` (mantido em `ApiServer`) guarda o último status de Redis e Mongo (e de provedores opcionais configurados) sempre que `readiness` roda; cada item registra `status`, `latencyMs` e timestamp.
 
 Esses dados são expostos via dois caminhos:
 

@@ -70,7 +70,7 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
 
   /**
    * POST /auth/login
-   * Autentica usuário (via Clerk OAuth)
+   * Autentica usuário (via provedor de identidade ou credenciais locais)
    */
   router.post(
     '/login',

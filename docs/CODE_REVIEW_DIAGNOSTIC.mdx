@@ -22,11 +22,11 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 ## 2. Dependências
 
 **Estado atual**
-- Stack em uso: Express 5, Zod, ioredis, mongoose (opcional), Clerk, Jest, ESLint flat config.
+-- Stack em uso: Express 5, Zod, ioredis, mongoose (opcional), (provedor de identidade opcional), Jest, ESLint flat config.
 - NestJS/TypeORM/class-validator removidos em favor de implementações próprias.
 
 **Checklist**
-- [ ] Rodar `npm outdated` a cada release para atualizar libs críticas (express-rate-limit, helmet, clerk SDK) => impacto: méd.
+- [ ] Rodar `npm outdated` a cada release para atualizar libs críticas (express-rate-limit, helmet, SDKs de provedor de identidade) => impacto: méd.
 - [ ] Automatizar `npm audit` no CI (alto).
 - [ ] Validar se pacotes dev-only (`tsx`, `tsc-alias`, `@types/*`) não vazaram para runtime (baixo).
 
@@ -44,7 +44,7 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 
 | Item | Situação | Ação |
 |------|----------|------|
-| Clerk obrig. em prod | ✅ `ApiServer` bloqueia boot sem `CLERK_SECRET_KEY` | Revisar `.env.example` se novas variáveis surgirem |
+| Identidade externa obrig. em prod | ✅ `ApiServer` bloqueia boot sem as variáveis de provedor de identidade quando configurado | Revisar `.env.example` se novas variáveis surgirem |
 | Rate limiting | ✅ Global + rotas críticas (`createRouteRateLimiter`) | Monitorar limites por ambiente |
 | Input validation | ✅ Zod DTOs em controllers | Cobrir novos DTOs imediatamente |
 | Secrets | ✅ `.env` no `.gitignore`; config centralizada (`shared/config`) | Validar Git hooks/CI para impedir vazamento |
@@ -83,9 +83,9 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 | Prioridade | Item | Status | Notas |
 |------------|------|--------|-------|
 | 🔴 Alta | Garantir CI obrigatório (lint/test/build) em todos os PRs | pendente | Bloqueia regressões silenciosas |
-| 🔴 Alta | Verificar secrets no CI (Clerk, JWT, Redis) antes do deploy | pendente | Use scanners ou validação manual |
-| 🟠 Média | Criar webhook Clerk (user.updated) para sync automático | pendente | Reduz drift entre Clerk e domínio |
-| 🟠 Média | Tests E2E com Clerk real + cache ligado | pendente | Simula produção |
+| 🔴 Alta | Verificar secrets no CI (variáveis do provedor de identidade, JWT, Redis) antes do deploy | pendente | Use scanners ou validação manual |
+| 🟠 Média | Criar webhook do provedor de identidade (user.updated) para sync automático quando aplicável | pendente | Reduz drift entre provedor e domínio |
+| 🟠 Média | Tests E2E com provedor de identidade real + cache ligado | pendente | Simula produção |
 | 🟢 Baixa | Monitorar duplicação de docs legacy | contínuo | já limpo, manter triagem |
 
 ## 9. Recomendações gerais
@@ -93,8 +93,8 @@ Visão consolidada do estado atual do repositório (nov/2025), pontos fortes e p
 1. **Revisões enxutas**: validar diffs por domínio (auth/user/wallet/bet) e exigir descrição de testes executados.
 2. **Logs**: nunca logar tokens; revisar PRs que toquem `loggingMiddleware`/`requestContext`.
 3. **Observabilidade**: qualquer rota nova deve atualizar os snapshots relevantes (latência/contadores internos) e incluir `requestId` no log.
-4. **Docs**: atualizar `docs/*.mdx` no mesmo PR da mudança (arquitetura, API, quickstart, observabilidade, Clerk, etc.).
-5. **Dependências externas**: toda integração (Redis, Mongo, Clerk, OTLP) precisa de fallback documentado + feature flag.
+4. **Docs**: atualizar `docs/*.mdx` no mesmo PR da mudança (arquitetura, API, quickstart, observabilidade, integração de identidade, etc.).
+5. **Dependências externas**: toda integração (Redis, Mongo, provedores de identidade, OTLP) precisa de fallback documentado + feature flag.
 
 ---
 

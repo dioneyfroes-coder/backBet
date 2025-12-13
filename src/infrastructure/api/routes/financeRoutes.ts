@@ -5,6 +5,7 @@ import { FinanceController } from '../controllers/FinanceController';
 import { CreditPackageService } from '@/core/finance/domain/services/CreditPackageService';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
+import { createWithdrawalQueue } from '@/infrastructure/withdrawals/withdrawalQueueFactory';
 import { ListCreditPackages } from '@/core/finance/application/use-cases/ListCreditPackages';
 import { PurchaseCreditPackage } from '@/core/finance/application/use-cases/PurchaseCreditPackage';
 import { RequestWithdrawal } from '@/core/finance/application/use-cases/RequestWithdrawal';
@@ -42,9 +43,11 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
 
   const withdrawalRequestRepository: IWithdrawalRequestRepository =
     deps.withdrawalRequestRepository ?? (await createWithdrawalRequestRepository());
+  const withdrawalQueue = await createWithdrawalQueue();
   const withdrawalRequestService = new WithdrawalRequestService(
     withdrawalRequestRepository,
     walletService,
+    withdrawalQueue,
   );
 
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());

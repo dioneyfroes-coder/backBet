@@ -30,8 +30,8 @@ export class UserService {
       passwordHash = await bcrypt.hash(input.password, 12);
       status = shouldAutoActivate ? 'ACTIVE' : 'PENDING_VERIFICATION';
     } else {
-      // Accounts created via Clerk (lazy creation) do not store a local password
-      // and are considered immediately active because identity is managed by Clerk.
+      // Accounts created via external identity providers may not have a local password
+      // treat them as active by default when no password is provided.
       passwordHash = '';
       status = 'ACTIVE';
     }

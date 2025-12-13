@@ -44,7 +44,7 @@ O BackBet utiliza a classe `AppError` para padronizar respostas de falha em toda
 | `NOT_FOUND` | 404 | Qualquer recurso inexistente | `resource`, `identifier` |
 | `CONFLICT` | 409 | Duplica chave ou condição otimista quebrada | `resource`, `field`, `value` |
 | `RATE_LIMIT_EXCEEDED` | 429 | Limite de IP/usuário atingido | `retryAfter` em segundos |
-| `SERVICE_UNAVAILABLE` | 503 | Dependência externa fora do ar (Clerk, Redis) | `dependency`, `retryAfter` |
+| `SERVICE_UNAVAILABLE` | 503 | Dependência externa fora do ar (ex.: provedores de identidade, Redis) | `dependency`, `retryAfter` |
 | `INTERNAL_SERVER_ERROR` | 500 | Erro inesperado; log completo somente no observability stack | `requestId` apenas |
 
 > Sempre use códigos específicos antes de cair no fallback `INTERNAL_SERVER_ERROR`.

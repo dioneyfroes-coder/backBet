@@ -6,7 +6,7 @@ slug: "/docs/backbet/overview"
 
 # BackBet – Visão Geral
 
-BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20**, seguindo **DDD**, camadas limpas e observabilidade nativa. Todos os módulos vivem em `src/` e são expostos via Express 5, com autenticação Clerk/JWT, cache Redis, persistência Mongo opcional e métricas/tracing prontos para produção.
+BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20**, seguindo **DDD**, camadas limpas e observabilidade nativa. Todos os módulos vivem em `src/` e são expostos via Express 5, com autenticação baseada em JWT (ou provedores de identidade configuráveis), cache Redis, persistência Mongo opcional e métricas/tracing prontos para produção.
 
 ## Stack e princípios
 
@@ -22,7 +22,7 @@ BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20
 
 | Contexto | Diretório | Responsabilidades | Principais artefatos |
 |----------|-----------|-------------------|----------------------|
-| **User Core** | `src/core/user` | Registro, autenticação local, sincronização com Clerk, atualização de perfil/email. | `User`, `Email`, `RegisterUser`, `AuthController`, `UserController` |
+| **User Core** | `src/core/user` | Registro, autenticação local e sincronização com provedores de identidade externos, atualização de perfil/email. | `User`, `Email`, `RegisterUser`, `AuthController`, `UserController` |
 | **Finance Core** | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito, workflow de withdrawal locks. | `Wallet`, `Money`, `WalletService`, `WithdrawalRequestService` |
 | **Betting Core** | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `PlaceBet`, `BetController` |
 | **Shared Kernel** | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados, tipos comuns. | - |
@@ -32,7 +32,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 ## Fluxo ponta a ponta
 
 1. Request chega ao `ApiServer` → middlewares aplicam helmet, CORS, rate limit, request-id, logging e métricas.
-2. Autenticação via Clerk (produção) ou bypass/JWT (`JwtService`) em dev/test; rotas sensíveis reutilizam `protectedRoute` + guards adicionais.
+2. Autenticação via provedores de identidade externos (produção) ou bypass/JWT (`JwtService`) em dev/test; rotas sensíveis reutilizam `protectedRoute` + guards adicionais.
 3. Controllers (auth, users, wallets, finance, bets) validam DTOs Zod e delegam para use cases (`src/core/**/application/use-cases`).
 4. Use cases conversam com serviços de domínio (`UserService`, `WalletService`, `BetService`) e repositórios resolvidos via factory.
 5. Cache Redis e hooks (`cacheUserProfile`, `cacheWalletBalance`, `cacheEventOdds`, etc.) reduzem IO e são invalidados após mutações.
@@ -43,7 +43,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 - **API (`src/infrastructure/api`)**: `ApiServer`, controllers, DTOs, middlewares (`loggingMiddleware`, `requestIdMiddleware`), Swagger (`/api/docs`).
 - **Application**: Use cases por contexto (`RegisterUser`, `DepositFunds`, `PlaceBet`, `ChangeEmail`, etc.), com Result pattern.
 - **Domínio**: Entidades/VOs puros (`User`, `Wallet`, `Bet`, `Money`, `Email`, `Odds`), regras e invariantes.
-- **Infraestrutura**: Persistência (Mongo/in-memory), cache Redis, auth (Clerk/JWT), observabilidade (metrics/tracing), config loaders.
+- **Infraestrutura**: Persistência (Mongo/in-memory), cache Redis, auth (provedores externos / JWT), observabilidade (metrics/tracing), config loaders.
 - **Shared**: `AppError`, `requestContext`, configs centralizadas (`appConfig`, `cacheConfig`, `observabilityConfig`).
 
 ## Infraestrutura e dependências
@@ -52,8 +52,8 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 |------------|--------|----------|
 | **MongoDB / Mongoose** | Opcional em dev, recomendado em staging/prod | Ativado com `USE_MONGOOSE_PERSISTENCE=true`; schemas em `src/infrastructure/persistence/mongoose/schemas`. `connectMongoDB()` é chamado antes do `ApiServer`. |
 | **Redis** | Opcional em dev, recomendado em produção | Config em `shared/config/cacheConfig.ts`. `RedisClient` expõe métricas e flush helpers para manter consistência. |
-| **Clerk** | Obrigatório em produção | Middleware `@clerk/express`. Dev/test podem usar bypass definindo `ALLOW_DEV_BEARER_BYPASS=true`. |
-| **JWT local** | Usado nos endpoints `/auth/login` & `/auth/refresh` | `JwtService` gera/valida tokens; útil para testes E2E sem Clerk. |
+| **Identidade externa** | Obrigatório em produção | Middleware do provedor de identidade configurado. Dev/test podem usar bypass definindo `ALLOW_DEV_BEARER_BYPASS=true` ou `JwtService` local. |
+| **JWT local** | Usado nos endpoints `/auth/login` & `/auth/refresh` | `JwtService` gera/valida tokens; útil para testes E2E sem provedor de identidade externo. |
 | **Observabilidade** | Default ON | `/health`, `/health/cache`, `/readiness` e tracing (`TRACING_ENABLED`) com exportador OTLP configurável; por padrão `/metrics` responde `410` até que `OBS_ENABLE_PROMETHEUS=true`. PM2 WebUI + health monitor cobrem o restante da stack. |
 
 ## APIs e contratos
@@ -104,7 +104,7 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 
 - 350 testes Jest (unidade + integração leve) — statements 97.79%, branches 87.19%, functions 97.99%, lines 97.96%.
 - Logs estruturados JSON com `request_start`, `request_end` e `request_error` (incluem requestId, userId, duração).
-- Snapshots de saúde trackeiam dependências externas (Mongo, Redis, Clerk) e alimentarão a PM2 WebUI/alertas de saúde.
+- Snapshots de saúde trackeiam dependências externas (Mongo, Redis e provedores de identidade configurados) e alimentarão a PM2 WebUI/alertas de saúde.
 - Dashboards/alertas anteriores baseados em Prometheus/Grafana foram aposentados; o plano de migração está documentado em `docs/PM2-WEBUI-MIGRATION.mdx`.
 
 ## Documentação relacionada
@@ -112,14 +112,14 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 - `docs/ARCHITECTURE.mdx` – detalhes das camadas e integrações.
 - `docs/API_DOCS.mdx` – referência completa de endpoints.
 - `docs/OBSERVABILITY.mdx` – health/readiness, logs e plano de migração para PM2 WebUI.
-- `docs/CLERK_SETUP.mdx`, `docs/MONGODB_SETUP.mdx`, `docs/LOGS.mdx` – guias operacionais.
+- `docs/MONGODB_SETUP.mdx`, `docs/LOGS.mdx` – guias operacionais. (guia de provedores de identidade foi removido)
 - `docs/QUICKSTART.mdx` – passo a passo para levantar dependências locais.
 
 ## Roadmap (Nov/2025)
 
 | Horizonte | Itens |
 |-----------|-------|
-| ✅ Concluído | Integração Clerk/JWT consolidada, cache Redis com métricas, docs Bet/User/Finance/Observability/API atualizados. |
+| ✅ Concluído | Integração de identidade/JWT consolidada, cache Redis com métricas, docs Bet/User/Finance/Observability/API atualizados. |
 | Curto prazo | Automatizar lint/test/build em CI, adicionar testes de carga e segurança básicos, publicar playbooks de incidentes. |
 | Médio prazo | Instrumentar tracing OTEL em staging, remover fallback in-memory em produção, formalizar eventos/outbox (`UserCreated`, `BetPlaced`, `FundsWithdrawn`). |
 | Pré-produção | Security review completa, testes de performance/stress automatizados, ativação dos alertas via PM2 WebUI + e-mail de saúde, checklist de rollout/rollback. |

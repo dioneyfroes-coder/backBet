@@ -1,12 +1,12 @@
 ---
 title: "Módulo Usuário"
-description: "Visão completa do núcleo de usuários: domínio, APIs de perfil/autenticação e integrações com Wallet, Clerk e JWT."
+description: "Visão completa do núcleo de usuários: domínio, APIs de perfil/autenticação e integrações com Wallet, provedores de identidade e JWT."
 slug: "/docs/user"
 ---
 
 # Core User
 
-> Responsável por onboarding, gestão de perfil e entrega de dados consistentes para Auth, Finance e Betting. Segue DDD + Clean Architecture e expõe endpoints REST protegidos por Clerk/JWT.
+> Responsável por onboarding, gestão de perfil e entrega de dados consistentes para Auth, Finance e Betting. Segue DDD + Clean Architecture e expõe endpoints REST protegidos por Passport/JWT ou pelo provedor configurado.
 
 ## Estrutura
 
@@ -26,7 +26,7 @@ src/infrastructure/
   api/routes/{authRoutes,userRoutes}.ts
   api/dtos/{AuthDTOs,UserDTOs}.ts
   api/middleware/{AuthMiddleware,cacheMiddleware}.ts
-shared/services/{ClerkService,JwtService}.ts
+shared/services/{JwtService,AuthService}.ts
 ```
 
 ## Fluxo de cadastro end-to-end
@@ -34,7 +34,7 @@ shared/services/{ClerkService,JwtService}.ts
 1. `POST /api/auth/register` valida payload (`RegisterDTO`) e delega para `RegisterUser`.
 2. O use-case chama `UserService.registerUser` (garante email único, aplica `bcrypt` com fator 12, exige `minPasswordLength` de `userConfig`).
 3. Em seguida `WalletService.createWallet` é acionado via `executeWithWalletErrorMapping`, gerando carteira com a moeda solicitada ou `BRL` (default).
-4. Com Clerk habilitado (`CLERK_SECRET_KEY` real), `AuthController` sincroniza o usuário via `ClerkService.createUser`, preservando o `externalId = user.id`.
+4. Quando um provedor externo de identidade está habilitado, `AuthController` pode sincronizar o usuário com o provedor (preservando `externalId` quando aplicável).
 5. A resposta inclui `status`, `isActive`, `sessionId`, `accessToken`/`refreshToken` (quando a conta já nasce ativa) e snapshots completos de usuário + carteira.
 6. Se o status permanecer `PENDING_VERIFICATION`, os tokens retornam `null` e o frontend pode acompanhar a liberação via `GET /api/auth/register/status/:userId`.
 
@@ -78,14 +78,14 @@ shared/services/{ClerkService,JwtService}.ts
   - `MongooseUserRepository`: utiliza `UserModel` quando `USE_MONGOOSE_PERSISTENCE=true`.
 - `createUserRepository()` (em `src/infrastructure/persistence/factory.ts`) decide qual implementação carregar e é compartilhado por `authRoutes` e `userRoutes`, evitando divergência de instâncias.
 
-## Integrações com Auth, Clerk e JWT
+## Integrações com Auth, provedores externos e JWT
 
 - `AuthController` cobre registro, login, refresh, `me` e logout.
 - `JwtService` assina tokens (HS256) com parâmetros de `appConfig.jwt` (`JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`).
 - `AuthMiddleware` aceita:
   - Bearer JWT válido → popula `req.auth` com `userId`/`sessionId`.
   - Dev bypass (`ALLOW_DEV_BEARER_BYPASS=true`) → qualquer `Bearer <user-id>` é aceito para testes locais.
-- `ClerkService` só inicializa quando há chave real (desconsidera `sk_test`). Quando ativo, as rotas Auth sincronizam usuários e enriquecem respostas com dados Clerk.
+- Integração com provedores externos: os adaptadores só inicializam quando as credenciais reais estão presentes. Quando ativo, as rotas Auth sincronizam usuários e enriquecem respostas com dados do provedor configurado.
 
 ## API HTTP
 
@@ -103,12 +103,12 @@ shared/services/{ClerkService,JwtService}.ts
 
 | Método | Caminho | Rate limit | Observações |
 |--------|---------|-----------|-------------|
-| `POST` | `/api/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com Clerk quando disponível.
+| `POST` | `/api/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com o provedor de identidade quando disponível.
 | `GET` | `/api/auth/register/status/:userId` | — | Retorna `{ status, isActive }` e permite polling até liberar o usuário.
 | `POST` | `/api/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
 | `POST` | `/api/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
-| `GET` | `/api/auth/me` | `protectedRoute` | Expõe perfil combinando User + Clerk.
-| `POST` | `/api/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client/Clerk.
+| `GET` | `/api/auth/me` | `protectedRoute` | Expõe perfil combinando User + dados do provedor de identidade quando configurado.
+| `POST` | `/api/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client ou no provedor de identidade quando aplicável.
 
 > Ajuste limites via `AUTH_{REGISTER|LOGIN|REFRESH}_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e configure o rate limit global (`RATE_LIMIT_*`) conforme o ambiente.
 
@@ -129,7 +129,7 @@ shared/services/{ClerkService,JwtService}.ts
 - `src/core/user/config/user-config.ts`:
   - `minPasswordLength` (8), `maxLoginAttempts`, `accountVerificationTimeout`, `defaultCurrency`, limites de depósito/saque.
 - Variáveis chave:
-  - `CLERK_SECRET_KEY`, `CLERK_API_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_API_URL`.
+  - Variáveis de configuração do provedor de identidade (ex.: `IDENTITY_PROVIDER_*`) quando aplicável.
   - `JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`.
   - `ALLOW_DEV_BEARER_BYPASS` (false por padrão) para testes locais.
   - `USE_MONGOOSE_PERSISTENCE` para selecionar o repositório.
@@ -151,14 +151,16 @@ shared/services/{ClerkService,JwtService}.ts
 - Rode `npm test -- User` para focar na suíte do módulo.
 - Problemas comuns:
   - `CONFLICT Email already exists` → email duplicado em memória ou no Mongo.
-  - `CLERK_SECRET_KEY must be configured` → desabilite Clerk em dev ou configure chaves reais.
+  - `IDENTITY_PROVIDER_SECRET must be configured` → desabilite o provedor em dev ou configure chaves reais.
   - `UNAUTHORIZED` em dev → defina `ALLOW_DEV_BEARER_BYPASS=true` e envie `Authorization: Bearer <user-id>`.
 
 ## Próximos passos
 
 1. Emitir eventos de domínio (`UserRegistered`, `EmailChanged`) para futuros consumers (notificações, compliance).
-2. Persistir campos opcionais (bio, avatar) em um repositório dedicado e sincronizar com Clerk via webhooks.
-3. Implementar fluxo de recuperação/verificação de email usando `ClerkService`.
+2. Persistir campos opcionais (bio, avatar) em um repositório dedicado e sincronizar com o provedor de identidade via webhooks quando aplicável.
+
+3. Implementar fluxo de recuperação/verificação de email usando o adaptador do provedor (ex.: Passport hooks) ou fluxo interno de verificação por e-mail.
+3. Implementar fluxo de recuperação/verificação de email usando o adaptador do provedor (ex.: Passport hooks) ou fluxo interno de verificação por e-mail.
 4. Adicionar testes de integração Auth + Wallet com Redis habilitado e rate limits reais.
 
 ---

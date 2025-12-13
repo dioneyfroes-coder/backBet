@@ -4,11 +4,18 @@ import { Currency } from '../value-objects/Currency';
 import { WithdrawalRequest, ApprovalAction } from '../entities/WithdrawalRequest';
 import { IWithdrawalRequestRepository } from '../repositories/IWithdrawalRequestRepository';
 import { WalletService } from './WalletService';
+import IWithdrawalQueue from '../ports/IWithdrawalQueue';
+import {
+  withdrawalRequestCreatedCounter,
+  withdrawalRequestApprovedCounter,
+  withdrawalRequestProcessingFailedCounter,
+} from '@/infrastructure/observability/metrics';
 
 export class WithdrawalRequestService {
   constructor(
     private readonly withdrawalRequestRepository: IWithdrawalRequestRepository,
     private readonly walletService: WalletService,
+    private readonly withdrawalQueue?: IWithdrawalQueue,
   ) {}
 
   async createRequest(
@@ -43,7 +50,27 @@ export class WithdrawalRequestService {
       notes,
     );
 
-    return this.withdrawalRequestRepository.create(request);
+    try {
+      const created = await this.withdrawalRequestRepository.create(request);
+      try {
+        withdrawalRequestCreatedCounter.inc();
+      } catch (e) {
+        console.debug('withdrawalRequestCreatedCounter inc failed', e);
+      }
+      return created;
+    } catch (err) {
+      // Persistence failed, ensure we unlock the amount so it doesn't stay blocked
+      try {
+        await this.walletService.unlock(userId, amount);
+      } catch (unlockErr) {
+        console.error('Failed to unlock wallet after withdrawal request persistence failure', {
+          userId,
+          amount,
+          error: unlockErr,
+        });
+      }
+      throw err;
+    }
   }
 
   async processRequest(
@@ -62,10 +89,59 @@ export class WithdrawalRequestService {
     }
 
     if (action === 'APPROVED') {
-      await this.walletService.withdrawLocked(request.userId, request.amount);
+      try {
+        await this.walletService.withdrawLocked(request.userId, request.amount);
+        } catch (err) {
+          try {
+            withdrawalRequestProcessingFailedCounter.inc();
+          } catch (incErr) {
+            console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+          }
+          throw err;
+        }
+
       request.approve(adminId, notes);
+
+      // persist approval before enqueuing the payout job (so workers see approved state)
+      await this.withdrawalRequestRepository.update(request);
+
+      if (this.withdrawalQueue) {
+        try {
+          await this.withdrawalQueue.enqueuePayout({
+            requestId: request.id,
+            userId: request.userId,
+            amount: request.amount,
+            currency: request.currency,
+          });
+        } catch (err) {
+          // enqueue failed — metrics increment and log
+          try {
+            withdrawalRequestProcessingFailedCounter.inc();
+          } catch (incErr) {
+            console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+          }
+          console.error('Failed to enqueue withdrawal payout job', { requestId: request.id, err });
+          throw err;
+        }
+      } else {
+        console.warn('No withdrawalQueue configured; payout will not be executed automatically', { requestId: request.id });
+      }
+      try {
+        withdrawalRequestApprovedCounter.inc();
+      } catch (incErr) {
+        console.debug('withdrawalRequestApprovedCounter inc failed', incErr);
+      }
     } else {
-      await this.walletService.unlock(request.userId, request.amount);
+      try {
+        await this.walletService.unlock(request.userId, request.amount);
+      } catch (err) {
+        try {
+          withdrawalRequestProcessingFailedCounter.inc();
+        } catch (incErr) {
+          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+        }
+        throw err;
+      }
       request.reject(adminId, notes);
     }
 

@@ -105,7 +105,7 @@ Endpoints definidos em `BetController` e registrados por `betRoutes` sob `/api/b
 | Método | Caminho | Autenticação | Rate limit | Observações |
 |--------|---------|--------------|------------|-------------|
 | `GET` | `/api/bets/event/:eventId` | pública | n/a | Usa `cacheEventOddsMiddleware` + Redis e retorna `BetListResponseDTO` por evento.
-| `POST` | `/api/bets` | Bearer (Clerk ou token dev) | `BET_PLACE_RATE_LIMIT_*` | Valida `PlaceBetDTO`, debita carteira e invalida cache do evento.
+| `POST` | `/api/bets` | Bearer (provedor de identidade ou token dev) | `BET_PLACE_RATE_LIMIT_*` | Valida `PlaceBetDTO`, debita carteira e invalida cache do evento.
 | `POST` | `/api/bets/:betId/cancel` | Bearer obrigatório | `BET_CANCEL_RATE_LIMIT_*` | `CancelBetDTO` aceita `reason`; devolve fundos se o evento ainda está `SCHEDULED`.
 | `GET` | `/api/bets/me` | Bearer obrigatório | n/a | Lista apostas do usuário autenticado usando `BetListResponseDTO`.
 
@@ -130,7 +130,7 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 - **Cancelamento**: permitido apenas antes do início do evento; motivo salvo em `Bet.cancellationReason`.
 - **Resolução**: somente apostas `PENDING`; resultado `WON` credita `potentialReturn`, `LOST` apenas finaliza.
 - **Eventos/mercados**: alterações de status devem ser persistidas via `IEventRepository`; mercados fechados lançam `DomainError`.
-- **Segurança**: autenticação via Clerk (`clerkMiddleware`) ou header Bearer fake em dev; erros retornam `AppError` padronizado.
+- **Segurança**: autenticação via provedor de identidade configurado (middleware correspondente) ou header Bearer fake em dev; erros retornam `AppError` padronizado.
 
 ## Cache, rate-limit e consistência
 
@@ -161,7 +161,7 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 1. Implementar `IEventRepository` persistente (MongoDB ou feed externo) para eliminar dependência de fixtures.
 2. Introduzir reservas (`lock/unlock`) no fluxo de criação de apostas (ao invés de saque imediato).
 3. Adicionar validações antifraude (limites por usuário/mercado, fingerprint) e eventos de domínio (`BetPlaced`) publicados no barramento.
-4. Expandir testes de integração cobrindo cache + rate-limit e e2e com Clerk/JWT reais.
+4. Expandir testes de integração cobrindo cache + rate-limit e e2e com provedores de identidade/JWT reais.
 
 ---
 

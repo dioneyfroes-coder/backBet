@@ -6,7 +6,7 @@ slug: "/docs/api"
 
 # BackBet API
 
-> Os módulos `auth`, `user`, `wallet`, `finance`, `bet`, `events`, `games` e `admin` são montados pelo `ApiServer` em `/api/**`, compartilhando o mesmo container de dependências (repositórios, serviços de domínio, cache hooks, Clerk/JWT, rate limiters e métricas). Este guia resume os contratos expostos hoje.
+> Os módulos `auth`, `user`, `wallet`, `finance`, `bet`, `events`, `games` e `admin` são montados pelo `ApiServer` em `/api/**`, compartilhando o mesmo container de dependências (repositórios, serviços de domínio, cache hooks, Passport/JWT, rate limiters e métricas). Este guia resume os contratos expostos hoje.
 
 ## Base URLs
 
@@ -21,7 +21,7 @@ slug: "/docs/api"
 
 - `Authorization: Bearer <token>` é obrigatório nas rotas marcadas como protegidas (`protectedRoute`).
 - Tokens aceitos:
-  - JWT emitido pelo Clerk (produção).
+  - JWT emitido pelo provedor de identidade configurado (produção). Em ambientes que usam `passport-jwt`, o backend valida tokens via Passport middleware.
   - JWT local gerado pelo `JwtService` (`/auth/login`, `/auth/refresh`).
   - Bypass de desenvolvimento: defina `ALLOW_DEV_BEARER_BYPASS=true` e envie `Authorization: Bearer <userId>` para forçar a sessão.
 - `Content-Type: application/json` em `POST` / `PATCH`.
@@ -97,11 +97,11 @@ Detalhes completos em `docs/OBSERVABILITY.mdx`.
 
 | Método | Caminho | Descrição |
 |--------|---------|-----------|
-| `POST` | `/auth/register` | Cria usuário + carteira (BRL). Sincroniza com Clerk quando habilitado. |
+| `POST` | `/auth/register` | Cria usuário + carteira (BRL). Sincroniza com o provedor de identidade quando habilitado. |
 | `GET` | `/auth/register/status/:userId` | Consulta o status do onboarding (PENDING_VERIFICATION/ACTIVE) para habilitar o front a liberar o acesso assim que o perfil for aprovado. |
 | `POST` | `/auth/login` | Valida credenciais locais, emite `accessToken`/`refreshToken`, retorna perfil. |
 | `POST` | `/auth/refresh` | Recebe `refreshToken` e devolve novo par de tokens. |
-| `GET` | `/auth/me` | Perfil autenticado (dados do domínio + Clerk). |
+| `GET` | `/auth/me` | Perfil autenticado (dados do domínio + dados do provedor de identidade quando configurado). |
 | `POST` | `/auth/logout` | Placeholder; retorna mensagem de sucesso. |
 
 **Registro (201)**
