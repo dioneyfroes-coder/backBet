@@ -3,10 +3,14 @@
   "version": "1.0.0",
   "description": "backendBet",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "check": "npm run lint && npm run test:coverage && npm run build",
     "dev": "tsx watch src/index.ts",
     "build": "tsc && tsc-alias",
     "start": "node scripts/entry.cjs",

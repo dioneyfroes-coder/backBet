@@ -177,6 +177,12 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 - `BetService.placeBet` usa `IWalletService.withdraw` para reservar stake; cancelamentos devolvem via `deposit` e vitórias pagam `wallet.deposit(potentialReturn)`.
 - Como `BetService` fala com o contrato e não com o repositório, é fácil trocar a implementação (e.g., Mongoose) sem tocar no domínio de apostas.
 
+### Coin-flip e limites de aposta
+- O jogo de coin-flip é configurado em `appConfig.games.coinFlip` com variáveis de ambiente (`GAME_COINFLIP_*`). Por padrão ele está **habilitado**, aceita apostas entre `minBet=1` e `maxBet=500` (BRL) e aplica um `payoutMultiplier=1`, isto é, o prêmio pago ao vencedor é `wager × payoutMultiplier`. A qualquer momento esses valores podem ser ajustados sem deploy via `.env`/secret manager.
+- A variação do valor apostado depende exatamente desses limites (`GAME_COINFLIP_MIN_BET` e `GAME_COINFLIP_MAX_BET`), então o frontend deve permitir apenas números dentro do intervalo informado pelo backend (o próprio `GameController` expõe esses campos no `/api/games/coin-flip/config`).
+- Existe também `GAME_COINFLIP_FIXED_WIN`: quando definido e positivo, o jogo ignora `wager × multiplier` e paga sempre esse valor fixo, mantendo o `metadata.source` marcado como `fixed-win` nos logs. Isso costuma ser usado para campanhas promocionais sem alterar o multiplicador base.
+- Os detalhes do multiplicador e do intervalo aparecem na resposta de `/api/games/coin-flip/config` e são utilizados pelo `CoinFlipGameService` (arquivo `src/core/game/domain/services/CoinFlipGameService.ts`) para calcular `payoutAmount = Number((wager × payoutMultiplier).toFixed(2))` antes de registrar a transação e afetar o `Wallet` do usuário.
+
 ## HTTP API
 
 ### Rotas de carteira (`src/infrastructure/api/routes/walletRoutes.ts`)
@@ -293,6 +299,14 @@ export const ApiErrorSchema = z.object({
 - **Wallet rate limit:** `WALLET_DEPOSIT_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e `WALLET_WITHDRAW_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` abastecem `createRouteRateLimiter`.
 - **Wallet limits & Pix toggles:** `WALLET_MIN_DEPOSIT` (default 1 BRL) e `WALLET_MIN_WITHDRAW` (default 100 BRL) alimentam `DepositDTO`/`WithdrawDTO`, enquanto `PIX_ENABLE_DEPOSITS` e `PIX_ENABLE_WITHDRAWALS` permitem pausar os fluxos sem desligar o serviço inteiro.
 - **Tesouraria:** `TREASURY_MIN_PRIZE_RATIO`, `TREASURY_MAX_PRIZE_RATIO` e `TREASURY_TARGET_PRIZE_RATIO` definem a faixa/objetivo de rebalanceamento (o alvo é sempre clampado dentro da faixa), com `TREASURY_MIN_PROFIT_BUFFER`, `TREASURY_MAX_TRANSFER_PER_RUN` e `TREASURY_REBALANCE_INTERVAL_MS` controlando o job automático.
+  
+## Tesouraria da casa
+
+- **HouseWallet:** o módulo da carteiras da casa vive em `src/core/treasury/domain/entities/HouseWallet.ts`. Ele mantém dois `Money` separados (`profit` e `prizeReserve`) e ensina o `HouseTreasuryService` a registrar lucratividade, transferir entre reservas e rebalancear o alvo de prêmio (`targetPrizeRatio`). Cada movimentação gera um `TreasuryLedgerEntry` (apenas 50 entradas retidas) com `type`, `amount`, `currency`, `description` e `metadata` (ex.: `source`, `referenceId`, `actorId`).
+- **Fluxo de apostas:** quando o `BetService` é executado, o stake sai da carteira do usuário via `WalletService.withdraw` e só depois o retorno (quando houver) é depositado de volta. O spread entre o valor pago e o valor devolvido entra como lucro (`RecordTreasuryProfit`) na carteira da casa antes de ser empurrado para `prizeReserve` se o buffer estiver alto demais. Isso garante que o percentual da casa fique separado do saldo do usuário e do dinheiro destinado a prêmios.
+- **Valores iniciais:** usamos o script `npm run seed:treasury -- 5000 "Seed inicial"` para registrar um lucro teórico de R$5.000 na carteira da casa e garantir que a parada comece com `profitBalance`=5000, `prizeReserveBalance`=0. O walletId padrão é `house-primary` e sempre opera em `BRL` a menos que você sobrescreva `appConfig.treasury.currency`.
+- **Monitoramento e investigação:** o admin pode chamar `/api/admin/treasury/summary` (GET) para ver `profitBalance`, `prizeReserveBalance`, `totalBalance` e o objeto `config` (`targetPrizeRatio`, `minProfitBuffer`, `maxTransferPerRun`). Há também `/api/admin/treasury/ledger?limit=25` para listar as entradas (`type`, `amount`, `description`, `createdAt`, `metadata`). Rebalanceamentos manuais (`POST /api/admin/treasury/rebalance`) ou movimentações manuais (`POST /api/admin/treasury/profit`, `/profit-to-prize`, `/prize-to-profit`) passam pelo mesmo service e aparecem no ledger com `source`/`context` no metadata. Todas essas rotas exigem `protectedRoute` + `requireAdminRole`, de modo que só painéis administrativos/autenticados com escopo elevam estado.
+- **Como checar o saldo atual:** mesmo que você tenha semeado 5k, o valor exato muda conforme operadores registram lucros e rebalanceamentos. Use o summary acima (`GET /api/admin/treasury/summary`, o controller responde `{ summary, config }`) para ver o valor atualizado; o campo `totalBalance` corresponde ao que chamamos de "saldo da casa" atualmente disponível. O mesmo endpoint também informa se o `targetPrizeRatio` (geralmente 0.6) está sendo respeitado.
 - **Finance:** `AUTH_*` e `RATE_LIMIT_*` globais ainda protegem rotas pois herdam o middleware padrão definido em `app.ts`.
 
 ## Seeds e dados iniciais
