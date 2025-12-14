@@ -47,6 +47,23 @@ export const UserResponseDTO = z.object({
   status: z.enum(['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED']),
   createdAt: z.string().datetime(),
   pixKey: z.string().nullable().optional(),
+  preferences: z
+    .object({
+      emailNotifications: z.boolean(),
+      smsNotifications: z.boolean(),
+      marketingEmails: z.boolean(),
+      requireWithdrawPassword: z.boolean().nullable().optional(),
+    })
+    .optional(),
 });
 
 export type UserResponseDTOType = z.infer<typeof UserResponseDTO>;
+
+export const UpdatePreferencesDTO = z.object({
+  emailNotifications: z.boolean().optional(),
+  smsNotifications: z.boolean().optional(),
+  marketingEmails: z.boolean().optional(),
+  requireWithdrawPassword: z.boolean().nullable().optional(),
+});
+
+export type UpdatePreferencesDTOType = z.infer<typeof UpdatePreferencesDTO>;

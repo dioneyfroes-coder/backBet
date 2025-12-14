@@ -22,6 +22,12 @@ export class User {
       uploadedAt: string;
       verified?: boolean;
     }> = [],
+    public preferences: {
+      emailNotifications: boolean;
+      smsNotifications: boolean;
+      marketingEmails: boolean;
+      requireWithdrawPassword?: boolean | null;
+    } = { emailNotifications: true, smsNotifications: false, marketingEmails: false, requireWithdrawPassword: null },
   ) {}
 
   canOperate(): boolean {
@@ -68,6 +74,7 @@ export class User {
       updatedAt: this.updatedAt,
       pixKey: this.pixKey,
       documents: this.documents,
+      preferences: this.preferences,
     };
   }
 }

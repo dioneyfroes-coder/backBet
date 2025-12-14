@@ -8,6 +8,7 @@ export const CreateWithdrawalRequestDTO = z.object({
   amount: z.number().positive().min(0.01),
   currency: z.enum(['BRL', 'USD', 'EUR']),
   notes: z.string().optional(),
+  password: z.string().optional(),
 });
 
 export const ProcessWithdrawalRequestDTO = z.object({

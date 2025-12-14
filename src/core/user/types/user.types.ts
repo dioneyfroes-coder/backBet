@@ -11,6 +11,7 @@ export interface IUserDTO {
   updatedAt: Date;
   pixKey?: string | null;
   documents?: IUserDocumentDTO[];
+  preferences?: IUserPreferences;
 }
 
 export interface ICreateUserDTO {
@@ -35,4 +36,11 @@ export interface IUserDocumentDTO {
   url: string;
   uploadedAt: string;
   verified?: boolean;
+}
+
+export interface IUserPreferences {
+  emailNotifications: boolean;
+  smsNotifications: boolean;
+  marketingEmails: boolean;
+  requireWithdrawPassword?: boolean | null; // per-user override (optional, nullable)
 }

@@ -68,6 +68,20 @@ export const userSchema = new Schema<IUserDocument>(
       type: String,
       default: null,
     },
+    preferences: {
+      type: {
+        emailNotifications: { type: Boolean, default: true },
+        smsNotifications: { type: Boolean, default: false },
+        marketingEmails: { type: Boolean, default: false },
+        requireWithdrawPassword: { type: Boolean, default: null },
+      },
+      default: {
+        emailNotifications: true,
+        smsNotifications: false,
+        marketingEmails: false,
+        requireWithdrawPassword: null,
+      },
+    },
     documents: {
       type: [
         {

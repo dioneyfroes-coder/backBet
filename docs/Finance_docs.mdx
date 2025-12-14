@@ -75,7 +75,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 | `GetHistory` | Retorna histórico paginado (`limit`, `offset`) | `userId`, `limit`, `offset` | `{ transactions, total }` |
 | `ListCreditPackages` | Lista pacotes ativos | — | `CreditPackage[]` |
 | `PurchaseCreditPackage` | Deposita `base + bônus` após validar pacote | `userId`, `packageId` | `{ creditPackage, wallet }` |
-| `RequestWithdrawal` / `GetWithdrawalRequests` | Cria e lista `WithdrawalRequest` bloqueando saldo | `userId`, `amount`, `currency`, `notes?` | Entidade(s) de saque |
+| `RequestWithdrawal` / `GetWithdrawalRequests` | Cria e lista `WithdrawalRequest` bloqueando saldo. Opcionalmente exige confirmação de senha do usuário (configurável via `WALLET_REQUIRE_WITHDRAW_PASSWORD`). | `userId`, `amount`, `currency`, `notes?`, `password?` | Entidade(s) de saque; retorna 403 quando a senha é exigida e inválida/ausente. |
 | `ProcessWithdrawalRequest` | Aprova/rejeita e executa `withdrawLocked`/`unlock` | `requestId`, `adminId`, `action`, `notes?` | `WithdrawalRequest` atualizado |
 
 Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `AppError` com status HTTP coerentes.

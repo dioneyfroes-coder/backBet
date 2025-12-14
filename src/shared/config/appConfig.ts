@@ -215,6 +215,8 @@ export const appConfig = {
       minDeposit: walletMinDeposit,
       minWithdraw: walletMinWithdraw,
     },
+    // Require user to confirm password when creating a withdrawal request
+    requireWithdrawPassword: parseBoolean(env.WALLET_REQUIRE_WITHDRAW_PASSWORD, true),
   },
   walletRateLimit: {
     deposit: {

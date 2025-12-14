@@ -33,6 +33,10 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   const changeEmailUseCase = new ChangeEmail(userService);
   const updatePixKeyUseCase = new UpdatePixKey(userService);
   const addUserDocumentUseCase = new AddUserDocument(userService);
+  const getPreferencesUseCase = new (await import('@core/user/application/use-cases/GetPreferences'))
+    .GetPreferences(userService);
+  const updatePreferencesUseCase = new (await import('@core/user/application/use-cases/UpdatePreferences'))
+    .UpdatePreferences(userService);
 
   const userController = new UserController(
     getUserProfileUseCase,
@@ -40,6 +44,8 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     changeEmailUseCase,
     updatePixKeyUseCase,
     addUserDocumentUseCase,
+    getPreferencesUseCase,
+    updatePreferencesUseCase,
   );
 
   const storageAdapter = new LocalStorageAdapter();
@@ -86,6 +92,18 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     asyncHandler((req: AuthenticatedRequest, res: Response) =>
       userController.uploadDocument(req, res),
     ),
+  );
+
+  router.get(
+    '/me/preferences',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) => userController.getPreferences(req, res)),
+  );
+
+  router.put(
+    '/me/preferences',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) => userController.updatePreferences(req, res)),
   );
 
   return router;

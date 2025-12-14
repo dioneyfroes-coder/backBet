@@ -26,8 +26,30 @@ export class UserController extends BaseController {
     private changeEmailUseCase: ChangeEmail,
     private updatePixKeyUseCase: UpdatePixKey,
     private addUserDocumentUseCase?: any,
+    private getPreferencesUseCase?: any,
+    private updatePreferencesUseCase?: any,
   ) {
     super();
+  }
+
+  async getPreferences(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+    if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+    if (!this.getPreferencesUseCase) return this.internalError(res, 'Use-case não disponível');
+
+    const prefs = await this.getPreferencesUseCase.execute(userId);
+    return this.ok(res, { preferences: prefs });
+  }
+
+  async updatePreferences(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+    if (!userId) return this.unauthorized(res, 'Autenticação requerida');
+    if (!this.updatePreferencesUseCase) return this.internalError(res, 'Use-case não disponível');
+
+    const payload = req.body as Record<string, unknown>;
+    const updated = await this.updatePreferencesUseCase.execute(userId, payload);
+    await flushUserProfileCache(userId).catch(() => undefined);
+    return this.ok(res, { preferences: updated });
   }
 
   /**
@@ -277,6 +299,7 @@ export class UserController extends BaseController {
       pixKey: user.pixKey ?? null,
     });
   }
+
 
   async updatePixKey(req: AuthenticatedRequest, res: Response): Promise<Response> {
     const userId = getRequestUserId(req);

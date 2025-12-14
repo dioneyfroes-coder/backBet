@@ -98,6 +98,8 @@ shared/services/{JwtService,AuthService}.ts
 | `PATCH` | `/api/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
 | `GET` | `/api/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
 | `PUT` | `/api/users/me/pix-key` | `protectedRoute` | — | Valida `UpdatePixKeyDTO`; permite cadastrar/remover a chave que será utilizada como fallback em `/api/wallets/withdraw`.
+| `GET` | `/api/users/me/preferences` | `protectedRoute` | — | Retorna as preferências do usuário (`emailNotifications`, `smsNotifications`, `marketingEmails`, `requireWithdrawPassword`).
+| `PUT` | `/api/users/me/preferences` | `protectedRoute` | — | Atualiza preferências do usuário; aceita payload parcial com qualquer um dos campos acima.
 
 ### Rotas de autenticação (`src/infrastructure/api/routes/authRoutes.ts`)
 

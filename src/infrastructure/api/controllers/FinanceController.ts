@@ -88,6 +88,8 @@ export class FinanceController extends BaseController {
       payload.amount,
       payload.currency,
       payload.notes,
+      // forward password (may be undefined). The use-case will enforce if configured to require it.
+      payload.password,
     );
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache after withdrawal request', error),

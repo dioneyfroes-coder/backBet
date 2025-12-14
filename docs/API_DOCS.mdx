@@ -193,6 +193,8 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | `PATCH` | `/users/me/email` | Troca email após validar unicidade e VO `Email`. Limpa cache de perfil. |
 | `GET` | `/users/me/pix-key` | Retorna a chave Pix padrão vinculada ao usuário (vazio quando não configurada). |
 | `PUT` | `/users/me/pix-key` | Aceita `{ pixKey }`, valida comprimento/formato e salva como fallback para saques e PIX automáticos. |
+| `GET` | `/users/me/preferences` | Retorna as preferências do usuário (`emailNotifications`, `smsNotifications`, `marketingEmails`, `requireWithdrawPassword`). |
+| `PUT` | `/users/me/preferences` | Aceita payload parcial com qualquer um dos campos de preferência e retorna as preferências atualizadas. |
 
 | `POST` | `/users/me/documents` | `protectedRoute` + multipart upload. Aceita campo `document` (imagem ou PDF, até 5MB). Armazena metadados do arquivo no perfil do usuário e devolve `{ document }` com `id, url, mimeType, size, uploadedAt`. No ambiente local os arquivos são servidos em `/uploads` (LocalStorageAdapter); em produção recomendamos usar object storage (S3/GCS) e URLs assinadas. |
 
@@ -370,7 +372,7 @@ Se `pixKey` não for enviado, o backend procura a chave salva em `/api/users/me/
 |--------|---------|-----------|
 | `GET` | `/finance/packages` | Lista pacotes ativos (`CreditPackageResponseDTO`). |
 | `POST` | `/finance/packages/:packageId/purchase` | Compra pacote, credita `base+bonus` e retorna `{ wallet, creditPackage }`. |
-| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes? }`, trava o saldo (`wallet.lock`) e coleta os dados de PIX/documentos/notas fiscais — se o usuário estava `PENDING_VERIFICATION`, ele é promovido para `ACTIVE` nesse momento. |
+| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes?, password? }`, trava o saldo (`wallet.lock`) e coleta os dados de PIX/documentos/notas fiscais — se o usuário estava `PENDING_VERIFICATION`, ele é promovido para `ACTIVE` nesse momento. Quando `WALLET_REQUIRE_WITHDRAW_PASSWORD=true` (padrão), a senha do usuário é requerida e retornará `403` em caso de senha ausente ou inválida. |
 | `GET` | `/finance/withdrawal-requests` | Lista pedidos do usuário com `approvalLogs`. |
 | `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"&#124;"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
 

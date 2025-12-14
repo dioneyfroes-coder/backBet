@@ -106,6 +106,33 @@ export class UserService {
     return user;
   }
 
+  async getPreferences(userId: string) {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+    return user.preferences;
+  }
+
+  async updatePreferences(userId: string, partial: Partial<{
+    emailNotifications: boolean;
+    smsNotifications: boolean;
+    marketingEmails: boolean;
+    requireWithdrawPassword?: boolean | null;
+  }>) {
+    const user = await this.userRepository.findById(userId);
+    if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
+    user.preferences = {
+      emailNotifications: partial.emailNotifications ?? user.preferences.emailNotifications,
+      smsNotifications: partial.smsNotifications ?? user.preferences.smsNotifications,
+      marketingEmails: partial.marketingEmails ?? user.preferences.marketingEmails,
+      requireWithdrawPassword:
+        typeof partial.requireWithdrawPassword === 'undefined'
+          ? user.preferences.requireWithdrawPassword
+          : partial.requireWithdrawPassword,
+    };
+    await this.userRepository.update(user);
+    return user.preferences;
+  }
+
   async addDocument(
     userId: string,
     document: {
