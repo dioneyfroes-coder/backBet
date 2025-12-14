@@ -57,6 +57,77 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 ### CurrencyValueObject (`src/core/finance/domain/value-objects/Currency.ts`)
 - Aceita apenas `BRL | USD | EUR`. Valores inválidos disparam `DomainError('CURRENCY_INVALID_CODE')` e são convertidos para `AppError` via mapper.
 
+## Sistema monetário (padrão: BRL)
+
+- O valor monetário em todo o core financeiro é representado pelo value object `Money` (`src/core/shared/domain/value-objects/Money.ts`). Ele garante que qualquer depósito, saque, bloqueio ou transação:
+  - use um número positivo ≥ 0 com duas casas decimais (internamente `Money.amount`);
+  - respeite sempre a mesma moeda (`Money.currency`). Qualquer tentativa de somar/subtrair moedas diferentes dispara `DomainError('MONEY_CURRENCY_MISMATCH')` e o mapper `WalletErrorMapper` converte isso em um `AppError` 400 que chega claro ao front-end;
+  - envolva apenas `SUPPORTED_CURRENCIES`, que hoje inclui `['BRL', 'USD', 'EUR']` e permite modularmente adicionar novos códigos no futuro sem quebrar a lógica de domínio.
+- No momento operamos exclusivamente em `BRL`. O onboarding, as apostas e as integrações Pix usam `CurrencyValueObject` com valor padrão `BRL`, e o backend fornece sempre `currency: 'BRL'` nas respostas (`Wallet.toDTO()`, `WalletDepositResponse`, `WalletWithdrawResponse`, etc.).
+- Para suportar outra moeda futuramente: basta adicionar o código desejado a `SUPPORTED_CURRENCIES`, garantir que o `CurrencyValueObject` aceite o novo código, configurar os tamanhos mínimos/max e traduzir as taxas em `appConfig.wallet.limits` se necessário. Essa modularidade preserva todos os métodos `Money.add/subtract/multiply` sem mudanças.
+
+## Boas práticas para consumir o sistema monetário no frontend
+
+1. **Use os dados oficiais da resposta ao invés de recalcular o saldo.** A API retorna `{ data: { balance, lockedBalance, currency } }` para `/api/wallets/me`. Confie nesses valores e apenas formate com a `currency` enviada.
+2. **Formate com `Intl.NumberFormat('pt-BR', { style: 'currency', currency })`.** Isso garante corretas casas decimais e separador de milhares. Nunca multiplique ou divida os valores exibidos para obter um novo saldo — o backend já faz isso com o `Money` value object e registra transações.
+3. **Envie valores como números decimais com duas casas (ex.: `10.00`).** O backend valida `amount > 0` e aplica `Money` antes de qualquer alteração. Strings ou formatos com vírgula serão rejeitados pelo Zod/`CreateWithdrawalRequestDTO`, portanto use sempre o ponto (`.`) como separador decimal nas requisições.
+4. **Considere o campo `lockedBalance` ao mostrar disponibilidade.** O saldo livre é `balance - lockedBalance`. Atividades como `coin-flip` primeiro chamam `wallet.withdraw(userId, wager)` e só depois registram o resultado; nenhum outro campo precisa ser atualizado manualmente.
+5. **Mantenha front-end desacoplado da moeda concreta.** Embora hoje seja `BRL`, sempre consulte `currency` no payload (por exemplo, `wallet.currency` no histórico) para evitar suposições. Quando outras moedas forem liberadas, a API continuará informando o código correto graças ao mesmo `Money.toString()` usado internamente.
+
+### Tipagem e formatação recomendadas
+
+```ts
+// tipos compartilhados no front-end (ex.: src/types/finance.ts)
+export type MoneyAmount = number; // deve vir com duas casas decimais (ex.: 10.00)
+export type CurrencyCode = 'BRL';
+
+export interface WalletSnapshot {
+  userId: string;
+  balance: MoneyAmount;
+  lockedBalance: MoneyAmount;
+  currency: CurrencyCode;
+}
+
+export interface WalletHistoryTransaction {
+  id: string;
+  type: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
+  amount: MoneyAmount;
+  currency: CurrencyCode;
+  createdAt: string; // ISO 8601
+}
+```
+
+Para formatar valores no front em BRL, use `Intl.NumberFormat`: 
+
+```ts
+const formatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+});
+
+formatter.format(wallet.balance); // ex: "R$ 1.000,00"
+```
+
+Para enviar um saque/deposito, mantenha um objeto simples em JSON e use o ponto como separador decimal:
+
+```ts
+await fetch('/api/wallets/withdraw', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    amount: 10.0, // número, não string com vírgula
+    currency: 'BRL',
+    pixKey: user.pixKey,
+    description: 'Coin flip wager',
+  }),
+});
+```
+
+Repare que `amount` sempre é um `number` com duas casas decimais. Se precisar gerar o valor dinamicamente, calcule no JavaScript e use `Number(wager.toFixed(2))` antes de enviar para evitar imprecisão de ponto flutuante.
+
+Essa abordagem documenta o fluxo monetário, garante consistência e mantém a porta aberta para adicionar novas moedas sem refatorar cada endpoint/backoffice.
+
 ## Serviços e repositórios
 
 - `WalletService`: orquestra verificações e delega persistência para `IWalletRepository`. Expõe `createWallet`, `deposit`, `withdraw`, `lock`, `unlock`, `withdrawLocked`, `getHistory`.
@@ -75,7 +146,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 | `GetHistory` | Retorna histórico paginado (`limit`, `offset`) | `userId`, `limit`, `offset` | `{ transactions, total }` |
 | `ListCreditPackages` | Lista pacotes ativos | — | `CreditPackage[]` |
 | `PurchaseCreditPackage` | Deposita `base + bônus` após validar pacote | `userId`, `packageId` | `{ creditPackage, wallet }` |
-| `RequestWithdrawal` / `GetWithdrawalRequests` | Cria e lista `WithdrawalRequest` bloqueando saldo. Opcionalmente exige confirmação de senha do usuário (configurável via `WALLET_REQUIRE_WITHDRAW_PASSWORD`). | `userId`, `amount`, `currency`, `notes?`, `password?` | Entidade(s) de saque; retorna 403 quando a senha é exigida e inválida/ausente. |
+| `RequestWithdrawal` / `GetWithdrawalRequests` | Cria e lista `WithdrawalRequest` bloqueando saldo. A exigência de senha depende do flag global `WALLET_REQUIRE_WITHDRAW_PASSWORD` ou da preferência do próprio usuário (`requireWithdrawPassword`); quando exigida, comparamos a senha enviada com o hash armazenado. | `userId`, `amount`, `currency`, `notes?`, `password?` | Entidade(s) de saque; retorna 403 quando a senha é exigida e inválida/ausente. |
 | `ProcessWithdrawalRequest` | Aprova/rejeita e executa `withdrawLocked`/`unlock` | `requestId`, `adminId`, `action`, `notes?` | `WithdrawalRequest` atualizado |
 
 Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `AppError` com status HTTP coerentes.
