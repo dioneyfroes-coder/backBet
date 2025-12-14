@@ -372,7 +372,7 @@ Se `pixKey` não for enviado, o backend procura a chave salva em `/api/users/me/
 |--------|---------|-----------|
 | `GET` | `/finance/packages` | Lista pacotes ativos (`CreditPackageResponseDTO`). |
 | `POST` | `/finance/packages/:packageId/purchase` | Compra pacote, credita `base+bonus` e retorna `{ wallet, creditPackage }`. |
-| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes?, password? }`, trava o saldo (`wallet.lock`) e coleta os dados de PIX/documentos/notas fiscais — se o usuário estava `PENDING_VERIFICATION`, ele é promovido para `ACTIVE` nesse momento. Quando `WALLET_REQUIRE_WITHDRAW_PASSWORD=true` (padrão), a senha do usuário é requerida e retornará `403` em caso de senha ausente ou inválida. |
+| `POST` | `/finance/withdrawal-requests` | Cria solicitação `{ amount, currency, notes?, password? }`, trava o saldo (`wallet.lock`) e coleta os dados de PIX/documentos/notas fiscais — se o usuário estava `PENDING_VERIFICATION`, ele é promovido para `ACTIVE` nesse momento. A exigência da senha respeita o flag `WALLET_REQUIRE_WITHDRAW_PASSWORD` (padrão = `true`) ou a preferência `requireWithdrawPassword` de cada usuário; quando exigida, compararemos o valor enviado com o hash armazenado e retornamos `403` em caso de senha ausente ou inválida. |
 | `GET` | `/finance/withdrawal-requests` | Lista pedidos do usuário com `approvalLogs`. |
 | `PATCH` | `/finance/withdrawal-requests/:requestId` | Admin flow: `{ action: "APPROVED"&#124;"REJECTED", notes? }`. Atualiza `withdrawLocked`/`unlock`. |
 

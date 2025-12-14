@@ -23,6 +23,12 @@ export interface IUserDocument extends Document<string> {
     uploadedAt: string;
     verified?: boolean;
   }>;
+  preferences?: {
+    emailNotifications: boolean;
+    smsNotifications: boolean;
+    marketingEmails: boolean;
+    requireWithdrawPassword?: boolean | null;
+  };
 }
 
 export const userSchema = new Schema<IUserDocument>(

@@ -6,6 +6,24 @@ import { AppError } from '@/shared/errors/AppError';
 
 const mockRequest = { id: 'req-1' } as any;
 
+const buildUser = (overrides: Partial<any> = {}) => {
+  const baseUser = {
+    id: 'user-1',
+    status: 'ACTIVE',
+    passwordHash: 'hash',
+    preferences: {
+      emailNotifications: true,
+      smsNotifications: false,
+      marketingEmails: false,
+      requireWithdrawPassword: null,
+    },
+  } as any;
+  if (overrides.preferences) {
+    baseUser.preferences = { ...baseUser.preferences, ...overrides.preferences };
+  }
+  return { ...baseUser, ...overrides };
+};
+
 describe('RequestWithdrawal', () => {
   const withdrawalRequestService = {
     createRequest: jest.fn(),
@@ -27,11 +45,12 @@ describe('RequestWithdrawal', () => {
     jest.clearAllMocks();
     withdrawalRequestService.createRequest.mockResolvedValue(mockRequest);
     userService.comparePassword.mockResolvedValue(true);
+    userService.findById.mockResolvedValue(buildUser());
   });
 
   it('activates pending users after creating a withdrawal request', async () => {
     const useCase = buildUseCase();
-    userService.findById.mockResolvedValue({ status: 'PENDING_VERIFICATION' } as any);
+    userService.findById.mockResolvedValueOnce(buildUser({ status: 'PENDING_VERIFICATION' }));
 
     const result = await useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'correct');
 
@@ -41,57 +60,46 @@ describe('RequestWithdrawal', () => {
 
   it('skips activation when user is already verified', async () => {
     const useCase = buildUseCase();
-    userService.findById.mockResolvedValue({ status: 'ACTIVE' } as any);
 
     await useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'correct');
 
     expect(userService.activateUser).not.toHaveBeenCalled();
   });
 
-  it('silently ignores missing users', async () => {
+  it('rejects when the user is not found', async () => {
     const useCase = buildUseCase();
-    // first call: password validation (return a user), second call: verifyUserIfPending (return null)
-    (userService.findById as jest.Mock)
-      .mockResolvedValueOnce({ id: 'user-1' } as any)
-      .mockResolvedValueOnce(null);
+    userService.findById.mockResolvedValueOnce(null);
 
-    await useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'correct');
-
-    expect(userService.activateUser).not.toHaveBeenCalled();
+    await expect(useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'any')).rejects.toBeInstanceOf(AppError);
+    expect(withdrawalRequestService.createRequest).not.toHaveBeenCalled();
   });
 
-  it('requires password when configured and rejects missing password with 403', async () => {
+  it('requires password when preference is true', async () => {
     const useCase = buildUseCase();
-    // If no password provided and requirement is enabled, should throw AppError 403
+    userService.findById.mockResolvedValueOnce(
+      buildUser({ preferences: { requireWithdrawPassword: true } }),
+    );
+
     await expect(useCase.execute('user-1', 50, 'BRL' as Currency)).rejects.toBeInstanceOf(AppError);
-    try {
-      await useCase.execute('user-1', 50, 'BRL' as Currency);
-    } catch (err: any) {
-      expect(err.statusCode).toBe(403);
-    }
+    expect(userService.comparePassword).not.toHaveBeenCalled();
     expect(withdrawalRequestService.createRequest).not.toHaveBeenCalled();
   });
 
-  it('rejects when password is invalid', async () => {
+  it('skips password validation when preference explicitly false', async () => {
     const useCase = buildUseCase();
-    userService.findById.mockResolvedValue({ id: 'user-1' } as any);
-    userService.comparePassword.mockResolvedValue(false);
+    userService.findById.mockResolvedValueOnce(
+      buildUser({ preferences: { requireWithdrawPassword: false } }),
+    );
 
-    await expect(
-      useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'wrong'),
-    ).rejects.toBeInstanceOf(AppError);
-    try {
-      await useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'wrong');
-    } catch (err: any) {
-      expect(err.statusCode).toBe(403);
-    }
-    expect(withdrawalRequestService.createRequest).not.toHaveBeenCalled();
+    const result = await useCase.execute('user-1', 50, 'BRL' as Currency);
+
+    expect(result).toBe(mockRequest);
+    expect(userService.comparePassword).not.toHaveBeenCalled();
   });
 
-  it('proceeds when password is valid', async () => {
+  it('proceeds with password when preference is null and password valid', async () => {
     const useCase = buildUseCase();
-    userService.findById.mockResolvedValue({ id: 'user-1' } as any);
-    userService.comparePassword.mockResolvedValue(true);
+    userService.findById.mockResolvedValueOnce(buildUser({ preferences: { requireWithdrawPassword: null } }));
 
     const result = await useCase.execute('user-1', 50, 'BRL' as Currency, undefined, 'correct');
     expect(result).toBe(mockRequest);

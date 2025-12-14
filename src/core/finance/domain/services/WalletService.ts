@@ -3,6 +3,7 @@ import { IWalletRepository } from '../repositories/IWalletRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 
 export class WalletService {
   constructor(private walletRepository: IWalletRepository) {}
@@ -27,6 +28,7 @@ export class WalletService {
     const wallet = await this.ensureWalletExists(userId);
     wallet.deposit(amount, context);
     await this.walletRepository.update(wallet);
+    this.logWalletAction('deposit', wallet, amount, context);
     return wallet;
   }
 
@@ -42,6 +44,7 @@ export class WalletService {
     const wallet = await this.ensureWalletExists(userId);
     wallet.withdraw(amount, context);
     await this.walletRepository.update(wallet);
+    this.logWalletAction('withdraw', wallet, amount, context);
     return wallet;
   }
 
@@ -49,6 +52,7 @@ export class WalletService {
     const wallet = await this.ensureWalletExists(userId);
     wallet.lock(amount);
     await this.walletRepository.update(wallet);
+    this.logWalletAction('lock', wallet, amount);
     return wallet;
   }
 
@@ -56,6 +60,7 @@ export class WalletService {
     const wallet = await this.ensureWalletExists(userId);
     wallet.unlock(amount);
     await this.walletRepository.update(wallet);
+    this.logWalletAction('unlock', wallet, amount);
     return wallet;
   }
 
@@ -63,6 +68,7 @@ export class WalletService {
     const wallet = await this.ensureWalletExists(userId);
     wallet.withdrawLocked(amount);
     await this.walletRepository.update(wallet);
+    this.logWalletAction('withdraw_locked', wallet, amount);
     return wallet;
   }
 
@@ -76,5 +82,24 @@ export class WalletService {
       });
     }
     return wallet;
+  }
+
+  private logWalletAction(
+    action: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked',
+    wallet: Wallet,
+    amount: number,
+    context?: TransactionContext,
+  ) {
+    writeStructuredLog({
+      event: 'wallet_action',
+      action,
+      userId: wallet.userId,
+      amount,
+      currency: wallet.currency,
+      balance: wallet.balance,
+      lockedBalance: wallet.lockedBalance,
+      description: context?.description,
+      metadata: context?.metadata,
+    });
   }
 }
