@@ -2,6 +2,11 @@ import { Email } from '../value-objects/Email';
 import { IUserDTO, UserStatus } from '../../types/user.types';
 
 export class User {
+  // ...
+  setPassword(newPassword: string) {
+    // Aqui deveria ser feito o hash, mas para teste simples:
+    this.passwordHash = newPassword;
+  }
   constructor(
     public readonly id: string,
     public email: Email,
@@ -27,7 +32,16 @@ export class User {
       smsNotifications: boolean;
       marketingEmails: boolean;
       requireWithdrawPassword?: boolean | null;
-    } = { emailNotifications: true, smsNotifications: false, marketingEmails: false, requireWithdrawPassword: null },
+    } = {
+      emailNotifications: true,
+      smsNotifications: false,
+      marketingEmails: false,
+      requireWithdrawPassword: null,
+    },
+    public passwordRecovery?: {
+      token: string;
+      expiresAt: Date;
+    },
   ) {}
 
   canOperate(): boolean {

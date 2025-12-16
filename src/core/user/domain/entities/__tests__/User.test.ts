@@ -100,6 +100,12 @@ describe('User Entity', () => {
         createdAt: mockData.createdAt,
         updatedAt: mockData.updatedAt,
         pixKey: mockData.pixKey,
+        preferences: {
+          emailNotifications: true,
+          smsNotifications: false,
+          marketingEmails: false,
+          requireWithdrawPassword: null,
+        },
       });
     });
   });

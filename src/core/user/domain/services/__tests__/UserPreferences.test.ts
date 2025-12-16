@@ -28,7 +28,10 @@ describe('UserService preferences', () => {
     const prefs = await service.getPreferences('u1');
     expect(prefs.emailNotifications).toBe(true);
 
-    const updated = await service.updatePreferences('u1', { emailNotifications: false, smsNotifications: true });
+    const updated = await service.updatePreferences('u1', {
+      emailNotifications: false,
+      smsNotifications: true,
+    });
     expect(updated.emailNotifications).toBe(false);
     expect(updated.smsNotifications).toBe(true);
 

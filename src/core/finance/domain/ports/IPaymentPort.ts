@@ -7,7 +7,12 @@ export type PaymentResult = {
 };
 
 export interface IPaymentPort {
-  payWithdrawal(requestId: string, userId: string, amount: number, currency: Currency): Promise<PaymentResult>;
+  payWithdrawal(
+    requestId: string,
+    userId: string,
+    amount: number,
+    currency: Currency,
+  ): Promise<PaymentResult>;
 }
 
 export default IPaymentPort;

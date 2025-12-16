@@ -26,6 +26,9 @@ const createService = (
     ({
       withdraw: jest.fn().mockResolvedValue({ currency: 'BRL' }),
       deposit: jest.fn().mockResolvedValue({ currency: 'BRL' }),
+      lock: jest.fn().mockResolvedValue({ currency: 'BRL' }),
+      withdrawLocked: jest.fn().mockResolvedValue({ currency: 'BRL' }),
+      findByUserId: jest.fn().mockResolvedValue({ balance: 100, currency: 'BRL' }),
     } as any);
 
   const integrationPort: jest.Mocked<GameIntegrationPort> =
@@ -45,12 +48,13 @@ const createService = (
 };
 
 describe('CoinFlipGameService', () => {
-  it('should withdraw, credit winnings and persist round on victory', async () => {
+  it('should lock, withdrawLocked, credit winnings and persist round on victory', async () => {
     const { service, walletService, repository, integrationPort } = createService();
 
     const round = await service.play({ userId: 'user-1', choice: 'HEADS', wager: 10 });
 
-    expect(walletService.withdraw).toHaveBeenCalledWith('user-1', 10);
+    expect(walletService.lock).toHaveBeenCalledWith('user-1', 10);
+    expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-1', 10);
     expect(walletService.deposit).toHaveBeenCalledWith('user-1', 30); // wager + payout (10 + 20)
     const stored = await repository.findByUser('user-1', 1);
     expect(stored[0]?.id).toBe(round.id);
@@ -58,16 +62,20 @@ describe('CoinFlipGameService', () => {
     expect(integrationPort.broadcastFeed).toHaveBeenCalledWith(stored);
   });
 
-  it('should not credit winnings when player loses', async () => {
+  it('should lock, withdrawLocked and not credit winnings when player loses', async () => {
     const engine = new CoinFlipEngine(() => 0.9); // outcome tails
     const walletService = {
-      withdraw: jest.fn().mockResolvedValue({ currency: 'USD' }),
+      lock: jest.fn().mockResolvedValue({ currency: 'USD' }),
+      withdrawLocked: jest.fn().mockResolvedValue({ currency: 'USD' }),
       deposit: jest.fn(),
+      findByUserId: jest.fn().mockResolvedValue({ balance: 100, currency: 'USD' }),
     } as Partial<IWalletService> as jest.Mocked<IWalletService>;
     const { service, integrationPort } = createService({}, engine, walletService);
 
     const round = await service.play({ userId: 'user-2', choice: 'HEADS', wager: 25 });
 
+    expect(walletService.lock).toHaveBeenCalledWith('user-2', 25);
+    expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-2', 25);
     expect(walletService.deposit).not.toHaveBeenCalled();
     expect(round.result).toBe('LOSE');
     expect(round.payoutAmount).toBe(0);

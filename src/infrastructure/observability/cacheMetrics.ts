@@ -17,7 +17,6 @@ export const updateCacheMetrics = (): void => {
     cacheSnapshot = zeroSnapshot();
     return;
   }
-
   const metrics = redisClient.getMetrics();
   cacheSnapshot = {
     hits: metrics.hits,

@@ -33,10 +33,10 @@ async function main() {
       void contactQueue.close().catch(() => undefined);
       contactQueue = undefined;
     }
-      if (withdrawalQueue) {
-        void withdrawalQueue.close().catch(() => undefined);
-        withdrawalQueue = undefined;
-      }
+    if (withdrawalQueue) {
+      void withdrawalQueue.close().catch(() => undefined);
+      withdrawalQueue = undefined;
+    }
   };
 
   try {

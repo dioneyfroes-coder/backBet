@@ -1,3 +1,7 @@
+import { PlayCoinFlipBatchDTO, PlayCoinFlipBatchDTOType } from '../dtos/GameDTOs';
+
+// Mantém apenas UMA declaração da classe GameController, com todos os métodos (playCoinFlipBatch, listGames, getCoinFlipConfig, playCoinFlip, getHistory, getFeed) definidos dentro dela.
+// Remover qualquer duplicidade de export class GameController e garantir que todos os métodos estejam presentes.
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
 import { PlayCoinFlipUseCase } from '@core/game/aplication/use-cases/PlayCoinFlipUseCase';
@@ -95,12 +99,59 @@ export class GameController extends BaseController {
     }
 
     const payload = this.validateSchema(PlayCoinFlipDTO, req.body) as PlayCoinFlipDTOType;
+    // Ignora o valor enviado pelo usuário e usa o valor fixo da configuração
     const round = await this.playCoinFlipUseCase.execute({
       userId,
       choice: payload.choice,
-      wager: payload.wager,
+      wager: this.coinFlipConfig.minBet,
     });
     return this.ok(res, round.toJSON());
+  }
+
+  async playCoinFlipBatch(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    /**
+     * @openapi
+     * /api/games/coin-flip/play-batch:
+     *   post:
+     *     tags:
+     *       - Games
+     *     security:
+     *       - bearerAuth: []
+     *     summary: Executa várias rodadas de cara ou coroa em sequência
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               choices:
+     *                 type: array
+     *                 items:
+     *                   type: string
+     *                   enum: [HEADS, TAILS]
+     *     responses:
+     *       '200':
+     *         description: Resultados das rodadas e saldo final
+     */
+    const userId = getRequestUserId(req);
+    if (!userId) {
+      return this.unauthorized(res);
+    }
+    if (this.coinFlipConfig.enabled === false) {
+      return this.error(res, 'GAME_DISABLED', 'Cara ou coroa está indisponível no momento', 503);
+    }
+
+    const payload = this.validateSchema(PlayCoinFlipBatchDTO, req.body) as PlayCoinFlipBatchDTOType;
+    const wager = this.coinFlipConfig.minBet;
+    const rounds = [];
+    let totalPrize = 0;
+    for (const choice of payload.choices) {
+      const round = await this.playCoinFlipUseCase.execute({ userId, choice, wager });
+      rounds.push(round.toJSON());
+      totalPrize += round.payoutAmount - wager;
+    }
+    return this.ok(res, { rounds, totalPrize });
   }
 
   async getHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {

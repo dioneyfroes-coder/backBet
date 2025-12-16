@@ -1,0 +1,25 @@
+# CoinFlip (Cara ou Coroa) - Configuração de aposta fixa
+
+Para implementar o sistema de aposta de valor fixo (R$ 1,00) e prêmio fixo (R$ 3,50 por vitória) no CoinFlip, defina as seguintes variáveis de ambiente no seu arquivo `.env`:
+
+```
+GAME_COINFLIP_MIN_BET=1
+GAME_COINFLIP_MAX_BET=1
+GAME_COINFLIP_PAYOUT_MULTIPLIER=1
+GAME_COINFLIP_FIXED_WIN=3.5
+```
+
+- `GAME_COINFLIP_MIN_BET` e `GAME_COINFLIP_MAX_BET` garantem que só é possível apostar exatamente R$ 1,00.
+- `GAME_COINFLIP_FIXED_WIN` define o valor do prêmio fixo por vitória (R$ 3,50).
+- `GAME_COINFLIP_PAYOUT_MULTIPLIER` é ignorado quando `GAME_COINFLIP_FIXED_WIN` está definido.
+
+**Importante:**
+- O backend já suporta essa configuração via variáveis de ambiente e validação de limites.
+- Não é necessário alterar código para aplicar a regra de valor fixo, apenas garantir as variáveis acima.
+
+## Testes
+Os testes automatizados em `CoinFlipGameService.spec.ts` já cobrem cenários de aposta e prêmio fixo.
+
+---
+
+Se precisar de um exemplo de `.env`, copie e cole as linhas acima no seu arquivo de configuração.

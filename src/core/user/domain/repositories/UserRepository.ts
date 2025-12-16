@@ -12,6 +12,14 @@ export class UserRepository implements IUserRepository {
   async findById(id: string): Promise<User | null> {
     return this.users.get(id) || null;
   }
+  async findByRecoveryToken(token: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.passwordRecovery && user.passwordRecovery.token === token) {
+        return user;
+      }
+    }
+    return null;
+  }
 
   async findByEmail(email: string): Promise<User | null> {
     const userId = this.emailIndex.get(email.toLowerCase());

@@ -55,14 +55,7 @@ const swaggerOptions = {
               type: 'string',
               example: 'joaosilva',
             },
-            firstName: {
-              type: 'string',
-              example: 'João',
-            },
-            lastName: {
-              type: 'string',
-              example: 'Silva',
-            },
+            // ...
             status: {
               type: 'string',
               enum: ['PENDING_VERIFICATION', 'ACTIVE', 'SUSPENDED'],
@@ -120,16 +113,7 @@ const swaggerOptions = {
               minLength: 8,
               example: 'SecurePass@123',
             },
-            firstName: {
-              type: 'string',
-              minLength: 2,
-              example: 'João',
-            },
-            lastName: {
-              type: 'string',
-              minLength: 2,
-              example: 'Silva',
-            },
+            // ...
             username: {
               type: 'string',
               minLength: 3,
@@ -137,7 +121,7 @@ const swaggerOptions = {
               example: 'joaosilva',
             },
           },
-          required: ['email', 'password', 'firstName', 'lastName', 'username'],
+          required: ['email', 'password', 'username'],
         },
         AuthResponse: {
           type: 'object',
@@ -181,8 +165,7 @@ const swaggerOptions = {
                 id: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
                 email: 'user@example.com',
                 username: 'joaosilva',
-                firstName: 'João',
-                lastName: 'Silva',
+                // ...
                 status: 'PENDING_VERIFICATION',
                 createdAt: '2025-11-14T23:20:42.778Z',
               },
@@ -330,8 +313,7 @@ const swaggerOptions = {
               id: 'cadaeb28-c7f7-425b-91f7-73a27141ae49',
               email: 'user@example.com',
               username: 'joaosilva',
-              firstName: 'João',
-              lastName: 'Silva',
+              // ...
               status: 'ACTIVE',
               createdAt: '2025-11-14T23:20:42.778Z',
             },

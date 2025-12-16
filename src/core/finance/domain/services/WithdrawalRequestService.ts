@@ -91,14 +91,14 @@ export class WithdrawalRequestService {
     if (action === 'APPROVED') {
       try {
         await this.walletService.withdrawLocked(request.userId, request.amount);
-        } catch (err) {
-          try {
-            withdrawalRequestProcessingFailedCounter.inc();
-          } catch (incErr) {
-            console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
-          }
-          throw err;
+      } catch (err) {
+        try {
+          withdrawalRequestProcessingFailedCounter.inc();
+        } catch (incErr) {
+          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
         }
+        throw err;
+      }
 
       request.approve(adminId, notes);
 
@@ -124,7 +124,9 @@ export class WithdrawalRequestService {
           throw err;
         }
       } else {
-        console.warn('No withdrawalQueue configured; payout will not be executed automatically', { requestId: request.id });
+        console.warn('No withdrawalQueue configured; payout will not be executed automatically', {
+          requestId: request.id,
+        });
       }
       try {
         withdrawalRequestApprovedCounter.inc();

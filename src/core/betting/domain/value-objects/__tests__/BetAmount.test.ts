@@ -1,3 +1,12 @@
+it('lança erro ao tentar criar aposta com valor negativo', () => {
+  expect(() => new BetAmount(-10, 'BRL')).toThrow(DomainError);
+  expect(() => new BetAmount(-10, 'BRL')).toThrow('Bet amount must be greater than 0');
+});
+
+it('lança erro ao tentar criar aposta com valor zero', () => {
+  expect(() => new BetAmount(0, 'BRL')).toThrow(DomainError);
+  expect(() => new BetAmount(0, 'BRL')).toThrow('Bet amount must be greater than 0');
+});
 import { BetAmount } from '../BetAmount';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 

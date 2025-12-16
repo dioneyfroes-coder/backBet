@@ -6,8 +6,6 @@ export interface IUserDocument extends Document<string> {
   email: string;
   username: string;
   passwordHash: string;
-  firstName?: string;
-  lastName?: string;
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED';
   createdAt: Date;
   updatedAt: Date;
@@ -56,14 +54,6 @@ export const userSchema = new Schema<IUserDocument>(
       type: String,
       required: false,
       default: '',
-    },
-    firstName: {
-      type: String,
-      default: null,
-    },
-    lastName: {
-      type: String,
-      default: null,
     },
     status: {
       type: String,

@@ -10,7 +10,11 @@ export class InMemoryWithdrawalQueue implements IWithdrawalQueue {
     // here to keep API latency small; errors are logged and surfaced via metrics in the worker.
     setImmediate(() => {
       processWithdrawalPayload(payload).catch((err) => {
-        writeStructuredLog({ event: 'inmemory_withdrawal_payout_error', requestId: payload.requestId, err });
+        writeStructuredLog({
+          event: 'inmemory_withdrawal_payout_error',
+          requestId: payload.requestId,
+          err,
+        });
       });
     });
   }

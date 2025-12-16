@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+export const PlayCoinFlipBatchDTO = z.object({
+  choices: z.array(z.enum(['HEADS', 'TAILS'])).min(1, 'Deve haver pelo menos uma jogada'),
+});
+
+export type PlayCoinFlipBatchDTOType = z.infer<typeof PlayCoinFlipBatchDTO>;
+
 export const PlayCoinFlipDTO = z.object({
   choice: z.enum(['HEADS', 'TAILS']),
   wager: z

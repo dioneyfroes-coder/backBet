@@ -21,7 +21,12 @@ export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
     } catch (_) {
       // ignore
     }
-    writeStructuredLog({ event: 'withdrawal_queue_fallback', backend: 'inmemory', redis: REDIS_URL, err });
+    writeStructuredLog({
+      event: 'withdrawal_queue_fallback',
+      backend: 'inmemory',
+      redis: REDIS_URL,
+      err,
+    });
     return new InMemoryWithdrawalQueue();
   }
 }

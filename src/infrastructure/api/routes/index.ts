@@ -9,6 +9,7 @@ import { createEventRoutes, EventRoutesDeps } from './eventRoutes';
 import { createAdminRoutes, AdminRoutesDeps } from './adminRoutes';
 import { createGameRoutes, GameRoutesDeps } from './gameRoutes';
 import { createContactRoutes } from './contactRoutes';
+import { createPasswordRecoveryRoutes } from './passwordRecoveryRoutes';
 import {
   createUserRepository,
   createWalletRepository,
@@ -71,6 +72,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
       ...(deps.auth || {}),
     }),
   );
+  router.use('/auth', createPasswordRecoveryRoutes({ userRepository }));
   router.use(
     '/users',
     await createUserRoutes({

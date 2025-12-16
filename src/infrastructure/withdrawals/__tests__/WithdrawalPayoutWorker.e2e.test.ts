@@ -1,6 +1,9 @@
 import { processWithdrawalPayload } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
 import TestPaymentAdapter from '@/infrastructure/payments/TestPaymentAdapter';
-import { withdrawalPayoutSuccessCounter, withdrawalPayoutFailedCounter } from '@/infrastructure/observability/metrics';
+import {
+  withdrawalPayoutSuccessCounter,
+  withdrawalPayoutFailedCounter,
+} from '@/infrastructure/observability/metrics';
 
 function getCounterValue(counter: any): number {
   try {

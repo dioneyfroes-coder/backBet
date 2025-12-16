@@ -24,6 +24,10 @@ export class RequestWithdrawal {
       throw new AppError('NOT_FOUND', 'User not found', 404);
     }
 
+    if (amount <= 0) {
+      throw new AppError('VALIDATION_ERROR', 'O valor do saque deve ser maior que zero', 400);
+    }
+
     const preference = user.preferences?.requireWithdrawPassword;
     const shouldRequirePassword =
       typeof preference === 'boolean' ? preference : appConfig.wallet.requireWithdrawPassword;

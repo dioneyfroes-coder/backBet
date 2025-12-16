@@ -87,6 +87,21 @@ export class UserService {
     const emailExists = await this.userRepository.findByEmail(newEmail);
     if (emailExists) throw new AppError('CONFLICT', 'Email already exists', 409);
 
+    // Envia email de confirmação para o novo endereço
+    try {
+      const { processContactPayload } = await import('@/infrastructure/mailer/ContactWorker');
+      await processContactPayload({
+        ticketId: `confirm-email-${userId}`,
+        name: user.username,
+        email: newEmail,
+        message: 'Confirme seu novo email para ativar as notificações.',
+        createdAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      // logar erro mas não bloquear alteração
+      console.warn('Falha ao enviar email de confirmação:', err);
+    }
+
     user.email = new Email(newEmail);
     await this.userRepository.update(user);
   }
@@ -112,12 +127,15 @@ export class UserService {
     return user.preferences;
   }
 
-  async updatePreferences(userId: string, partial: Partial<{
-    emailNotifications: boolean;
-    smsNotifications: boolean;
-    marketingEmails: boolean;
-    requireWithdrawPassword?: boolean | null;
-  }>) {
+  async updatePreferences(
+    userId: string,
+    partial: Partial<{
+      emailNotifications: boolean;
+      smsNotifications: boolean;
+      marketingEmails: boolean;
+      requireWithdrawPassword?: boolean | null;
+    }>,
+  ) {
     const user = await this.userRepository.findById(userId);
     if (!user) throw new AppError('NOT_FOUND', 'User not found', 404);
     user.preferences = {

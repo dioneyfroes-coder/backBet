@@ -22,7 +22,12 @@ export class MockPaymentAdapter implements IPaymentPort {
     this.jitterMs = options.jitterMs ?? 200;
   }
 
-  async payWithdrawal(requestId: string, userId: string, amount: number, currency: Currency): Promise<PaymentResult> {
+  async payWithdrawal(
+    requestId: string,
+    userId: string,
+    amount: number,
+    currency: Currency,
+  ): Promise<PaymentResult> {
     // Simulate network call with retries + exponential backoff + jitter
     for (let attempt = 1; attempt <= this.attempts; attempt++) {
       try {

@@ -40,6 +40,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 ### Wallet (`src/core/finance/domain/entities/Wallet.ts`)
 - Mantém `balance`, `lockedBalance`, `currency` e histórico de `Transaction`.
 - Expõe operações atômicas: `deposit`, `withdraw`, `lock`, `unlock`, `withdrawLocked`, todas validadas por `Money` (value object compartilhado) e lançando `DomainError` (`WALLET_INVALID_AMOUNT`, `WALLET_INSUFFICIENT_FUNDS`, etc.).
+  - **Importante:** qualquer tentativa de saque (`withdraw`) ou aposta com valor zero ou negativo é rejeitada com erro de validação.
 - `recordTransaction` agora aceita `TransactionContext` com `description` + `metadata` (ex.: `channel: "PIX"`, referencias do gateway), persistindo o payload para auditoria mesmo quando usamos provedores simulados.
 
 ### Transaction (`src/core/finance/domain/entities/Transaction.ts`)

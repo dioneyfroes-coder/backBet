@@ -16,7 +16,12 @@ export class MongooseUserRepository implements IUserRepository {
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
         documents: user.documents ?? [],
-        preferences: user.preferences ?? { emailNotifications: true, smsNotifications: false, marketingEmails: false, requireWithdrawPassword: null },
+        preferences: user.preferences ?? {
+          emailNotifications: true,
+          smsNotifications: false,
+          marketingEmails: false,
+          requireWithdrawPassword: null,
+        },
       };
 
       await UserModel.findByIdAndUpdate(user.id, userData, { upsert: true });
@@ -68,6 +73,11 @@ export class MongooseUserRepository implements IUserRepository {
     }
   }
 
+  async findByRecoveryToken(token: string): Promise<User | null> {
+    const doc = await UserModel.findOne({ 'passwordRecovery.token': token });
+    return doc ? this.mapToDomain(doc) : null;
+  }
+
   async update(user: User): Promise<void> {
     try {
       const userData: Partial<IUserDocument> = {
@@ -76,7 +86,12 @@ export class MongooseUserRepository implements IUserRepository {
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
         documents: user.documents ?? [],
-        preferences: user.preferences ?? { emailNotifications: true, smsNotifications: false, marketingEmails: false, requireWithdrawPassword: null },
+        preferences: user.preferences ?? {
+          emailNotifications: true,
+          smsNotifications: false,
+          marketingEmails: false,
+          requireWithdrawPassword: null,
+        },
       };
 
       const result = await UserModel.findByIdAndUpdate(user.id, userData, { new: true });
@@ -105,7 +120,12 @@ export class MongooseUserRepository implements IUserRepository {
       data.updatedAt,
       data.pixKey ?? null,
       data.documents ?? [],
-      data.preferences ?? { emailNotifications: true, smsNotifications: false, marketingEmails: false, requireWithdrawPassword: null },
+      data.preferences ?? {
+        emailNotifications: true,
+        smsNotifications: false,
+        marketingEmails: false,
+        requireWithdrawPassword: null,
+      },
     );
   }
 }

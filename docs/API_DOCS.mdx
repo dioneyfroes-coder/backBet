@@ -115,9 +115,7 @@ Content-Type: application/json
 {
   "email": "usuario@example.com",
   "password": "SenhaForte123!",
-  "username": "usuario_123",
-  "firstName": "João",
-  "lastName": "Silva"
+  "username": "usuario_123"
 }
 ```
 
@@ -189,7 +187,7 @@ Todas protegidas por bearer token + cache opcional (`cacheUserProfileMiddleware`
 | Método | Caminho | Notas |
 |--------|---------|-------|
 | `GET` | `/users/me` | Retorna perfil completo; servido do Redis quando `CACHE_ENABLED=true`. |
-| `PATCH` | `/users/me` | Atualiza `firstName/lastName` (o backend recalcula `username` e `updatedAt`). |
+| `PATCH` | `/users/me` | Atualiza `username` (nome público do usuário) e `updatedAt`. |
 | `PATCH` | `/users/me/email` | Troca email após validar unicidade e VO `Email`. Limpa cache de perfil. |
 | `GET` | `/users/me/pix-key` | Retorna a chave Pix padrão vinculada ao usuário (vazio quando não configurada). |
 | `PUT` | `/users/me/pix-key` | Aceita `{ pixKey }`, valida comprimento/formato e salva como fallback para saques e PIX automáticos. |

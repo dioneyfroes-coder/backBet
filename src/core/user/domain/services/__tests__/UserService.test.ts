@@ -22,6 +22,7 @@ describe('UserService', () => {
       findByEmail: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
+      findByRecoveryToken: jest.fn(),
     };
 
     userService = new UserService(mockUserRepository);

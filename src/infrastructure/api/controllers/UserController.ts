@@ -300,7 +300,6 @@ export class UserController extends BaseController {
     });
   }
 
-
   async updatePixKey(req: AuthenticatedRequest, res: Response): Promise<Response> {
     const userId = getRequestUserId(req);
 

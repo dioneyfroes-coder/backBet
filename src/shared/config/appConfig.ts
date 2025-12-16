@@ -1,3 +1,10 @@
+const parsePositiveMs = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return fallback;
+  }
+  return parsed;
+};
 import { env } from './env';
 
 const projectAppName = env.APP_NAME || 'backbet';
@@ -269,6 +276,7 @@ export const appConfig = {
         env.GAME_COINFLIP_FIXED_WIN && parseNumber(env.GAME_COINFLIP_FIXED_WIN, 0) > 0
           ? parseNumber(env.GAME_COINFLIP_FIXED_WIN, 0)
           : undefined,
+      cooldownMs: parsePositiveMs(env.GAME_COINFLIP_COOLDOWN_MS, 0),
     },
     integration: {
       webhookEnabled: parseBoolean(env.GAME_INTEGRATION_WEBHOOK_ENABLED, false),

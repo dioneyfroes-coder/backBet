@@ -7,6 +7,7 @@ export interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
   save(user: User): Promise<void>;
   update(user: User): Promise<void>;
+  findByRecoveryToken(token: string): Promise<User | null>;
 }
 
 // users/domain/repositories/IWalletRepository.ts

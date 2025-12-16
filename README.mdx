@@ -15,7 +15,7 @@ BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20
 - **Configuração centralizada**: `BACKBET_RUNTIME_ENV` decide se as validações de produção devem exigir chaves live; mantenha em `development` para tolerar valores de `.env` mesmo quando ferramentas (PM2 e scripts de observabilidade) precisam que `NODE_ENV=production`.
 - **Arquitetura**: Monólito modular (API ▸ application ▸ domain ▸ infrastructure ▸ shared)
 - **Padrões**: DDD, Result pattern, repositories async, factories para troca de adapters
-- **Qualidade**: ESLint flat config, Jest + SWC, 350 testes (97% cobertura), CI local `npm run lint && npm run test --coverage && npm run build`
+- **Qualidade**: ESLint flat config, Jest + SWC, 372 testes (statements 98.2%, branches 89.5%, functions 98.1%, lines 98.0%), CI local `npm run lint && npm run test --coverage && npm run build`
 - **Observabilidade**: health/readiness endpoints, snapshots internos de cache/resiliência, request-id + logs JSON, OpenTelemetry e PM2 WebUI (em rollout)
 
 ## Bounded contexts
@@ -102,7 +102,7 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 
 ## Qualidade e operação
 
-- 350 testes Jest (unidade + integração leve) — statements 97.79%, branches 87.19%, functions 97.99%, lines 97.96%.
+- 372 testes Jest (unidade + integração leve) — statements 98.2%, branches 89.5%, functions 98.1%, lines 98.0%.
 - Logs estruturados JSON com `request_start`, `request_end` e `request_error` (incluem requestId, userId, duração).
 - Snapshots de saúde trackeiam dependências externas (Mongo, Redis e provedores de identidade configurados) e alimentarão a PM2 WebUI/alertas de saúde.
 - Dashboards/alertas anteriores baseados em Prometheus/Grafana foram aposentados; o plano de migração está documentado em `docs/PM2-WEBUI-MIGRATION.mdx`.
@@ -133,5 +133,57 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 
 ---
 
+
+## Boas Práticas e Checklist de Manutenção
+
+> Siga este checklist para manter o projeto BackBet robusto, seguro e alinhado com as melhores práticas:
+
+### 📦 Estrutura & Organização
+- Novos módulos devem seguir o padrão `src/core/<domínio>/application/use-cases`.
+- Revise periodicamente a pasta `docs/` para evitar documentação legada ou fora do padrão.
+- Mantenha DTOs, controllers e rotas coesos em `src/infrastructure/api/**`.
+
+### 🔒 Segurança
+- Todas as rotas sensíveis devem usar autenticação e rate limiters.
+- Nunca logue dados sensíveis (tokens, senhas, documentos completos).
+- Audite CSP e headers de segurança ao adicionar novas UIs.
+- Rode revisões de secrets e dependências (`npm audit`, `.env` no `.gitignore`).
+
+### 🧪 Testes & Qualidade
+- Mantenha cobertura de testes acima de 97% (statements/functions/lines).
+- Priorize aumentar cobertura de branches (<90%) em módulos críticos (finance/bets).
+- Adicione testes de carga (k6/Artillery) para `/auth`, `/wallets`, `/bets`.
+- Automatize smoke tests pós-deploy (`/health`, `/readiness`, `/health/cache`).
+
+### 🛠️ CI/CD & Dependências
+- Automatize lint, test, build e audit no pipeline (GitHub Actions).
+- Rode `npm outdated` a cada release e atualize libs críticas.
+- Valide se pacotes dev-only não estão no runtime.
+
+### 📄 Documentação & Observabilidade
+- Atualize sempre os docs (`docs/*.mdx`) junto com mudanças de código.
+- Documente exemplos de payloads e variáveis de ambiente.
+- Adicione logs estruturados e snapshots em fluxos críticos.
+- Enriquecer logs com métricas de produto (apostas, depósitos).
+
+### 🏗️ Arquitetura & Roadmap
+- Formalize eventos de domínio/outbox (`UserCreated`, `BetPlaced`, etc).
+- Remova fallback in-memory em produção, habilite migrações automáticas.
+- Prepare o `ApiServer` para escala horizontal e externalize sessões.
+- Complete integração do PM2 WebUI + alertas de saúde.
+
+### 🧹 Código & Imports
+- Mantenha imports organizados e evite duplicidade.
+- Use Zod para validação de DTOs em todos os controllers.
+- Prefira objetos rasos nos logs e mensagens/eventos em inglês curto.
+
+### 📝 Recomendações Gerais
+- Exija descrição de testes executados nos PRs.
+- Nunca logue tokens; revise PRs que toquem logging.
+- Atualize docs no mesmo PR da mudança.
+- Documente fallback e feature flags para integrações externas.
+
+---
+
 **Versão atual:** 0.1.0 (pre-alpha)  
-**Última atualização:** 25 de novembro de 2025
+**Última atualização:** 16 de dezembro de 2025

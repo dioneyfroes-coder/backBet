@@ -9,7 +9,12 @@ export class TestPaymentAdapter implements IPaymentPort {
     this.remainingFailures = failuresBeforeSuccess;
   }
 
-  async payWithdrawal(_requestId: string, _userId: string, _amount: number, _currency: Currency): Promise<PaymentResult> {
+  async payWithdrawal(
+    _requestId: string,
+    _userId: string,
+    _amount: number,
+    _currency: Currency,
+  ): Promise<PaymentResult> {
     this.attempts += 1;
     if (this.remainingFailures > 0) {
       this.remainingFailures -= 1;

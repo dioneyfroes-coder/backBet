@@ -1,3 +1,4 @@
+// rota play-batch já é definida dentro da função createGameRoutes
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { protectedRoute } from '../middleware/AuthMiddleware';

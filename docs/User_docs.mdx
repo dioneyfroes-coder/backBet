@@ -1,3 +1,12 @@
+## Recuperação de Senha
+
+O sistema permite que o usuário recupere sua senha via email:
+
+1. O usuário solicita recuperação informando seu email (`POST /auth/request-password-recovery`).
+2. Se o email existir, um token de recuperação é gerado e enviado por email com um link de redefinição.
+3. O usuário acessa o link, informa a nova senha e o token (`POST /auth/reset-password`).
+4. O token expira em 30 minutos e só pode ser usado uma vez.
+5. Nenhuma informação sobre existência do email é exposta na resposta.
 ---
 title: "Módulo Usuário"
 description: "Visão completa do núcleo de usuários: domínio, APIs de perfil/autenticação e integrações com Wallet, provedores de identidade e JWT."
@@ -59,7 +68,7 @@ shared/services/{JwtService,AuthService}.ts
 - `registerUser`: cria `User` com `PENDING_VERIFICATION`, hash da senha e salva via `IUserRepository`.
 - `suspendUser` / `activateUser`: validam estado antes de atualizar para evitar operações redundantes.
 - `updateProfile`: altera `username` (derivado de first/last name enviados) e atualiza `updatedAt`.
-- `changeEmail`: verifica unicidade, recria VO `Email` e persiste.
+- `changeEmail`: verifica unicidade, envia email de confirmação para o novo endereço, recria VO `Email` e persiste. O envio de email é tentado, mas falhas não bloqueiam a alteração.
 - `updatePixKey`: normaliza/valida a chave, persiste no usuário e dispara `flushUserProfileCache` para que carteiras possam reutilizar o valor.
 - `comparePassword`: usa `bcrypt.compare` durante o login legado.
 
@@ -93,7 +102,7 @@ shared/services/{JwtService,AuthService}.ts
 
 | Método | Caminho | Autenticação | Cache | Observações |
 |--------|---------|--------------|-------|-------------|
-| `GET` | `/api/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; divide `username` em `firstName`/`lastName` para respostas.
+| `GET` | `/api/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; campo `username` é o nome público do usuário.
 | `PATCH` | `/api/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
 | `PATCH` | `/api/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
 | `GET` | `/api/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
