@@ -19,6 +19,7 @@ import { createPixProvider } from '@/infrastructure/payments/pix';
 import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
 import { UserService } from '@core/user/domain/services/UserService';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -41,8 +42,8 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
-  const depositUseCase = new Deposit(walletService, pixProvider);
-  const withdrawUseCase = new Withdraw(walletService, pixProvider);
+  const depositUseCase = new Deposit(walletService, pixProvider, idempotencyService);
+  const withdrawUseCase = new Withdraw(walletService, pixProvider, idempotencyService);
   const getHistoryUseCase = new GetHistory(walletService);
 
   const walletController = new WalletController(

@@ -3,6 +3,7 @@ import { Bet } from '../../entities/Bet';
 import { BetAmount } from '../../value-objects/BetAmount';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { Event, Market } from '../../entities/Event';
+import { TransactionRunner } from '@/core/shared/types/Transaction';
 
 const makeEvent = (status: 'SCHEDULED' | 'LIVE' | 'FINISHED' = 'SCHEDULED') =>
   new Event(
@@ -54,6 +55,35 @@ describe('BetService', () => {
   });
 
   describe('placeBet', () => {
+    it('uses one transaction session for wallet debit and bet creation', async () => {
+      const session = { id: 'bet-transaction' };
+      const transactionRunner: TransactionRunner = {
+        withTransaction: jest.fn(async <T>(work: (session: unknown) => Promise<T>) => work(session)),
+      };
+      const transactionalService = new BetService(
+        betRepository,
+        eventRepository,
+        walletService,
+        undefined,
+        transactionRunner,
+      );
+      eventRepository.findById.mockResolvedValue(makeEvent());
+      walletService.withdraw.mockResolvedValue({ currency: 'BRL', userId: 'user-1' });
+
+      await transactionalService.placeBet({
+        userId: 'user-1',
+        eventId: 'event-1',
+        marketId: 'market-a',
+        oddId: 'odd-a',
+        amount: 100,
+        type: 'SINGLE',
+      });
+
+      expect(transactionRunner.withTransaction).toHaveBeenCalledTimes(1);
+      expect(walletService.withdraw).toHaveBeenCalledWith('user-1', 100, undefined, { session });
+      expect(betRepository.create).toHaveBeenCalledWith(expect.any(Bet), { session });
+    });
+
     it('creates a bet when event, market and odds exist', async () => {
       eventRepository.findById.mockResolvedValue(makeEvent());
       walletService.withdraw.mockResolvedValue({ currency: 'BRL', userId: 'user-1' });

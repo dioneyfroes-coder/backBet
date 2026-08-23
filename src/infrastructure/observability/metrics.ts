@@ -95,6 +95,20 @@ const withdrawalPayoutFailedCounter = new Counter({
   registers: [registry],
 });
 
+const idempotencyClaimCounter = new Counter({
+  name: 'backbet_idempotency_claims_total',
+  help: 'Total de reservas de operações idempotentes',
+  labelNames: ['operation', 'result'],
+  registers: [registry],
+});
+
+const optimisticLockConflictCounter = new Counter({
+  name: 'backbet_optimistic_lock_conflicts_total',
+  help: 'Total de conflitos de optimistic locking',
+  labelNames: ['resource'],
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -111,4 +125,6 @@ export {
   withdrawalRequestProcessingFailedCounter,
   withdrawalPayoutSuccessCounter,
   withdrawalPayoutFailedCounter,
+  idempotencyClaimCounter,
+  optimisticLockConflictCounter,
 };

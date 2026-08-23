@@ -53,10 +53,11 @@ export class FinanceController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const { creditPackage, wallet } = await this.purchaseCreditPackage.execute(
-      userId,
-      payload.packageId,
-    );
+    const idempotencyKey = typeof req.get === 'function' ? req.get('Idempotency-Key') : undefined;
+    const result = idempotencyKey
+      ? await this.purchaseCreditPackage.execute(userId, payload.packageId, idempotencyKey)
+      : await this.purchaseCreditPackage.execute(userId, payload.packageId);
+    const { creditPackage, wallet } = result;
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache after purchase', error),
     );
@@ -83,14 +84,23 @@ export class FinanceController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
-    const request = await this.requestWithdrawal.execute(
-      userId,
-      payload.amount,
-      payload.currency,
-      payload.notes,
-      // forward password (may be undefined). The use-case will enforce if configured to require it.
-      payload.password,
-    );
+    const idempotencyKey = typeof req.get === 'function' ? req.get('Idempotency-Key') : undefined;
+    const request = idempotencyKey
+      ? await this.requestWithdrawal.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          payload.notes,
+          payload.password,
+          idempotencyKey,
+        )
+      : await this.requestWithdrawal.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          payload.notes,
+          payload.password,
+        );
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache after withdrawal request', error),
     );

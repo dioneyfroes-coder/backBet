@@ -9,10 +9,12 @@ describe('User preferences integration', () => {
       ...ORIGINAL_ENV,
       JWT_SECRET: 'test-secret',
       JWT_ISSUER: 'backbet',
-      NODE_ENV: 'development',
-      BACKBET_RUNTIME_ENV: 'development',
+      NODE_ENV: 'test',
+      BACKBET_RUNTIME_ENV: 'test',
       ALLOW_DEV_BEARER_BYPASS: 'true',
     } as NodeJS.ProcessEnv;
+    delete process.env.REDIS_URL;
+    process.env.USE_REDIS_QUEUE = 'false';
   });
 
   afterEach(() => {

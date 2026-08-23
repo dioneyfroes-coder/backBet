@@ -4,11 +4,12 @@ import Queue from 'bull';
 import type { Queue as BullQueue } from 'bull';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
 
-export async function processContactPayload(payload: ContactPayload): Promise<void> {
+async function processContactPayloadOnce(payload: ContactPayload): Promise<void> {
   // Build simple plain-text email
   const subject = `[Contact] ${payload.ticketId}`;
   const text = `Ticket: ${payload.ticketId}\nFrom: ${payload.name ?? 'anonymous'} <$${payload.email ?? 'noreply'}>\n\n${payload.message}`;
@@ -33,6 +34,14 @@ export async function processContactPayload(payload: ContactPayload): Promise<vo
   }
 
   writeStructuredLog({ event: 'contact_sent', ticketId: payload.ticketId, email: payload.email });
+}
+
+export async function processContactPayload(payload: ContactPayload): Promise<void> {
+  await idempotencyService.execute(
+    `contact-email:${payload.ticketId}`,
+    JSON.stringify(payload),
+    () => processContactPayloadOnce(payload),
+  );
 }
 
 export function startContactWorker(): BullQueue {

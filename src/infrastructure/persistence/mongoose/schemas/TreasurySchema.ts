@@ -4,6 +4,7 @@ import { TreasuryLedgerType } from '@/core/treasury/domain/entities/TreasuryLedg
 export interface IHouseTreasuryDocument extends Document {
   _id: mongoose.Types.ObjectId;
   walletId: string;
+  version: number;
   currency: string;
   profitBalance: number;
   prizeReserveBalance: number;
@@ -44,6 +45,12 @@ const houseTreasurySchema = new Schema<IHouseTreasuryDocument>(
       required: true,
       unique: true,
       index: true,
+    },
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
     },
     currency: {
       type: String,

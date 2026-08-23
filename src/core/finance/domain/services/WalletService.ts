@@ -4,6 +4,7 @@ import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
 
 export class WalletService {
   constructor(private walletRepository: IWalletRepository) {}
@@ -24,56 +25,70 @@ export class WalletService {
     return wallet;
   }
 
-  async deposit(userId: string, amount: number, context?: TransactionContext): Promise<Wallet> {
-    const wallet = await this.ensureWalletExists(userId);
+  async deposit(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId, options);
     wallet.deposit(amount, context);
-    await this.walletRepository.update(wallet);
+    wallet.incrementVersion();
+    if (options) await this.walletRepository.update(wallet, options);
+    else await this.walletRepository.update(wallet);
     this.logWalletAction('deposit', wallet, amount, context);
     return wallet;
   }
 
-  async findByUserId(userId: string): Promise<Wallet | null> {
-    return this.walletRepository.findByUserId(userId);
+  async findByUserId(userId: string, options?: WalletRepositoryOptions): Promise<Wallet | null> {
+    return options
+      ? this.walletRepository.findByUserId(userId, options)
+      : this.walletRepository.findByUserId(userId);
   }
 
   async getHistory(userId: string, limit = 10, offset = 0) {
     return this.walletRepository.getHistory(userId, limit, offset);
   }
 
-  async withdraw(userId: string, amount: number, context?: TransactionContext): Promise<Wallet> {
-    const wallet = await this.ensureWalletExists(userId);
+  async withdraw(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId, options);
     wallet.withdraw(amount, context);
-    await this.walletRepository.update(wallet);
+    wallet.incrementVersion();
+    if (options) await this.walletRepository.update(wallet, options);
+    else await this.walletRepository.update(wallet);
     this.logWalletAction('withdraw', wallet, amount, context);
     return wallet;
   }
 
-  async lock(userId: string, amount: number): Promise<Wallet> {
-    const wallet = await this.ensureWalletExists(userId);
+  async lock(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId, options);
     wallet.lock(amount);
-    await this.walletRepository.update(wallet);
+    wallet.incrementVersion();
+    if (options) await this.walletRepository.update(wallet, options);
+    else await this.walletRepository.update(wallet);
     this.logWalletAction('lock', wallet, amount);
     return wallet;
   }
 
-  async unlock(userId: string, amount: number): Promise<Wallet> {
-    const wallet = await this.ensureWalletExists(userId);
+  async unlock(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId, options);
     wallet.unlock(amount);
-    await this.walletRepository.update(wallet);
+    wallet.incrementVersion();
+    if (options) await this.walletRepository.update(wallet, options);
+    else await this.walletRepository.update(wallet);
     this.logWalletAction('unlock', wallet, amount);
     return wallet;
   }
 
-  async withdrawLocked(userId: string, amount: number): Promise<Wallet> {
-    const wallet = await this.ensureWalletExists(userId);
+  async withdrawLocked(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = await this.ensureWalletExists(userId, options);
     wallet.withdrawLocked(amount);
-    await this.walletRepository.update(wallet);
+    wallet.incrementVersion();
+    if (options) await this.walletRepository.update(wallet, options);
+    else await this.walletRepository.update(wallet);
     this.logWalletAction('withdraw_locked', wallet, amount);
     return wallet;
   }
 
-  private async ensureWalletExists(userId: string): Promise<Wallet> {
-    const wallet = await this.walletRepository.findByUserId(userId);
+  private async ensureWalletExists(userId: string, options?: WalletRepositoryOptions): Promise<Wallet> {
+    const wallet = options
+      ? await this.walletRepository.findByUserId(userId, options)
+      : await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new DomainError({
         code: 'WALLET_NOT_FOUND',

@@ -1,4 +1,4 @@
-import { ListAvailableGamesUseCase } from '@/core/game/aplication/use-cases/ListAvailableGamesUseCase';
+import { ListAvailableGamesUseCase } from '@/core/game/application/use-cases/ListAvailableGamesUseCase';
 
 describe('ListAvailableGamesUseCase', () => {
   it('should return games from provider snapshot', () => {

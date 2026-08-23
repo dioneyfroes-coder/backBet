@@ -2,14 +2,34 @@ import { WalletService } from '../../domain/services/WalletService';
 import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
+import { IdempotencyService } from '@/shared/services/IdempotencyService';
 
 export class Deposit {
   constructor(
     private walletService: WalletService,
     private pixProvider: PixProviderPort,
+    private idempotency?: IdempotencyService,
   ) {}
 
-  async execute(userId: string, amount: number, currency: Currency, description?: string) {
+  async execute(
+    userId: string,
+    amount: number,
+    currency: Currency,
+    description?: string,
+    idempotencyKey?: string,
+  ) {
+    const operation = () => this.executeOnce(userId, amount, currency, description);
+    if (!this.idempotency || !idempotencyKey) {
+      return operation();
+    }
+    return this.idempotency.execute(
+      `${userId}:deposit:${idempotencyKey}`,
+      JSON.stringify({ userId, amount, currency, description }),
+      operation,
+    );
+  }
+
+  private async executeOnce(userId: string, amount: number, currency: Currency, description?: string) {
     const charge = await this.pixProvider.createCharge({
       userId,
       amount,

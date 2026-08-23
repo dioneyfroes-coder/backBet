@@ -6,7 +6,7 @@ slug: "/docs/architecture"
 
 # Arquitetura BackBet
 
-O BackBet é um monólito modular escrito em TypeScript/Node 20 que aplica princípios de **DDD**, **ports & adapters** e **observabilidade nativa**. Todo o código vive em `src/` e é separado em camadas coerentes:
+O BackBet é um monólito modular escrito em TypeScript/Node 22+ que aplica princípios de **DDD**, **ports & adapters** e **observabilidade nativa**. Todo o código vive em `src/` e é separado em camadas coerentes:
 
 1. **Interface / API (`src/infrastructure/api`)** – Express 5, controllers, DTOs e middlewares.
 2. **Aplicação (`src/core/**/application`)** – use cases e serviços orquestradores que conversam por interfaces.
@@ -114,10 +114,18 @@ POST /api/auth/register
 ```
 POST /api/wallets/deposit | withdraw
 → WalletController verifica rate limit específico e autenticação
+→ IdempotencyService reserva Idempotency-Key quando fornecida
 → WalletService.deposit/withdraw usa Value Objects Money/Currency
 → Persistência atualiza histórico + locks
 → cacheWalletBalance/cacheWalletHistory são atualizados
 ```
+
+### Concorrência e idempotência
+
+- `HouseWallet.version` é incrementado a cada mutação persistida; o repositório Mongoose inclui a versão anterior no filtro da atualização e retorna `409 CONFLICT` em caso de conflito.
+- `IdempotencyService` usa `SET NX` no Redis para operações financeiras e workers. O resultado concluído pode ser reutilizado; payloads diferentes com a mesma chave são rejeitados.
+- O fallback em memória existe apenas para testes/desenvolvimento. Em produção, Redis e Mongo devem estar habilitados e monitorados.
+- A transação ACID completa entre carteira, aposta e efeitos externos continua pendente.
 
 ### Colocar/Cancelar Aposta
 ```

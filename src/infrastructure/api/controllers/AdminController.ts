@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { ResolveBetUseCase } from '@core/betting/aplication/use-cases/ResolveBetUseCase';
-import { UpdateEventStatusUseCase } from '@core/betting/aplication/use-cases/UpdateEventStatusUseCase';
+import { ResolveBetUseCase } from '@core/betting/application/use-cases/ResolveBetUseCase';
+import { UpdateEventStatusUseCase } from '@core/betting/application/use-cases/UpdateEventStatusUseCase';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { EventCatalogService } from '@core/betting/domain/services/EventCatalogService';
 import { SettleBetDTO, SettleBetDTOType } from '../dtos/AdminDTOs';

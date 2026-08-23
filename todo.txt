@@ -1,0 +1,58 @@
+Análise geral
+
+O projeto está bem estruturado como backend de portfólio ou MVP avançado. A separação por bounded contexts, uso de DDD, interfaces de repositório, factories, testes, validação Zod, observabilidade e suporte a Mongo/Redis são pontos fortes.
+
+A base técnica está acima da média, mas eu ainda não classificaria o sistema como pronto para produção financeira. O principal problema é que algumas garantias estão implementadas apenas parcialmente ou dependem de Redis/cache, enquanto operações financeiras exigem persistência durável e atomicidade verificável.
+
+Riscos mais importantes
+
+Saque Pix
+
+O pagamento externo pode ser iniciado antes do débito interno.
+Uma falha posterior pode gerar pagamento sem débito correspondente.
+Falta reconciliação completa, webhook e estados como PENDING, FAILED e REVERSED.
+Idempotência
+
+A chave ainda é opcional.
+O resultado fica no Redis, não em um registro financeiro único no Mongo.
+Expiração ou indisponibilidade do Redis pode permitir duplicidade.
+Risco
+
+canPlaceBet ainda segue padrão check-then-act.
+Apostas simultâneas podem ultrapassar limites de exposição.
+A exposição pode ser contada duas vezes: pelas apostas pendentes e pelo valor persistido.
+Dinheiro
+
+Money e BetAmount melhoraram bastante ao usar centavos internamente.
+Porém a fronteira inteira ainda usa number: DTOs, entidades, schemas Mongo e relatórios.
+Para produção financeira, o ideal é padronizar centavos como bigint, Decimal128 ou uma biblioteca decimal em todo o fluxo.
+Persistência
+
+Eventos e partidas ainda possuem adapters em memória.
+O histórico está embutido na Wallet.
+Ainda não há ledger financeiro imutável nem Outbox para efeitos externos.
+Segurança
+
+pixKey aparece em metadata/logs e deveria ser mascarada.
+uploads parece estar exposto sem restrição de ambiente.
+O uso de X-Forwarded-For precisa depender de proxy confiável.
+O limite global de body de 10 MB é alto para todas as rotas.
+Testes
+
+A cobertura funcional é boa, mas muitos testes usam mocks e adapters em memória.
+A suíte real MongoDB + Redis está preparada, mas ainda depende do outro computador.
+Ainda falta testar atomicidade real de Wallet + Bet + Risk em Mongo replica set.
+Minha opinião
+
+O projeto tem uma arquitetura boa e demonstra maturidade de engenharia. A nota alta em TypeScript, organização e arquitetura é coerente. A nota baixa em concorrência e “pronto para produção financeira” também é justa.
+
+O código está em um estágio de MVP robusto / backend de portfólio avançado, não de produção financeira definitiva. Os próximos trabalhos devem ser exclusivamente:
+
+executar os testes reais MongoDB + Redis;
+corrigir saque e reconciliação;
+persistir idempotência no Mongo;
+eliminar a dupla contagem de risco;
+padronizar dinheiro exato ponta a ponta;
+mascarar dados sensíveis;
+revisar documentação contra o comportamento real.
+Depois disso, o correto é parar de adicionar funcionalidades e concentrar-se em auditoria, testes de falha, segurança e operação.

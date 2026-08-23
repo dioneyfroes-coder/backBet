@@ -65,4 +65,16 @@ describe('configuration parsing helpers', () => {
       expect(cacheConfig.enabled).toBe(true);
     });
   });
+
+  it('disables cache when BACKBET_RUNTIME_ENV is test even if CACHE_ENABLED is true', async () => {
+    process.env.JWT_SECRET = 'secret';
+    process.env.NODE_ENV = 'development';
+    process.env.BACKBET_RUNTIME_ENV = 'test';
+    process.env.CACHE_ENABLED = 'true';
+
+    await jest.isolateModulesAsync(async () => {
+      const { cacheConfig } = await import('../cacheConfig');
+      expect(cacheConfig.enabled).toBe(false);
+    });
+  });
 });

@@ -32,6 +32,15 @@ describe('GameRound', () => {
     });
   });
 
+  it('normalizes wager and payout to cents', () => {
+    const round = new GameRound(
+      'round-2', 'user-1', 'COIN_FLIP', 0.1, 'BRL', 'HEADS', 'HEADS', 'WIN', 0.2,
+    );
+
+    expect(round.wagerAmount).toBe(0.1);
+    expect(round.payoutAmount).toBe(0.2);
+  });
+
   it.each([
     ['invalid wager', () => new GameRound('id', 'user', 'COIN_FLIP', 0, 'BRL', 'H', 'H', 'WIN', 1)],
     [

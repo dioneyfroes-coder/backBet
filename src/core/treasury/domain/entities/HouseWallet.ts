@@ -37,6 +37,7 @@ export class HouseWallet {
     profitBalance = 0,
     prizeReserveBalance = 0,
     ledgerEntries: TreasuryLedgerEntry[] = [],
+    private _version = 1,
   ) {
     const normalizedCurrency = new CurrencyValueObject(currency).toString();
     this._profit = new Money(Math.max(0, profitBalance), normalizedCurrency);
@@ -52,6 +53,14 @@ export class HouseWallet {
     return this._id;
   }
 
+  get version(): number {
+    return this._version;
+  }
+
+  incrementVersion(): void {
+    this._version += 1;
+  }
+
   get currency(): Currency {
     return this._profit.currency;
   }
@@ -65,7 +74,7 @@ export class HouseWallet {
   }
 
   get totalBalance(): number {
-    return this.profitBalance + this.prizeReserveBalance;
+    return this._profit.add(this._prizeReserve).amount;
   }
 
   recordProfitInflow(

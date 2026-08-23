@@ -3,11 +3,12 @@ import { BaseController } from './BaseController';
 import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import { PlaceBetDTO, CancelBetDTO, PlaceBetDTOType, CancelBetDTOType } from '../dtos/BetDTOs';
 import { BetService } from '@core/betting/domain/services/BetService';
-import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseCase';
-import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
-import { GetUserBetsUseCase } from '@core/betting/aplication/use-cases/GetUserBetsUseCase';
-import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEventUseCase';
+import { PlaceBetUseCase } from '@core/betting/application/use-cases/PlaceBetUseCase';
+import { CancelBetUseCase } from '@core/betting/application/use-cases/CancelBetUseCase';
+import { GetUserBetsUseCase } from '@core/betting/application/use-cases/GetUserBetsUseCase';
+import { GetEventBetsUseCase } from '@core/betting/application/use-cases/GetEventUseCase';
 import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
+import { ICreateBetDTO } from '@/core/betting/types/bet.types';
 
 /**
  * Controller de apostas
@@ -84,14 +85,22 @@ export class BetController extends BaseController {
 
     const payload = this.validateSchema(PlaceBetDTO, req.body) as PlaceBetDTOType;
 
-    const bet = await this.placeBetUseCase.execute({
+    const input: ICreateBetDTO = {
       userId,
       eventId: payload.eventId,
       marketId: payload.marketId,
       oddId: payload.oddId,
       amount: payload.amount,
       type: payload.type === 'MULTIPLE' ? 'MULTIPLE' : 'SINGLE',
-    });
+    };
+    const idempotencyKey = typeof req.get === 'function'
+      ? req.get('Idempotency-Key')
+      : (Array.isArray(req.headers?.['idempotency-key'])
+        ? req.headers['idempotency-key'][0]
+        : req.headers?.['idempotency-key']);
+    const bet = idempotencyKey
+      ? await this.placeBetUseCase.execute(input, idempotencyKey)
+      : await this.placeBetUseCase.execute(input);
     await flushEventOddsCache(payload.eventId).catch((error) =>
       console.warn('Failed to flush event cache', error),
     );

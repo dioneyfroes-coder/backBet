@@ -17,11 +17,11 @@ const walletService = new WalletService(walletRepository);
 export const betService = new BetService(betRepository, eventRepository, walletService);
 
 // Casos de uso (injeção de dependência)
-import { PlaceBetUseCase } from '../aplication/use-cases/PlaceBetUseCase';
-import { CancelBetUseCase } from '../aplication/use-cases/CancelBetUseCase';
-import { ResolveBetUseCase } from '../aplication/use-cases/ResolveBetUseCase';
-import { GetUserBetsUseCase } from '../aplication/use-cases/GetUserBetsUseCase';
-import { GetEventBetsUseCase } from '../aplication/use-cases/GetEventUseCase';
+import { PlaceBetUseCase } from '../application/use-cases/PlaceBetUseCase';
+import { CancelBetUseCase } from '../application/use-cases/CancelBetUseCase';
+import { ResolveBetUseCase } from '../application/use-cases/ResolveBetUseCase';
+import { GetUserBetsUseCase } from '../application/use-cases/GetUserBetsUseCase';
+import { GetEventBetsUseCase } from '../application/use-cases/GetEventUseCase';
 
 export const placeBetUseCase = new PlaceBetUseCase(betService);
 export const cancelBetUseCase = new CancelBetUseCase(betService);

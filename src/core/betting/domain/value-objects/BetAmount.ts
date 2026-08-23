@@ -2,24 +2,30 @@ import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export class BetAmount {
   private static readonly SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
+  private readonly cents: number;
 
   constructor(
-    public readonly value: number,
+    value: number,
     public readonly currency: string,
   ) {
-    this.validate();
+    this.validate(value);
+    this.cents = Math.round(value * 100);
     Object.freeze(this); // garante imutabilidade real do value object
   }
 
-  private validate(): void {
-    if (typeof this.value !== 'number' || isNaN(this.value)) {
+  get value(): number {
+    return this.cents / 100;
+  }
+
+  private validate(value: number): void {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
       throw new DomainError({
         code: 'BET_AMOUNT_INVALID_NUMBER',
         message: 'Bet amount must be a valid number',
       });
     }
 
-    if (this.value <= 0) {
+    if (value <= 0) {
       throw new DomainError({
         code: 'BET_AMOUNT_NON_POSITIVE',
         message: 'Bet amount must be greater than 0',
@@ -40,13 +46,13 @@ export class BetAmount {
   }
 
   multiply(factor: number): BetAmount {
-    if (factor <= 0 || isNaN(factor)) {
+    if (factor <= 0 || !Number.isFinite(factor)) {
       throw new DomainError({
         code: 'BET_AMOUNT_INVALID_MULTIPLIER',
         message: 'Invalid multiplier factor',
       });
     }
-    return new BetAmount(this.value * factor, this.currency);
+    return new BetAmount(Math.round(this.cents * factor) / 100, this.currency);
   }
 
   toString(): string {

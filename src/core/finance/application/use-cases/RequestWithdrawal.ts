@@ -1,15 +1,18 @@
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
+import { WithdrawalRequest } from '@/core/finance/domain/entities/WithdrawalRequest';
 import { Currency } from '@/core/finance/domain/value-objects/Currency';
 import { executeWithWalletErrorMapping } from '@/core/finance/application/errors/WalletErrorMapper';
 import { User } from '@/core/user/domain/entities/User';
 import { UserService } from '@/core/user/domain/services/UserService';
 import { appConfig } from '@/shared/config/appConfig';
 import { AppError } from '@/shared/errors/AppError';
+import { IdempotencyService } from '@/shared/services/IdempotencyService';
 
 export class RequestWithdrawal {
   constructor(
     private withdrawalRequestService: WithdrawalRequestService,
     private userService: UserService,
+    private idempotency?: IdempotencyService,
   ) {}
 
   async execute(
@@ -18,6 +21,7 @@ export class RequestWithdrawal {
     currency: Currency,
     notes?: string,
     password?: string,
+    idempotencyKey?: string,
   ) {
     const user = await this.userService.findById(userId);
     if (!user) {
@@ -43,11 +47,33 @@ export class RequestWithdrawal {
       }
     }
 
-    const request = await executeWithWalletErrorMapping(() =>
-      this.withdrawalRequestService.createRequest(userId, amount, currency, notes),
+    const operation = async () => {
+      const request = await executeWithWalletErrorMapping(() =>
+        this.withdrawalRequestService.createRequest(userId, amount, currency, notes),
+      );
+      await this.verifyUserIfPending(user);
+      return request;
+    };
+    if (!this.idempotency || !idempotencyKey) {
+      return operation();
+    }
+    return this.idempotency.execute(
+      `${userId}:withdrawal-request:${idempotencyKey}`,
+      JSON.stringify({ userId, amount, currency, notes }),
+      operation,
+      (raw) =>
+        new WithdrawalRequest(
+          raw.id,
+          raw.userId,
+          raw.amount,
+          raw.currency,
+          new Date(raw.requestedAt),
+          raw.status,
+          raw.processedAt ? new Date(raw.processedAt) : undefined,
+          raw.notes,
+          raw.approvalLogs,
+        ),
     );
-    await this.verifyUserIfPending(user);
-    return request;
   }
 
   private async verifyUserIfPending(user: User) {

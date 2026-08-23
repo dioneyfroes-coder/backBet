@@ -26,14 +26,16 @@ describe('BetRepository in-memory', () => {
 
   it('creates and finds a bet', async () => {
     await repo.create(bet);
-    expect(await repo.findById('bet-a')).toBe(bet);
-    expect(await repo.findByUserId('user-a')).toContain(bet);
+    expect((await repo.findById('bet-a'))?.id).toBe(bet.id);
+    expect((await repo.findByUserId('user-a')).map((item) => item.id)).toContain(bet.id);
   });
 
   it('updates an existing bet and deletes it', async () => {
     await repo.create(bet);
-    bet.resolve('WON');
-    await repo.update(bet);
+    const stored = await repo.findById('bet-a');
+    stored!.resolve('WON');
+    stored!.incrementVersion();
+    await repo.update(stored!);
     const updated = await repo.findById('bet-a');
     expect(updated?.status).toBe('WON');
     expect(await repo.delete('bet-a')).toBe(true);
@@ -43,6 +45,27 @@ describe('BetRepository in-memory', () => {
   it('returns empty arrays when filters miss', async () => {
     expect(await repo.findByEventId('none')).toEqual([]);
     expect(await repo.findByUserId('none')).toEqual([]);
+  });
+
+  it('rejects a stale concurrent bet update', async () => {
+    await repo.create(bet);
+    const firstRead = await repo.findById(bet.id);
+    const secondRead = await repo.findById(bet.id);
+
+    firstRead!.resolve('WON');
+    firstRead!.incrementVersion();
+    secondRead!.resolve('LOST');
+    secondRead!.incrementVersion();
+
+    await repo.update(firstRead!);
+    await expect(repo.update(secondRead!)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      statusCode: 409,
+    });
+
+    const persisted = await repo.findById(bet.id);
+    expect(persisted?.status).toBe('WON');
+    expect(persisted?.version).toBe(2);
   });
 
   it('ignores updates for unknown bets', async () => {

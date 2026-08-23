@@ -8,6 +8,7 @@ import {
   flushEventOddsCache,
 } from '../cacheHooks';
 import { cacheTTL } from '../cacheKeys';
+import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '../RedisClient';
 
 jest.mock('../RedisClient', () => ({
@@ -23,6 +24,7 @@ describe('cache hooks', () => {
   const loader = jest.fn().mockResolvedValue('value');
 
   beforeEach(() => {
+    cacheConfig.enabled = true;
     cachedMock.mockReset().mockResolvedValue('value');
     delMock.mockReset();
     loader.mockClear();

@@ -1,4 +1,5 @@
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 
 export type GameType = 'COIN_FLIP';
 export type GameResult = 'WIN' | 'LOSE';
@@ -7,20 +8,33 @@ export type CoinFlipChoice = 'HEADS' | 'TAILS';
 export type GameRoundMetadata = Record<string, unknown> | undefined;
 
 export class GameRound {
+  private readonly wager: Money;
+  private readonly payout: Money;
+
   constructor(
     public readonly id: string,
     public readonly userId: string,
     public readonly gameType: GameType,
-    public readonly wagerAmount: number,
+    wagerAmount: number,
     public readonly currency: string,
     public readonly playerChoice: string,
     public readonly outcome: string,
     public readonly result: GameResult,
-    public readonly payoutAmount: number,
+    payoutAmount: number,
     public readonly createdAt: Date = new Date(),
     public readonly metadata?: GameRoundMetadata,
   ) {
+    this.wager = new Money(wagerAmount, this.currency as SupportedCurrency);
+    this.payout = new Money(payoutAmount, this.currency as SupportedCurrency);
     this.validate();
+  }
+
+  get wagerAmount(): number {
+    return this.wager.amount;
+  }
+
+  get payoutAmount(): number {
+    return this.payout.amount;
   }
 
   private validate(): void {

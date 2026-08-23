@@ -4,6 +4,7 @@ import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository
 import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
 import { BetStatus } from '@/core/betting/types/bet.types';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import { RiskRepositoryOptions } from '../repositories/IRiskRepository';
 
 export class RiskService {
   // If repository is provided, use it; otherwise fallback to in-memory map for compatibility/tests
@@ -160,9 +161,10 @@ export class RiskService {
     return true;
   }
 
-  async registerExposure(userId: string, amount: number): Promise<void> {
+  async registerExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void> {
     if (this.riskRepository) {
-      await this.riskRepository.increaseExposure(userId, amount);
+      if (options) await this.riskRepository.increaseExposure(userId, amount, options);
+      else await this.riskRepository.increaseExposure(userId, amount);
       return;
     }
     const profile =
@@ -171,9 +173,10 @@ export class RiskService {
     this.profiles.set(userId, profile);
   }
 
-  async reduceExposure(userId: string, amount: number): Promise<void> {
+  async reduceExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void> {
     if (this.riskRepository) {
-      await this.riskRepository.decreaseExposure(userId, amount);
+      if (options) await this.riskRepository.decreaseExposure(userId, amount, options);
+      else await this.riskRepository.decreaseExposure(userId, amount);
       return;
     }
     const profile = this.profiles.get(userId);

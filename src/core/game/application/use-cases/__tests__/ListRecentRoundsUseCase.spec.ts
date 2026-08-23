@@ -1,4 +1,4 @@
-import { ListRecentRoundsUseCase } from '@/core/game/aplication/use-cases/ListRecentRoundsUseCase';
+import { ListRecentRoundsUseCase } from '@/core/game/application/use-cases/ListRecentRoundsUseCase';
 
 describe('ListRecentRoundsUseCase', () => {
   it('should request recent rounds from repository', async () => {

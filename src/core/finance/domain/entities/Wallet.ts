@@ -13,6 +13,7 @@ export class Wallet {
   constructor(
     private readonly _userId: string,
     currency: Currency,
+    private _version = 1,
   ) {
     const validatedCurrency = new CurrencyValueObject(currency).toString();
     this._balance = new Money(0, validatedCurrency);
@@ -21,6 +22,14 @@ export class Wallet {
 
   get userId(): string {
     return this._userId;
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  incrementVersion(): void {
+    this._version += 1;
   }
 
   get balance(): number {

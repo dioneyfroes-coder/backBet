@@ -12,7 +12,7 @@ slug: "/docs/betting"
 
 ```
 src/core/betting/
-	aplication/
+	application/
 		errors/BetErrorMapper.ts
 		use-cases/*.ts
 	config/bet.ts
@@ -66,7 +66,7 @@ src/infrastructure/
 	- `resolveBet`: muda status para `WON`/`LOST`, credita o pagamento quando aplicável e atualiza o estado.
 	- Leituras: `getUserBets`, `getEventBets`.
 
-- **Casos de uso** (`aplication/use-cases/*.ts`)
+- **Casos de uso** (`application/use-cases/*.ts`)
 	- `PlaceBetUseCase`, `CancelBetUseCase`, `ResolveBetUseCase`, `GetUserBetsUseCase`, `GetEventBetsUseCase` apenas orquestram o serviço e aplicam `executeWithBetErrorMapping`.
 	- O mapper converte `DomainError` em `AppError` com status HTTP consistente.
 
@@ -151,7 +151,7 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 
 ## Testes e qualidade
 
-- `src/core/betting/aplication/use-cases/__tests__/BetUseCases.test.ts`: garante delegação correta e mapeamento de erros.
+- `src/core/betting/application/use-cases/__tests__/BetUseCases.test.ts`: garante delegação correta e mapeamento de erros.
 - `src/core/betting/domain/repositories/__tests__/EventRepository.test.ts`: cobre operações do repositório em memória.
 - Para e2e use `supertest` ou `curl` com os endpoints de `/api/bets`; scripts como `src/scripts/seedInitialData.ts` ajudam a gerar usuários/carteiras antes das chamadas.
 - Rode `npm test -- --testPathPattern=betting` para focar somente no módulo.

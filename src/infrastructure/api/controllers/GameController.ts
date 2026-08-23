@@ -4,10 +4,10 @@ import { PlayCoinFlipBatchDTO, PlayCoinFlipBatchDTOType } from '../dtos/GameDTOs
 // Remover qualquer duplicidade de export class GameController e garantir que todos os métodos estejam presentes.
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { PlayCoinFlipUseCase } from '@core/game/aplication/use-cases/PlayCoinFlipUseCase';
-import { ListAvailableGamesUseCase } from '@core/game/aplication/use-cases/ListAvailableGamesUseCase';
-import { GetGameHistoryUseCase } from '@core/game/aplication/use-cases/GetGameHistoryUseCase';
-import { ListRecentRoundsUseCase } from '@core/game/aplication/use-cases/ListRecentRoundsUseCase';
+import { PlayCoinFlipUseCase } from '@core/game/application/use-cases/PlayCoinFlipUseCase';
+import { ListAvailableGamesUseCase } from '@core/game/application/use-cases/ListAvailableGamesUseCase';
+import { GetGameHistoryUseCase } from '@core/game/application/use-cases/GetGameHistoryUseCase';
+import { ListRecentRoundsUseCase } from '@core/game/application/use-cases/ListRecentRoundsUseCase';
 import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
 import { PlayCoinFlipDTO, PlayCoinFlipDTOType, ListHistoryQueryDTO } from '../dtos/GameDTOs';
 import { CoinFlipConfig } from '@core/game/domain/services/CoinFlipGameService';
@@ -100,11 +100,19 @@ export class GameController extends BaseController {
 
     const payload = this.validateSchema(PlayCoinFlipDTO, req.body) as PlayCoinFlipDTOType;
     // Ignora o valor enviado pelo usuário e usa o valor fixo da configuração
-    const round = await this.playCoinFlipUseCase.execute({
+    const input = {
       userId,
       choice: payload.choice,
       wager: this.coinFlipConfig.minBet,
-    });
+    };
+    const idempotencyKey = typeof req.get === 'function'
+      ? req.get('Idempotency-Key')
+      : (Array.isArray(req.headers?.['idempotency-key'])
+        ? req.headers['idempotency-key'][0]
+        : req.headers?.['idempotency-key']);
+    const round = idempotencyKey
+      ? await this.playCoinFlipUseCase.execute(input, idempotencyKey)
+      : await this.playCoinFlipUseCase.execute(input);
     return this.ok(res, round.toJSON());
   }
 
@@ -146,8 +154,16 @@ export class GameController extends BaseController {
     const wager = this.coinFlipConfig.minBet;
     const rounds = [];
     let totalPrize = 0;
-    for (const choice of payload.choices) {
-      const round = await this.playCoinFlipUseCase.execute({ userId, choice, wager });
+    const idempotencyKey = typeof req.get === 'function'
+      ? req.get('Idempotency-Key')
+      : (Array.isArray(req.headers?.['idempotency-key'])
+        ? req.headers['idempotency-key'][0]
+        : req.headers?.['idempotency-key']);
+    for (const [index, choice] of payload.choices.entries()) {
+      const input = { userId, choice, wager };
+      const round = idempotencyKey
+        ? await this.playCoinFlipUseCase.execute(input, `${idempotencyKey}:${index}`)
+        : await this.playCoinFlipUseCase.execute(input);
       rounds.push(round.toJSON());
       totalPrize += round.payoutAmount - wager;
     }

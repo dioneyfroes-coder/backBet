@@ -67,4 +67,9 @@ describe('BetAmount value object', () => {
     expect(multiplied.value).toBe(25);
     expect(multiplied.currency).toBe('EUR');
   });
+
+  it('rounds monetary multiplication to cents', () => {
+    const amount = new BetAmount(0.1, 'BRL');
+    expect(amount.multiply(3).value).toBe(0.3);
+  });
 });

@@ -18,6 +18,7 @@ export interface UserRecord {
 
 export interface BetRecord {
   _id: MongoId;
+  version: number;
   userId: string;
   eventId: string;
   marketId: string;
@@ -48,6 +49,7 @@ export interface WalletTransactionRecord {
 export interface WalletRecord {
   _id: MongoId;
   userId: string;
+  version: number;
   balance: number;
   lockedBalance: number;
   currency: string;
@@ -78,6 +80,7 @@ export interface TreasuryLedgerRecord {
 export interface HouseTreasuryRecord {
   _id: MongoId;
   walletId: string;
+  version: number;
   currency: string;
   profitBalance: number;
   prizeReserveBalance: number;

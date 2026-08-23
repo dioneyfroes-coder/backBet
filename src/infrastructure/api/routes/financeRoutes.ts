@@ -22,6 +22,7 @@ import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { UserService } from '@/core/user/domain/services/UserService';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 export type FinanceRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -55,8 +56,8 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
 
   const financeController = new FinanceController(
     new ListCreditPackages(creditPackageService),
-    new PurchaseCreditPackage(creditPackageService, walletService),
-    new RequestWithdrawal(withdrawalRequestService, userService),
+    new PurchaseCreditPackage(creditPackageService, walletService, idempotencyService),
+    new RequestWithdrawal(withdrawalRequestService, userService, idempotencyService),
     new GetWithdrawalRequests(withdrawalRequestService),
     new ProcessWithdrawalRequest(withdrawalRequestService),
   );

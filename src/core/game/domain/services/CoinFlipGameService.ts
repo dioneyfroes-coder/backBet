@@ -5,6 +5,7 @@ import { IGameRoundRepository } from '../repositories/IGameRoundRepository';
 import { GameIntegrationPort } from '../ports/GameIntegrationPort';
 import { IWalletService } from '@/core/finance/domain/services/IWalletService';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 
 export type CoinFlipConfig = {
   enabled?: boolean;
@@ -71,13 +72,16 @@ export class CoinFlipGameService {
     }
 
     const result = this.engine.play({ choice: input.choice });
-    const payout = this.calculatePayout(input.wager);
+    const currency = updatedWallet.currency ?? 'BRL';
+    const payout = this.calculatePayout(input.wager, currency);
 
     // Libera o valor "preso" e faz o fluxo de crédito/desbloqueio
     if (result.win) {
       // Retira o valor travado e credita prêmio + aposta
       await this.walletService.withdrawLocked(input.userId, input.wager);
-      const totalReturn = Number((input.wager + payout).toFixed(2));
+      const totalReturn = new Money(input.wager, currency)
+        .add(new Money(payout, currency))
+        .amount;
       await this.walletService.deposit(input.userId, totalReturn);
     } else {
       // Apenas retira o valor travado (aposta perdida)
@@ -89,7 +93,7 @@ export class CoinFlipGameService {
       input.userId,
       'COIN_FLIP',
       Number(input.wager.toFixed(2)),
-      updatedWallet.currency ?? 'BRL',
+      currency,
       input.choice,
       result.outcome,
       result.win ? 'WIN' : 'LOSE',
@@ -126,10 +130,12 @@ export class CoinFlipGameService {
     }
   }
 
-  private calculatePayout(wager: number): number {
+  private calculatePayout(wager: number, currency: string): number {
     if (this.config.fixedWinAmount && this.config.fixedWinAmount > 0) {
-      return Number(this.config.fixedWinAmount.toFixed(2));
+      return new Money(this.config.fixedWinAmount, currency as 'BRL' | 'USD' | 'EUR').amount;
     }
-    return Number((wager * this.config.payoutMultiplier).toFixed(2));
+    return new Money(wager, currency as 'BRL' | 'USD' | 'EUR')
+      .multiply(this.config.payoutMultiplier)
+      .amount;
   }
 }

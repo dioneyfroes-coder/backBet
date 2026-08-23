@@ -4,6 +4,7 @@ import { BetStatus, BetType } from '../../types/bet.types';
 import { BetAmount } from '../value-objects/BetAmount';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 
 export class Bet {
   private _status: BetStatus;
@@ -20,8 +21,9 @@ export class Bet {
     status: BetStatus,
     public readonly type: BetType,
     public readonly createdAt: Date,
-    resolvedAt: Date,
-    cancellationReason: string,
+    resolvedAt?: Date,
+    cancellationReason?: string,
+    private _version = 1,
   ) {
     this._status = status;
     this._resolvedAt = resolvedAt;
@@ -42,8 +44,18 @@ export class Bet {
     return this._cancellationReason;
   }
 
+  get version(): number {
+    return this._version;
+  }
+
+  incrementVersion(): void {
+    this._version += 1;
+  }
+
   get potentialReturn(): number {
-    return this.odds.calculatePotentialReturn(this.amount.value);
+    return new Money(this.amount.value, this.amount.currency as SupportedCurrency)
+      .multiply(this.odds.value)
+      .amount;
   }
 
   // ---------- Domain Methods ----------

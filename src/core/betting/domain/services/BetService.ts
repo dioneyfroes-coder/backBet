@@ -3,13 +3,15 @@
 import { Bet } from '../entities/Bet';
 import { Event, Market } from '../entities/Event';
 import { BetFactory } from '../factories/BetFactory';
-import { IBetRepository } from '../repositories/IBetRepository';
+import { IBetRepository, BetRepositoryOptions } from '../repositories/IBetRepository';
 import { IEventRepository } from '../repositories/IEventRepository';
 import { IWalletService } from '@/core/finance/domain/services/IWalletService';
 import { ICreateBetDTO, ICancelBetDTO, IResolveBetDTO } from '../../types/bet.types';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
+import { TransactionRunner, TransactionSession } from '@/core/shared/types/Transaction';
+import { WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 
 export class BetService {
   constructor(
@@ -17,6 +19,7 @@ export class BetService {
     private eventRepository: IEventRepository,
     private walletService: IWalletService,
     private riskService?: RiskService,
+    private transactionRunner?: TransactionRunner,
   ) {}
 
   async placeBet(input: ICreateBetDTO): Promise<Bet> {
@@ -42,70 +45,88 @@ export class BetService {
       }
     }
 
-    const wallet = await this.walletService.withdraw(input.userId, input.amount);
-
-    const bet = BetFactory.createPendingBet({
-      userId: input.userId,
-      eventId: input.eventId,
-      marketId: input.marketId,
-      amount: input.amount,
-      currency: wallet.currency ?? 'BRL',
-      odds: odd,
-      type: input.type,
-    });
-
-    await this.betRepository.create(bet);
-
-    // register exposure (reserve) after successful creation
-    if (this.riskService) {
-      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
-      await this.riskService.registerExposure(bet.userId, liability);
-    }
+    const operation = async (session?: TransactionSession) => {
+      const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
+      const wallet = options
+        ? await this.walletService.withdraw(input.userId, input.amount, undefined, options)
+        : await this.walletService.withdraw(input.userId, input.amount);
+      const bet = BetFactory.createPendingBet({
+        userId: input.userId,
+        eventId: input.eventId,
+        marketId: input.marketId,
+        amount: input.amount,
+        currency: wallet.currency ?? 'BRL',
+        odds: odd,
+        type: input.type,
+      });
+      if (session) await this.betRepository.create(bet, { session });
+      else await this.betRepository.create(bet);
+      if (this.riskService) {
+        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
+        if (options) await this.riskService.registerExposure(bet.userId, liability, options);
+        else await this.riskService.registerExposure(bet.userId, liability);
+      }
+      return bet;
+    };
+    const bet = this.transactionRunner
+      ? await this.transactionRunner.withTransaction(operation)
+      : await operation();
 
     return bet;
   }
 
   async cancelBet(input: ICancelBetDTO): Promise<Bet> {
-    const bet = await this.getBetOrThrow(input.betId);
-    const event = await this.getEventOrThrow(bet.eventId);
-    if (event.status !== 'SCHEDULED') {
-      throw new DomainError({
-        code: 'EVENT_NOT_CANCELABLE',
-        message: 'Cannot cancel bet on ongoing or finished event',
-        details: { status: event.status, eventId: event.id },
-      });
-    }
-
-    bet.cancel(input.reason);
-
-    // release exposure
-    if (this.riskService) {
-      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
-      await this.riskService.reduceExposure(bet.userId, liability);
-    }
-
-    await this.walletService.deposit(bet.userId, bet.amount.value);
-    await this.betRepository.update(bet);
-
-    return bet;
+    const operation = async (session?: TransactionSession) => {
+      const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
+      const event = await this.getEventOrThrow(bet.eventId);
+      if (event.status !== 'SCHEDULED') {
+        throw new DomainError({
+          code: 'EVENT_NOT_CANCELABLE',
+          message: 'Cannot cancel bet on ongoing or finished event',
+          details: { status: event.status, eventId: event.id },
+        });
+      }
+      bet.cancel(input.reason);
+      if (this.riskService) {
+        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
+        if (session) await this.riskService.reduceExposure(bet.userId, liability, { session });
+        else await this.riskService.reduceExposure(bet.userId, liability);
+      }
+      const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
+      if (options) await this.walletService.deposit(bet.userId, bet.amount.value, undefined, options);
+      else await this.walletService.deposit(bet.userId, bet.amount.value);
+      bet.incrementVersion();
+      if (session) await this.betRepository.update(bet, { session });
+      else await this.betRepository.update(bet);
+      return bet;
+    };
+    return this.transactionRunner
+      ? this.transactionRunner.withTransaction(operation)
+      : operation();
   }
 
   async resolveBet(input: IResolveBetDTO): Promise<Bet> {
-    const bet = await this.getBetOrThrow(input.betId);
-    bet.resolve(input.result);
-
-    // reduce exposure for resolved bet
-    if (this.riskService) {
-      const liability = Number((bet.amount.value * (bet.odds.value - 1)).toFixed(2));
-      await this.riskService.reduceExposure(bet.userId, liability);
-    }
-
-    if (input.result === 'WON') {
-      await this.walletService.deposit(bet.userId, bet.potentialReturn);
-    }
-
-    await this.betRepository.update(bet);
-    return bet;
+    const operation = async (session?: TransactionSession) => {
+      const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
+      bet.resolve(input.result);
+      if (this.riskService) {
+        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
+        if (session) await this.riskService.reduceExposure(bet.userId, liability, { session });
+        else await this.riskService.reduceExposure(bet.userId, liability);
+      }
+      if (input.result === 'WON') {
+        const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
+        if (options) await this.walletService.deposit(bet.userId, bet.potentialReturn, undefined, options);
+        else await this.walletService.deposit(bet.userId, bet.potentialReturn);
+      }
+      bet.incrementVersion();
+      if (session) await this.betRepository.update(bet, { session });
+      else await this.betRepository.update(bet);
+      return bet;
+    };
+    return this.transactionRunner
+      ? this.transactionRunner.withTransaction(operation)
+      : operation();
   }
 
   async getUserBets(userId: string): Promise<Bet[]> {
@@ -152,8 +173,10 @@ export class BetService {
     return odd;
   }
 
-  private async getBetOrThrow(betId: string): Promise<Bet> {
-    const bet = await this.betRepository.findById(betId);
+  private async getBetOrThrow(betId: string, options?: BetRepositoryOptions): Promise<Bet> {
+    const bet = options
+      ? await this.betRepository.findById(betId, options)
+      : await this.betRepository.findById(betId);
     if (!bet) {
       throw new DomainError({
         code: 'BET_NOT_FOUND',

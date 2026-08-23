@@ -91,6 +91,32 @@ export class RedisClient {
     }
   }
 
+  async setIfAbsent<T>(
+    key: string,
+    value: T,
+    ttlSeconds: number = cacheConfig.defaultTTLSeconds,
+  ): Promise<boolean> {
+    try {
+      const client = this.getRedis();
+      if (!client) {
+        return false;
+      }
+      const result = await this.runWithBreaker(() =>
+        client.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX'),
+      );
+      if (result === 'OK') {
+        this.metrics.writes += 1;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      recordRetryFailure('redis');
+      this.metrics.errors += 1;
+      console.warn('Cache conditional write failed', key, error);
+      return false;
+    }
+  }
+
   async del(key: string): Promise<void> {
     try {
       const client = this.getRedis();
@@ -132,6 +158,14 @@ export class RedisClient {
       this.metrics.errors += 1;
       throw error;
     }
+  }
+
+  async quit(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+    await this.client.quit();
+    this.client = null;
   }
 }
 

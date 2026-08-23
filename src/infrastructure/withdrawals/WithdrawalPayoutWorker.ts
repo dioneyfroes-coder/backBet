@@ -8,10 +8,11 @@ import {
 import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithdrawalQueue';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 
-export async function processWithdrawalPayload(
+async function processWithdrawalPayloadOnce(
   payload: WithdrawalPayoutPayload,
   paymentAdapter?: IPaymentPort,
 ): Promise<void> {
@@ -57,6 +58,17 @@ export async function processWithdrawalPayload(
     writeStructuredLog({ event: 'withdrawal_payout_error', requestId: payload.requestId, err });
     throw err;
   }
+}
+
+export async function processWithdrawalPayload(
+  payload: WithdrawalPayoutPayload,
+  paymentAdapter?: IPaymentPort,
+): Promise<void> {
+  await idempotencyService.execute(
+    `withdrawal-payout:${payload.requestId}`,
+    JSON.stringify(payload),
+    () => processWithdrawalPayloadOnce(payload, paymentAdapter),
+  );
 }
 
 export function startWithdrawalWorker(): BullQueue {

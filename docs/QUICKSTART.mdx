@@ -145,6 +145,18 @@ Variáveis relevantes:
 | `npm run migration:run` | Runner de migrations (Mongo) |
 | `npm run seed:initial` / `npm run seed:credit-packages` | Seeds utilitários |
 
+Para executar a suíte de integração real com MongoDB e Redis, isole um banco de teste e rode:
+
+```bash
+RUN_REAL_INTEGRATION_TESTS=true \
+MONGODB_URI=mongodb://localhost:27017/backbet-integration \
+MONGODB_DB_NAME=backbet-integration \
+REDIS_URL=redis://localhost:6379 \
+npm test -- --runInBand src/integration/__tests__/mongo-redis.integration.test.ts
+```
+
+Essa suíte é ignorada quando `RUN_REAL_INTEGRATION_TESTS` não é `true`; nunca aponte para dados de produção.
+
 ## 7. Smoke test rápido
 
 Após `npm run dev` ou `npm start`:

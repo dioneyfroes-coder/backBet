@@ -156,16 +156,26 @@ export class WalletController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
+    const idempotencyKey = this.getIdempotencyKey(req);
+    const depositResult = idempotencyKey
+      ? await this.depositUseCase.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          payload.description,
+          idempotencyKey,
+        )
+      : await this.depositUseCase.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          payload.description,
+        );
     const {
       wallet: updatedWallet,
       pixCharge,
       pixConfirmation,
-    } = await this.depositUseCase.execute(
-      userId,
-      payload.amount,
-      payload.currency,
-      payload.description,
-    );
+    } = depositResult;
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
@@ -272,13 +282,24 @@ export class WalletController extends BaseController {
       effectivePixKey = user.pixKey;
     }
 
-    const { wallet: updatedWallet, pixPayout } = await this.withdrawUseCase.execute(
-      userId,
-      payload.amount,
-      payload.currency,
-      effectivePixKey,
-      payload.description,
-    );
+    const idempotencyKey = this.getIdempotencyKey(req);
+    const withdrawResult = idempotencyKey
+      ? await this.withdrawUseCase.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          effectivePixKey,
+          payload.description,
+          idempotencyKey,
+        )
+      : await this.withdrawUseCase.execute(
+          userId,
+          payload.amount,
+          payload.currency,
+          effectivePixKey,
+          payload.description,
+        );
+    const { wallet: updatedWallet, pixPayout } = withdrawResult;
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
@@ -353,5 +374,12 @@ export class WalletController extends BaseController {
       transactions: result.transactions,
       pagination: { limit, offset, total: result.total },
     });
+  }
+
+  private getIdempotencyKey(req: Request): string | undefined {
+    const headerValue = typeof req.get === 'function' ? req.get('Idempotency-Key') : undefined;
+    const fallbackValue = req.headers?.['idempotency-key'];
+    const value = headerValue ?? (Array.isArray(fallbackValue) ? fallbackValue[0] : fallbackValue);
+    return value?.trim() || undefined;
   }
 }

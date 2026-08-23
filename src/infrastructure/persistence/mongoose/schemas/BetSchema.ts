@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IBetDocument extends Document {
   _id: mongoose.Types.ObjectId;
+  version: number;
   userId: string;
   eventId: string;
   marketId: string;
@@ -24,6 +25,12 @@ const betSchema = new Schema<IBetDocument>(
       type: String,
       required: true,
       index: true,
+    },
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
     },
     eventId: {
       type: String,

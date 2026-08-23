@@ -1,4 +1,4 @@
-import { PlayCoinFlipUseCase } from '@/core/game/aplication/use-cases/PlayCoinFlipUseCase';
+import { PlayCoinFlipUseCase } from '@/core/game/application/use-cases/PlayCoinFlipUseCase';
 import { GameRound } from '@/core/game/domain/entities/GameRound';
 
 const buildRound = () =>

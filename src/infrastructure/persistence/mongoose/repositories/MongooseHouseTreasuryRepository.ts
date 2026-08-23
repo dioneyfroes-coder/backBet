@@ -1,18 +1,25 @@
 import { AppError } from '@/shared/errors/AppError';
 import { IHouseTreasuryRepository } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
+import { TreasuryRepositoryOperationOptions } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
 import { HouseWallet } from '@/core/treasury/domain/entities/HouseWallet';
 import { TreasuryLedgerEntry } from '@/core/treasury/domain/entities/TreasuryLedgerEntry';
 import { HouseTreasuryModel, IHouseTreasuryDocument } from '../schemas/TreasurySchema';
 import { HouseTreasuryRecord, TreasuryLedgerRecord } from '@/types/persistence';
+import { optimisticLockConflictCounter } from '@/infrastructure/observability/metrics';
 
 type PersistedRecord = Omit<HouseTreasuryRecord, '_id'> & {
   _id: HouseTreasuryRecord['_id'] | { toString(): string };
+  version?: number;
 };
 
 export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository {
-  async getById(walletId: string): Promise<HouseWallet | null> {
+  async getById(walletId: string, options: TreasuryRepositoryOperationOptions = {}): Promise<HouseWallet | null> {
     try {
-      const record = await HouseTreasuryModel.findOne({ walletId }).lean<PersistedRecord | null>();
+      const query = HouseTreasuryModel.findOne({ walletId });
+      if (options.session) {
+        query.session(options.session as never);
+      }
+      const record = await query.lean<PersistedRecord | null>();
       if (!record) {
         return null;
       }
@@ -23,12 +30,16 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     }
   }
 
-  async save(wallet: HouseWallet): Promise<HouseWallet> {
+  async save(wallet: HouseWallet, options: TreasuryRepositoryOperationOptions = {}): Promise<HouseWallet> {
     try {
-      await HouseTreasuryModel.findOneAndUpdate({ walletId: wallet.id }, this.serialize(wallet), {
+      const query = HouseTreasuryModel.findOneAndUpdate({ walletId: wallet.id }, this.serialize(wallet), {
         upsert: true,
         new: true,
       });
+      if (options.session) {
+        query.session(options.session as never);
+      }
+      await query;
       return wallet;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
@@ -36,15 +47,33 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     }
   }
 
-  async update(wallet: HouseWallet): Promise<HouseWallet> {
+  async update(wallet: HouseWallet, options: TreasuryRepositoryOperationOptions = {}): Promise<HouseWallet> {
     try {
-      const result = await HouseTreasuryModel.findOneAndUpdate(
-        { walletId: wallet.id },
-        this.serialize(wallet),
+      const query = HouseTreasuryModel.findOneAndUpdate(
+        {
+          walletId: wallet.id,
+          $or: [
+            { version: wallet.version - 1 },
+            ...(wallet.version === 1 ? [{ version: { $exists: false } }] : []),
+          ],
+        },
+        { ...this.serialize(wallet), version: wallet.version },
         { new: true },
       );
+      if (options.session) {
+        query.session(options.session as never);
+      }
+      const result = await query;
       if (!result) {
-        throw new AppError('Tesouraria não encontrada', 'NOT_FOUND', 404);
+        const existing = await HouseTreasuryModel.exists({ walletId: wallet.id });
+        if (!existing) {
+          throw new AppError('Tesouraria não encontrada', 'NOT_FOUND', 404);
+        }
+        optimisticLockConflictCounter.inc({ resource: 'house_treasury' });
+        throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar tesouraria', 409, {
+          walletId: wallet.id,
+          expectedVersion: wallet.version - 1,
+        });
       }
       return wallet;
     } catch (error) {
@@ -56,9 +85,19 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     }
   }
 
+  async withTransaction<T>(work: (session: unknown) => Promise<T>): Promise<T> {
+    const session = await HouseTreasuryModel.startSession();
+    try {
+      return await session.withTransaction(() => work(session));
+    } finally {
+      await session.endSession();
+    }
+  }
+
   private serialize(wallet: HouseWallet): Partial<IHouseTreasuryDocument> {
     return {
       walletId: wallet.id,
+      version: wallet.version,
       currency: wallet.currency,
       profitBalance: wallet.profitBalance,
       prizeReserveBalance: wallet.prizeReserveBalance,
@@ -86,6 +125,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       record.profitBalance,
       record.prizeReserveBalance,
       ledgerEntries,
+      record.version ?? 1,
     );
   }
 

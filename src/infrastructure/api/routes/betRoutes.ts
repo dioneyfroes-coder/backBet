@@ -13,15 +13,16 @@ import {
 import { createRiskRepository } from '@/infrastructure/persistence/factory';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { WalletService } from '@core/finance/domain/services/WalletService';
-import { PlaceBetUseCase } from '@core/betting/aplication/use-cases/PlaceBetUseCase';
-import { CancelBetUseCase } from '@core/betting/aplication/use-cases/CancelBetUseCase';
-import { GetUserBetsUseCase } from '@core/betting/aplication/use-cases/GetUserBetsUseCase';
-import { GetEventBetsUseCase } from '@core/betting/aplication/use-cases/GetEventUseCase';
+import { PlaceBetUseCase } from '@core/betting/application/use-cases/PlaceBetUseCase';
+import { CancelBetUseCase } from '@core/betting/application/use-cases/CancelBetUseCase';
+import { GetUserBetsUseCase } from '@core/betting/application/use-cases/GetUserBetsUseCase';
+import { GetEventBetsUseCase } from '@core/betting/application/use-cases/GetEventUseCase';
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { appConfig } from '@/shared/config/appConfig';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 export type BetRoutesDeps = {
   betRepository?: IBetRepository;
@@ -41,10 +42,19 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
   const riskRepository: IRiskRepository = await createRiskRepository();
   const riskService = new RiskService(riskRepository, betRepository);
 
-  const betService = new BetService(betRepository, eventRepository, walletService, riskService);
+  const transactionRunner = walletRepository.withTransaction
+    ? { withTransaction: walletRepository.withTransaction.bind(walletRepository) }
+    : undefined;
+  const betService = new BetService(
+    betRepository,
+    eventRepository,
+    walletService,
+    riskService,
+    transactionRunner,
+  );
 
   // use-cases (thin wrappers / orchestration)
-  const placeBetUseCase = new PlaceBetUseCase(betService);
+  const placeBetUseCase = new PlaceBetUseCase(betService, idempotencyService);
   const cancelBetUseCase = new CancelBetUseCase(betService);
   const getUserBetsUseCase = new GetUserBetsUseCase(betService);
   const getEventBetsUseCase = new GetEventBetsUseCase(betService);

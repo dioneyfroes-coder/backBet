@@ -39,6 +39,11 @@ describe('Money Value Object', () => {
       const money = new Money(99.99, 'BRL');
       expect(money.amount).toBe(99.99);
     });
+
+    it('should keep arithmetic exact to the cent', () => {
+      const result = new Money(0.1, 'BRL').add(new Money(0.2, 'BRL'));
+      expect(result.amount).toBe(0.3);
+    });
   });
 
   describe('add method', () => {

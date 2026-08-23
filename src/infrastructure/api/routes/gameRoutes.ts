@@ -9,16 +9,17 @@ import {
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { CoinFlipEngine } from '@core/game/domain/services/CoinFlipEngine';
 import { CoinFlipGameService } from '@core/game/domain/services/CoinFlipGameService';
-import { PlayCoinFlipUseCase } from '@core/game/aplication/use-cases/PlayCoinFlipUseCase';
-import { ListAvailableGamesUseCase } from '@core/game/aplication/use-cases/ListAvailableGamesUseCase';
-import { GetGameHistoryUseCase } from '@core/game/aplication/use-cases/GetGameHistoryUseCase';
-import { ListRecentRoundsUseCase } from '@core/game/aplication/use-cases/ListRecentRoundsUseCase';
+import { PlayCoinFlipUseCase } from '@core/game/application/use-cases/PlayCoinFlipUseCase';
+import { ListAvailableGamesUseCase } from '@core/game/application/use-cases/ListAvailableGamesUseCase';
+import { GetGameHistoryUseCase } from '@core/game/application/use-cases/GetGameHistoryUseCase';
+import { ListRecentRoundsUseCase } from '@core/game/application/use-cases/ListRecentRoundsUseCase';
 import { GameController } from '../controllers/GameController';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { IGameRoundRepository } from '@core/game/domain/repositories/IGameRoundRepository';
 import { GameIntegrationPort } from '@core/game/domain/ports/GameIntegrationPort';
 import { createGameIntegrationAdapter } from '@/infrastructure/game/adapterFactory';
 import { appConfig } from '@/shared/config/appConfig';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 export type GameRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -53,7 +54,7 @@ export async function createGameRoutes(deps: GameRoutesDeps = {}): Promise<Route
   );
 
   const gameController = new GameController(
-    new PlayCoinFlipUseCase(coinFlipService),
+    new PlayCoinFlipUseCase(coinFlipService, idempotencyService),
     new ListAvailableGamesUseCase(() => [
       {
         id: 'coin-flip',

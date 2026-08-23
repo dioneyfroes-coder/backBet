@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { BaseController } from './BaseController';
-import { ListEventsUseCase } from '@core/betting/aplication/use-cases/ListEventsUseCase';
-import { GetEventDetailsUseCase } from '@core/betting/aplication/use-cases/GetEventDetailsUseCase';
-import { GetUpcomingEventsUseCase } from '@core/betting/aplication/use-cases/GetUpcomingEventsUseCase';
-import { ListEventCategoriesUseCase } from '@core/betting/aplication/use-cases/ListEventCategoriesUseCase';
+import { ListEventsUseCase } from '@core/betting/application/use-cases/ListEventsUseCase';
+import { GetEventDetailsUseCase } from '@core/betting/application/use-cases/GetEventDetailsUseCase';
+import { GetUpcomingEventsUseCase } from '@core/betting/application/use-cases/GetUpcomingEventsUseCase';
+import { ListEventCategoriesUseCase } from '@core/betting/application/use-cases/ListEventCategoriesUseCase';
 import { ListEventsQueryDTO, ListEventsQueryDTOType } from '../dtos/EventDTOs';
 import { Event } from '@core/betting/domain/entities/Event';
 

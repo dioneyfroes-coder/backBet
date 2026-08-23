@@ -1,4 +1,4 @@
-import { GetGameHistoryUseCase } from '@/core/game/aplication/use-cases/GetGameHistoryUseCase';
+import { GetGameHistoryUseCase } from '@/core/game/application/use-cases/GetGameHistoryUseCase';
 import { GameRound } from '@/core/game/domain/entities/GameRound';
 
 const historyMock = [

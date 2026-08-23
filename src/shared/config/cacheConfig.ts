@@ -8,7 +8,8 @@ const parsePositiveInt = (value: string | undefined, fallback: number): number =
   return parsed;
 };
 
-const cacheEnabled = env.CACHE_ENABLED?.toLowerCase() !== 'false' && env.NODE_ENV !== 'test';
+const runtimeEnv = env.BACKBET_RUNTIME_ENV || env.NODE_ENV || 'development';
+const cacheEnabled = env.CACHE_ENABLED?.toLowerCase() !== 'false' && runtimeEnv !== 'test';
 
 export const cacheConfig = {
   redisUrl: env.REDIS_URL || 'redis://localhost:6379',

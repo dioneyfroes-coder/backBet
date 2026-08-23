@@ -8,19 +8,26 @@ const SUPPORTED_CURRENCIES = ['BRL', 'USD', 'EUR'] as const;
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 export class Money {
+  private readonly cents: number;
+
   constructor(
-    public readonly amount: number,
+    amount: number,
     public readonly currency: SupportedCurrency,
   ) {
-    this.validate();
+    this.validate(amount);
+    this.cents = Math.round(amount * 100);
   }
 
-  private validate(): void {
-    if (typeof this.amount !== 'number' || Number.isNaN(this.amount) || this.amount < 0) {
+  get amount(): number {
+    return this.cents / 100;
+  }
+
+  private validate(amount: number): void {
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
       throw new DomainError({
         code: 'MONEY_INVALID_AMOUNT',
         message: 'Invalid money amount',
-        details: { amount: this.amount },
+        details: { amount },
       });
     }
     if (!SUPPORTED_CURRENCIES.includes(this.currency)) {
@@ -34,12 +41,12 @@ export class Money {
 
   add(other: Money): Money {
     this.ensureSameCurrency(other, 'Cannot add money with different currencies');
-    return new Money(this.amount + other.amount, this.currency);
+    return new Money((this.cents + other.cents) / 100, this.currency);
   }
 
   subtract(other: Money): Money {
     this.ensureSameCurrency(other, 'Cannot subtract money with different currencies');
-    const result = this.amount - other.amount;
+    const result = this.cents - other.cents;
     if (result < 0) {
       throw new DomainError({
         code: 'MONEY_NEGATIVE_RESULT',
@@ -47,18 +54,18 @@ export class Money {
         details: { minuend: this.amount, subtrahend: other.amount },
       });
     }
-    return new Money(result, this.currency);
+    return new Money(result / 100, this.currency);
   }
 
   multiply(factor: number): Money {
-    if (factor < 0) {
+    if (!Number.isFinite(factor) || factor < 0) {
       throw new DomainError({
         code: 'MONEY_NEGATIVE_FACTOR',
         message: 'Cannot multiply by negative factor',
         details: { factor },
       });
     }
-    return new Money(this.amount * factor, this.currency);
+    return new Money(Math.round(this.cents * factor) / 100, this.currency);
   }
 
   isGreaterThan(other: Money): boolean {

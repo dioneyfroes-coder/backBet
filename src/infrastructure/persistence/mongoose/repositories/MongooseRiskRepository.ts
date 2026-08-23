@@ -2,6 +2,7 @@ import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { RiskProfileModel } from '../schemas/RiskProfileSchema';
 import { AppError } from '@/shared/errors/AppError';
+import { RiskRepositoryOptions } from '@/core/risk/domain/repositories/IRiskRepository';
 
 type RiskProfileRecord = {
   _id?: string | { toString(): string };
@@ -36,13 +37,15 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
-  async upsert(profile: RiskProfile): Promise<void> {
+  async upsert(profile: RiskProfile, options: RiskRepositoryOptions = {}): Promise<void> {
     try {
-      await RiskProfileModel.findOneAndUpdate(
+      const query = RiskProfileModel.findOneAndUpdate(
         { userId: profile.userId },
         { exposure: profile.exposure, maxExposure: profile.maxExposure },
         { upsert: true, new: true },
       );
+      if (options.session) query.session(options.session as never);
+      await query;
     } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar perfil de risco', 500, {
         originalError: getErrorMessage(error),
@@ -50,13 +53,15 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
-  async increaseExposure(userId: string, amount: number): Promise<void> {
+  async increaseExposure(userId: string, amount: number, options: RiskRepositoryOptions = {}): Promise<void> {
     try {
-      await RiskProfileModel.findOneAndUpdate(
+      const query = RiskProfileModel.findOneAndUpdate(
         { userId },
         { $inc: { exposure: amount } },
         { upsert: true },
       );
+      if (options.session) query.session(options.session as never);
+      await query;
     } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao incrementar exposição', 500, {
         originalError: getErrorMessage(error),
@@ -64,18 +69,22 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
-  async decreaseExposure(userId: string, amount: number): Promise<void> {
+  async decreaseExposure(userId: string, amount: number, options: RiskRepositoryOptions = {}): Promise<void> {
     try {
-      const res = await RiskProfileModel.findOneAndUpdate(
+      const query = RiskProfileModel.findOneAndUpdate(
         { userId },
         { $inc: { exposure: -Math.abs(amount) } },
         { new: true },
-      ).lean<RiskProfileRecord | null>();
+      );
+      if (options.session) query.session(options.session as never);
+      const res = await query.lean<RiskProfileRecord | null>();
 
       if (res && res.exposure < 0) {
         const normalizedId = normalizeRecordId(res._id);
         if (normalizedId) {
-          await RiskProfileModel.findByIdAndUpdate(normalizedId, { exposure: 0 });
+          const correction = RiskProfileModel.findByIdAndUpdate(normalizedId, { exposure: 0 });
+          if (options.session) correction.session(options.session as never);
+          await correction;
         }
       }
     } catch (error: unknown) {

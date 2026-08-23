@@ -1,4 +1,4 @@
-import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
+import { IBetRepository, BetRepositoryOptions } from '@/core/betting/domain/repositories/IBetRepository';
 import { Bet } from '@/core/betting/domain/entities/Bet';
 import { BetStatus } from '@/core/betting/types/bet.types';
 import { BetAmount } from '@/core/betting/domain/value-objects/BetAmount';
@@ -12,9 +12,10 @@ type BetRecordRaw = Omit<BetRecord, '_id'> & {
 };
 
 export class MongooseBetRepository implements IBetRepository {
-  async create(bet: Bet): Promise<void> {
+  async create(bet: Bet, options: BetRepositoryOptions = {}): Promise<void> {
     try {
       const betData: Partial<IBetDocument> = {
+        version: bet.version,
         userId: bet.userId,
         eventId: bet.eventId,
         marketId: bet.marketId,
@@ -31,7 +32,7 @@ export class MongooseBetRepository implements IBetRepository {
       };
 
       const newBet = new BetModel(betData);
-      await newBet.save();
+      await newBet.save({ session: options.session as never });
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('Erro ao criar aposta', 'INTERNAL_SERVER_ERROR', 500, {
@@ -40,18 +41,40 @@ export class MongooseBetRepository implements IBetRepository {
     }
   }
 
-  async update(bet: Bet): Promise<void> {
+  async update(bet: Bet, options: BetRepositoryOptions = {}): Promise<void> {
     try {
       const betData: Partial<IBetDocument> = {
+        version: bet.version,
         status: bet.status,
         resolvedAt: bet.resolvedAt,
         cancellationReason: bet.cancellationReason,
         updatedAt: new Date(),
       };
 
-      const result = await BetModel.findByIdAndUpdate(bet.id, betData, { new: true });
+      const query = BetModel.findOneAndUpdate(
+        {
+          _id: bet.id,
+          $or: [
+            { version: bet.version - 1 },
+            ...(bet.version === 1 ? [{ version: { $exists: false } }] : []),
+          ],
+        },
+        betData,
+        { new: true },
+      );
+      if (options.session) {
+        query.session(options.session as never);
+      }
+      const result = await query;
       if (!result) {
-        throw new AppError('Aposta não encontrada', 'NOT_FOUND', 404);
+        const existing = await BetModel.exists({ _id: bet.id });
+        if (!existing) {
+          throw new AppError('Aposta não encontrada', 'NOT_FOUND', 404);
+        }
+        throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar aposta', 409, {
+          betId: bet.id,
+          expectedVersion: bet.version - 1,
+        });
       }
     } catch (error: unknown) {
       if (error instanceof AppError) {
@@ -64,9 +87,11 @@ export class MongooseBetRepository implements IBetRepository {
     }
   }
 
-  async findById(id: string): Promise<Bet | null> {
+  async findById(id: string, options: BetRepositoryOptions = {}): Promise<Bet | null> {
     try {
-      const betData = await BetModel.findById(id).lean<BetRecordRaw | null>();
+      const query = BetModel.findById(id);
+      if (options.session) query.session(options.session as never);
+      const betData = await query.lean<BetRecordRaw | null>();
       if (!betData) {
         return null;
       }
@@ -173,6 +198,7 @@ export class MongooseBetRepository implements IBetRepository {
       data.createdAt,
       data.resolvedAt ?? data.createdAt,
       data.cancellationReason ?? '',
+      data.version ?? 1,
     );
   }
 

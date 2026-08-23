@@ -16,6 +16,7 @@ describe('WalletRepository', () => {
     expect(await repository.findByUserId('user-1')).toEqual(wallet);
 
     wallet.deposit(50);
+    wallet.incrementVersion();
     await repository.update(wallet);
     expect((await repository.findByUserId('user-1'))?.balance).toBe(150);
 
@@ -28,10 +29,35 @@ describe('WalletRepository', () => {
     expect(history).toEqual({ transactions: [], total: 0 });
   });
 
+  it('rejects a stale concurrent wallet update', async () => {
+    await repository.save(wallet);
+    const firstRead = await repository.findByUserId('user-1');
+    const secondRead = await repository.findByUserId('user-1');
+
+    firstRead!.deposit(25);
+    firstRead!.incrementVersion();
+    secondRead!.deposit(40);
+    secondRead!.incrementVersion();
+
+    await repository.update(firstRead!);
+    await expect(repository.update(secondRead!)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      statusCode: 409,
+    });
+
+    const persisted = await repository.findByUserId('user-1');
+    expect(persisted?.balance).toBe(125);
+    expect(persisted?.version).toBe(2);
+  });
+
   it('returns paginated history for an existing wallet', async () => {
     await repository.save(wallet);
     wallet.withdraw(10, { description: 'first' });
+    wallet.incrementVersion();
+    await repository.update(wallet);
     wallet.withdraw(20, { description: 'second' });
+    wallet.incrementVersion();
+    await repository.update(wallet);
 
     const history = await repository.getHistory('user-1', 1, 0);
     expect(history.total).toBe(3); // initial deposit + 2 withdraws

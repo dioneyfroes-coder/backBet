@@ -6,16 +6,16 @@ slug: "/docs/backbet/overview"
 
 # BackBet – Visão Geral
 
-BackBet é um backend de apostas desportivas construído em **TypeScript/Node 20**, seguindo **DDD**, camadas limpas e observabilidade nativa. Todos os módulos vivem em `src/` e são expostos via Express 5, com autenticação baseada em JWT (ou provedores de identidade configuráveis), cache Redis, persistência Mongo opcional e métricas/tracing prontos para produção.
+BackBet é um backend de apostas desportivas construído em **TypeScript/Node 22+**, seguindo **DDD**, camadas limpas e observabilidade nativa. Todos os módulos vivem em `src/` e são expostos via Express 5, com autenticação baseada em JWT (ou provedores de identidade configuráveis), cache Redis, persistência Mongo opcional e métricas/tracing configuráveis.
 
 ## Stack e princípios
 
-- **Linguagem/Runtime**: TypeScript 5.9 + Node 20 (`ts-node`/`tsx` em dev, `tsc` + `tsc-alias` para build)
+- **Linguagem/Runtime**: TypeScript 5.9 + Node 22+ (`ts-node`/`tsx` em dev, `tsc` + `tsc-alias` para build)
 - **Nomes configuráveis**: `APP_NAME` declara o nome do produto exibido enquanto `SERVICE_NAME` identifica o serviço em métricas/tracing (`OTEL_SERVICE_NAME`). Mantemos ambos no `.env` para separar a identidade do app da identidade operacional.
 - **Configuração centralizada**: `BACKBET_RUNTIME_ENV` decide se as validações de produção devem exigir chaves live; mantenha em `development` para tolerar valores de `.env` mesmo quando ferramentas (PM2 e scripts de observabilidade) precisam que `NODE_ENV=production`.
 - **Arquitetura**: Monólito modular (API ▸ application ▸ domain ▸ infrastructure ▸ shared)
 - **Padrões**: DDD, Result pattern, repositories async, factories para troca de adapters
-- **Qualidade**: ESLint flat config, Jest + SWC, 372 testes (statements 98.2%, branches 89.5%, functions 98.1%, lines 98.0%), CI local `npm run lint && npm run test --coverage && npm run build`
+- **Qualidade**: ESLint flat config, Jest + ts-jest, testes unitários e de integração, CI local `npm run lint && npm run test -- --coverage && npm run build`
 - **Observabilidade**: health/readiness endpoints, snapshots internos de cache/resiliência, request-id + logs JSON, OpenTelemetry e PM2 WebUI (em rollout)
 
 ## Bounded contexts
@@ -62,6 +62,9 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 - Documentação textual em `docs/API_DOCS.mdx` e `docs/OBSERVABILITY.mdx`.
 - Controllers seguem `BaseController` e `asyncHandler`, retornando envelopes padronizados e códigos `AppError` (ex.: `RATE_LIMIT_EXCEEDED`, `VALIDATION_ERROR`).
 - Rate limits globais (`appConfig.rateLimit`) e específicos (`AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*`).
+- Operações mutáveis aceitam `Idempotency-Key`, reservado com Redis `SET NX` quando habilitado.
+- `Money` e `BetAmount` fazem aritmética interna em centavos inteiros, mantendo números na API.
+- `HouseWallet` usa optimistic locking por `version` e retorna `409 CONFLICT` em versão obsoleta.
 
 ## Execução local
 
@@ -76,6 +79,7 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) isol
 - `npm run lint`
 - `npm run test --coverage`
 - `npm run build`
+- `RUN_REAL_INTEGRATION_TESTS=true npm test -- --runInBand src/integration/__tests__/mongo-redis.integration.test.ts` (MongoDB + Redis reais)
 - `npm start` (executa `dist/index.js`)
 
 ### Monitoramento diário
@@ -102,7 +106,8 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 
 ## Qualidade e operação
 
-- 372 testes Jest (unidade + integração leve) — statements 98.2%, branches 89.5%, functions 98.1%, lines 98.0%.
+- Testes Jest (unidade + integração leve), executáveis com `npm run test -- --coverage`.
+- A suíte MongoDB + Redis é opt-in e exige `RUN_REAL_INTEGRATION_TESTS=true`, `MONGODB_URI` e `REDIS_URL` de teste.
 - Logs estruturados JSON com `request_start`, `request_end` e `request_error` (incluem requestId, userId, duração).
 - Snapshots de saúde trackeiam dependências externas (Mongo, Redis e provedores de identidade configurados) e alimentarão a PM2 WebUI/alertas de saúde.
 - Dashboards/alertas anteriores baseados em Prometheus/Grafana foram aposentados; o plano de migração está documentado em `docs/PM2-WEBUI-MIGRATION.mdx`.
@@ -186,4 +191,4 @@ Cada mudança nesses toggles gera o log `observability_toggle_state` e o snapsho
 ---
 
 **Versão atual:** 0.1.0 (pre-alpha)  
-**Última atualização:** 16 de dezembro de 2025
+**Última atualização:** 23 de agosto de 2026

@@ -1,4 +1,4 @@
-import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { IWalletRepository, WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
 import { Transaction, ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
 import { Money } from '@/core/shared/domain/value-objects/Money';
@@ -14,6 +14,7 @@ type WalletInternals = {
   _balance: Money;
   _lockedBalance: Money;
   _transactions: Transaction[];
+  _version: number;
 };
 
 const sanitizeUserId = (userId: string): string => {
@@ -49,10 +50,11 @@ const normalizePagination = (value: number | undefined, fallback: number): numbe
 };
 
 export class MongooseWalletRepository implements IWalletRepository {
-  async save(wallet: Wallet): Promise<Wallet> {
+  async save(wallet: Wallet, options: WalletRepositoryOptions = {}): Promise<Wallet> {
     try {
       const walletData: Partial<IWalletDocument> = {
         userId: wallet.userId,
+        version: wallet.version,
         balance: wallet.balance,
         lockedBalance: wallet.lockedBalance,
         currency: wallet.currency,
@@ -61,10 +63,12 @@ export class MongooseWalletRepository implements IWalletRepository {
         updatedAt: new Date(),
       };
 
-      await WalletModel.findOneAndUpdate({ userId: wallet.userId }, walletData, {
+      const query = WalletModel.findOneAndUpdate({ userId: wallet.userId }, walletData, {
         upsert: true,
         new: true,
       });
+      if (options.session) query.session(options.session as never);
+      await query;
       return wallet;
     } catch (error: unknown) {
       if (
@@ -82,12 +86,14 @@ export class MongooseWalletRepository implements IWalletRepository {
     }
   }
 
-  async findByUserId(userId: string): Promise<Wallet | null> {
+  async findByUserId(userId: string, options: WalletRepositoryOptions = {}): Promise<Wallet | null> {
     try {
       const safeUserId = sanitizeUserId(userId);
-      const walletData = await WalletModel.findOne({
+      const query = WalletModel.findOne({
         userId: safeUserId,
-      }).lean<WalletRecordRaw | null>();
+      });
+      if (options.session) query.session(options.session as never);
+      const walletData = await query.lean<WalletRecordRaw | null>();
       if (!walletData) {
         return null;
       }
@@ -100,23 +106,41 @@ export class MongooseWalletRepository implements IWalletRepository {
     }
   }
 
-  async update(wallet: Wallet): Promise<Wallet> {
+  async update(wallet: Wallet, options: WalletRepositoryOptions = {}): Promise<Wallet> {
     try {
       const walletData: Partial<IWalletDocument> = {
+        version: wallet.version,
         balance: wallet.balance,
         lockedBalance: wallet.lockedBalance,
         transactions: serializeTransactions(wallet.getTransactions()),
         updatedAt: new Date(),
       };
 
-      const result = await WalletModel.findOneAndUpdate(
-        { userId: sanitizeUserId(wallet.userId) },
+      const query = WalletModel.findOneAndUpdate(
+        {
+          userId: sanitizeUserId(wallet.userId),
+          $or: [
+            { version: wallet.version - 1 },
+            ...(wallet.version === 1 ? [{ version: { $exists: false } }] : []),
+          ],
+        },
         walletData,
         { new: true },
       );
+      if (options.session) {
+        query.session(options.session as never);
+      }
+      const result = await query;
 
       if (!result) {
-        throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
+        const existing = await WalletModel.exists({ userId: sanitizeUserId(wallet.userId) });
+        if (!existing) {
+          throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
+        }
+        throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar carteira', 409, {
+          userId: wallet.userId,
+          expectedVersion: wallet.version - 1,
+        });
       }
       return wallet;
     } catch (error: unknown) {
@@ -127,6 +151,15 @@ export class MongooseWalletRepository implements IWalletRepository {
       throw new AppError('Erro ao atualizar carteira', 'INTERNAL_SERVER_ERROR', 500, {
         originalError,
       });
+    }
+  }
+
+  async withTransaction<T>(work: (session: unknown) => Promise<T>): Promise<T> {
+    const session = await WalletModel.startSession();
+    try {
+      return await session.withTransaction(() => work(session));
+    } finally {
+      await session.endSession();
     }
   }
 
@@ -193,6 +226,7 @@ export class MongooseWalletRepository implements IWalletRepository {
       data.currency as Wallet['currency'],
     );
     mutableWallet._transactions = parseTransactions(data.transactions);
+    mutableWallet._version = data.version ?? 1;
     return wallet;
   }
 
