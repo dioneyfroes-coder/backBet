@@ -12,6 +12,7 @@ import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { TransactionRunner, TransactionSession } from '@/core/shared/types/Transaction';
 import { WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
+import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 
 export class BetService {
   constructor(
@@ -47,9 +48,19 @@ export class BetService {
 
     const operation = async (session?: TransactionSession) => {
       const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
+      const betId = new UniqueId().value;
       const wallet = options
-        ? await this.walletService.withdraw(input.userId, input.amount, undefined, options)
-        : await this.walletService.withdraw(input.userId, input.amount);
+        ? await this.walletService.withdraw(
+            input.userId,
+            input.amount,
+            { type: 'BET_DEBIT', referenceId: betId, source: 'BET' },
+            options,
+          )
+        : await this.walletService.withdraw(input.userId, input.amount, {
+            type: 'BET_DEBIT',
+            referenceId: betId,
+            source: 'BET',
+          });
       const bet = BetFactory.createPendingBet({
         userId: input.userId,
         eventId: input.eventId,
@@ -58,6 +69,7 @@ export class BetService {
         currency: wallet.currency ?? 'BRL',
         odds: odd,
         type: input.type,
+        betIdFactory: () => betId,
       });
       if (session) await this.betRepository.create(bet, { session });
       else await this.betRepository.create(bet);
@@ -93,8 +105,19 @@ export class BetService {
         else await this.riskService.reduceExposure(bet.userId, liabilityCents);
       }
       const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
-      if (options) await this.walletService.deposit(bet.userId, bet.amount.amount, undefined, options);
-      else await this.walletService.deposit(bet.userId, bet.amount.amount);
+      if (options)
+        await this.walletService.deposit(
+          bet.userId,
+          bet.amount.amount,
+          { type: 'BET_REFUND', referenceId: bet.id, source: 'BET' },
+          options,
+        );
+      else
+        await this.walletService.deposit(bet.userId, bet.amount.amount, {
+          type: 'BET_REFUND',
+          referenceId: bet.id,
+          source: 'BET',
+        });
       bet.incrementVersion();
       if (session) await this.betRepository.update(bet, { session });
       else await this.betRepository.update(bet);
@@ -116,8 +139,19 @@ export class BetService {
       }
       if (input.result === 'WON') {
         const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
-        if (options) await this.walletService.deposit(bet.userId, bet.potentialReturn, undefined, options);
-        else await this.walletService.deposit(bet.userId, bet.potentialReturn);
+        if (options)
+          await this.walletService.deposit(
+            bet.userId,
+            bet.potentialReturn,
+            { type: 'BET_WIN', referenceId: bet.id, source: 'BET' },
+            options,
+          );
+        else
+          await this.walletService.deposit(bet.userId, bet.potentialReturn, {
+            type: 'BET_WIN',
+            referenceId: bet.id,
+            source: 'BET',
+          });
       }
       bet.incrementVersion();
       if (session) await this.betRepository.update(bet, { session });

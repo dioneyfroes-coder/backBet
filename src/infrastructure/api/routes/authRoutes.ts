@@ -5,9 +5,14 @@ import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
 import { UserService } from '../../../core/user/domain/services/UserService';
 import { WalletService } from '../../../core/finance/domain/services/WalletService';
-import { createUserRepository, createWalletRepository } from '@/infrastructure/persistence/factory';
+import {
+  createUserRepository,
+  createWalletRepository,
+  createLedgerRepository,
+} from '@/infrastructure/persistence/factory';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
 import { JwtService } from '@/shared/services/JwtService';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { appConfig } from '@/shared/config/appConfig';
@@ -15,6 +20,7 @@ import { appConfig } from '@/shared/config/appConfig';
 export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
   walletRepository?: IWalletRepository;
+  ledgerRepository?: ILedgerRepository;
   jwtService?: JwtService;
 };
 
@@ -39,10 +45,12 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
+  const ledgerRepository: ILedgerRepository =
+    deps.ledgerRepository ?? (await createLedgerRepository());
 
   // Instanciar serviços
   const userService = new UserService(userRepository);
-  const walletService = new WalletService(walletRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository);
   const jwtService = deps.jwtService ?? new JwtService();
 
   // Use-cases

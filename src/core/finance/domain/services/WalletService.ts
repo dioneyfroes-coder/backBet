@@ -1,13 +1,19 @@
 import { TransactionContext, Wallet } from '../entities/Wallet';
+import { LedgerEntry, LedgerOperationType, LedgerStatus } from '../entities/LedgerEntry';
 import { IWalletRepository } from '../repositories/IWalletRepository';
+import { ILedgerRepository } from '../repositories/ILedgerRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
+import { randomUUID } from 'crypto';
 
 export class WalletService {
-  constructor(private walletRepository: IWalletRepository) {}
+  constructor(
+    private walletRepository: IWalletRepository,
+    private ledgerRepository?: ILedgerRepository,
+  ) {}
 
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {
     const existingWallet = await this.walletRepository.findByUserId(input.userId);
@@ -31,6 +37,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
+    await this.appendLedger(userId, amount, wallet.currency, context, 'DEPOSIT', options);
     this.logWalletAction('deposit', wallet, amount, context);
     return wallet;
   }
@@ -45,44 +52,96 @@ export class WalletService {
     return this.walletRepository.getHistory(userId, limit, offset);
   }
 
+  async getLedgerHistory(userId: string, limit = 50, offset = 0) {
+    if (!this.ledgerRepository) {
+      return { entries: [], total: 0 };
+    }
+    const entries = await this.ledgerRepository.findByUserId(userId, { limit, offset });
+    const total = await this.ledgerRepository.countByUserId(userId);
+    return { entries, total };
+  }
+
   async withdraw(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     wallet.withdraw(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
+    await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw', wallet, amount, context);
     return wallet;
   }
 
-  async lock(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+  async lock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
-    wallet.lock(amount);
+    wallet.lock(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    this.logWalletAction('lock', wallet, amount);
+    await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_HOLD', options);
+    this.logWalletAction('lock', wallet, amount, context);
     return wallet;
   }
 
-  async unlock(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+  async unlock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
-    wallet.unlock(amount);
+    wallet.unlock(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    this.logWalletAction('unlock', wallet, amount);
+    await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_REVERSED', options);
+    this.logWalletAction('unlock', wallet, amount, context);
     return wallet;
   }
 
-  async withdrawLocked(userId: string, amount: number, options?: WalletRepositoryOptions): Promise<Wallet> {
+  async withdrawLocked(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
-    wallet.withdrawLocked(amount);
+    wallet.withdrawLocked(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    this.logWalletAction('withdraw_locked', wallet, amount);
+    await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
+    this.logWalletAction('withdraw_locked', wallet, amount, context);
     return wallet;
+  }
+
+  private async appendLedger(
+    userId: string,
+    amount: number,
+    currency: string,
+    context: TransactionContext | undefined,
+    defaultType: LedgerOperationType,
+    options?: WalletRepositoryOptions,
+  ): Promise<void> {
+    if (!this.ledgerRepository) {
+      return;
+    }
+    const entry = new LedgerEntry(
+      context?.referenceId ? `${context.type ?? defaultType}:${context.referenceId}` : randomUUID(),
+      userId,
+      context?.type ?? defaultType,
+      Math.round(amount * 100),
+      currency,
+      context?.referenceId,
+      context?.source,
+      (context?.status as LedgerStatus | undefined) ?? 'COMPLETED',
+      new Date(),
+      context?.metadata,
+    );
+    try {
+      await this.ledgerRepository.append(entry, options);
+    } catch (error) {
+      writeStructuredLog(
+        {
+          event: 'ledger_append_failed',
+          userId,
+          type: entry.type,
+          amountCents: entry.amountCents,
+          err: error instanceof Error ? error.message : 'unknown',
+        },
+        'error',
+      );
+    }
   }
 
   private async ensureWalletExists(userId: string, options?: WalletRepositoryOptions): Promise<Wallet> {

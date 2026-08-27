@@ -41,6 +41,9 @@ export class Deposit {
 
     const wallet = await executeWithWalletErrorMapping(() =>
       this.walletService.deposit(userId, amount, {
+        type: 'DEPOSIT',
+        source: 'PIX',
+        referenceId: charge.chargeId,
         description: description ?? 'Depósito via Pix',
         metadata: {
           channel: 'PIX',

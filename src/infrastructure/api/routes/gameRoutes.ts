@@ -5,6 +5,7 @@ import { protectedRoute } from '../middleware/AuthMiddleware';
 import {
   createWalletRepository,
   createGameRoundRepository,
+  createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { CoinFlipEngine } from '@core/game/domain/services/CoinFlipEngine';
@@ -15,6 +16,7 @@ import { GetGameHistoryUseCase } from '@core/game/application/use-cases/GetGameH
 import { ListRecentRoundsUseCase } from '@core/game/application/use-cases/ListRecentRoundsUseCase';
 import { GameController } from '../controllers/GameController';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { IGameRoundRepository } from '@core/game/domain/repositories/IGameRoundRepository';
 import { GameIntegrationPort } from '@core/game/domain/ports/GameIntegrationPort';
 import { createGameIntegrationAdapter } from '@/infrastructure/game/adapterFactory';
@@ -23,6 +25,7 @@ import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 export type GameRoutesDeps = {
   walletRepository?: IWalletRepository;
+  ledgerRepository?: ILedgerRepository;
   gameRoundRepository?: IGameRoundRepository;
   integrationAdapter?: GameIntegrationPort;
 };
@@ -32,12 +35,14 @@ export async function createGameRoutes(deps: GameRoutesDeps = {}): Promise<Route
 
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
+  const ledgerRepository: ILedgerRepository =
+    deps.ledgerRepository ?? (await createLedgerRepository());
   const gameRoundRepository: IGameRoundRepository =
     deps.gameRoundRepository ?? (await createGameRoundRepository());
   const integrationAdapter: GameIntegrationPort =
     deps.integrationAdapter ?? (await createGameIntegrationAdapter());
 
-  const walletService = new WalletService(walletRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository);
   const coinFlipConfig = appConfig.games.coinFlip;
   const coinFlipService = new CoinFlipGameService(
     walletService,

@@ -53,9 +53,21 @@ describe('CoinFlipGameService', () => {
 
     const round = await service.play({ userId: 'user-1', choice: 'HEADS', wager: 10 });
 
-    expect(walletService.lock).toHaveBeenCalledWith('user-1', 10);
-    expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-1', 10);
-    expect(walletService.deposit).toHaveBeenCalledWith('user-1', 30); // wager + payout (10 + 20)
+    expect(walletService.lock).toHaveBeenCalledWith(
+      'user-1',
+      10,
+      expect.objectContaining({ type: 'STAKE_LOCK', source: 'GAME' }),
+    );
+    expect(walletService.withdrawLocked).toHaveBeenCalledWith(
+      'user-1',
+      10,
+      expect.objectContaining({ type: 'STAKE_RELEASE', source: 'GAME' }),
+    );
+    expect(walletService.deposit).toHaveBeenCalledWith(
+      'user-1',
+      30,
+      expect.objectContaining({ type: 'GAME_WIN', source: 'GAME' }),
+    ); // wager + payout (10 + 20)
     const stored = await repository.findByUser('user-1', 1);
     expect(stored[0]?.id).toBe(round.id);
     expect(integrationPort.notifyRound).toHaveBeenCalledWith(round);
@@ -74,8 +86,16 @@ describe('CoinFlipGameService', () => {
 
     const round = await service.play({ userId: 'user-2', choice: 'HEADS', wager: 25 });
 
-    expect(walletService.lock).toHaveBeenCalledWith('user-2', 25);
-    expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-2', 25);
+    expect(walletService.lock).toHaveBeenCalledWith(
+      'user-2',
+      25,
+      expect.objectContaining({ type: 'STAKE_LOCK', source: 'GAME' }),
+    );
+    expect(walletService.withdrawLocked).toHaveBeenCalledWith(
+      'user-2',
+      25,
+      expect.objectContaining({ type: 'STAKE_RELEASE', source: 'GAME' }),
+    );
     expect(walletService.deposit).not.toHaveBeenCalled();
     expect(round.result).toBe('LOSE');
     expect(round.payoutAmount).toBe(0);
@@ -87,7 +107,11 @@ describe('CoinFlipGameService', () => {
 
     await service.play({ userId: 'user-3', choice: 'HEADS', wager: 10 });
 
-    expect(walletService.deposit).toHaveBeenCalledWith('user-3', 52);
+    expect(walletService.deposit).toHaveBeenCalledWith(
+      'user-3',
+      52,
+      expect.objectContaining({ type: 'GAME_WIN', source: 'GAME' }),
+    );
   });
 
   it('should throw when game is disabled', async () => {

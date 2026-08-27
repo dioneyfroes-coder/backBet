@@ -4,6 +4,7 @@ import type { IBetRepository } from '../domain/repositories/IBetRepository';
 import { EventRepository } from '../domain/repositories/EventRepository';
 import type { IEventRepository } from '../domain/repositories/IEventRepository';
 import { WalletRepository } from '@/core/finance/domain/repositories/WalletRepository';
+import { InMemoryLedgerRepository } from '../../finance/domain/repositories/InMemoryLedgerRepository';
 import { WalletService } from '../../finance/domain/services/WalletService';
 import { BetService } from '../domain/services/BetService';
 
@@ -11,7 +12,8 @@ import { BetService } from '../domain/services/BetService';
 const betRepository: IBetRepository = new BetRepository();
 const eventRepository: IEventRepository = new EventRepository();
 const walletRepository = new WalletRepository();
-const walletService = new WalletService(walletRepository);
+const ledgerRepository = new InMemoryLedgerRepository();
+const walletService = new WalletService(walletRepository, ledgerRepository);
 
 // Serviço principal
 export const betService = new BetService(betRepository, eventRepository, walletService);

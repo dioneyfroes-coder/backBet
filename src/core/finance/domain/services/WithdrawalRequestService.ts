@@ -37,10 +37,16 @@ export class WithdrawalRequestService {
       throw new AppError('BAD_REQUEST', 'Saldo insuficiente', 400);
     }
 
-    await this.walletService.lock(userId, amount);
+    const requestId = randomUUID();
+
+    await this.walletService.lock(userId, amount, {
+      type: 'WITHDRAWAL_HOLD',
+      referenceId: requestId,
+      source: 'WITHDRAWAL',
+    });
 
     const request = new WithdrawalRequest(
-      randomUUID(),
+      requestId,
       userId,
       amount,
       currency,
@@ -61,7 +67,11 @@ export class WithdrawalRequestService {
     } catch (err) {
       // Persistence failed, ensure we unlock the amount so it doesn't stay blocked
       try {
-        await this.walletService.unlock(userId, amount);
+        await this.walletService.unlock(userId, amount, {
+          type: 'WITHDRAWAL_REVERSED',
+          referenceId: requestId,
+          source: 'WITHDRAWAL',
+        });
       } catch (unlockErr) {
         console.error('Failed to unlock wallet after withdrawal request persistence failure', {
           userId,
@@ -90,7 +100,11 @@ export class WithdrawalRequestService {
 
     if (action === 'APPROVED') {
       try {
-        await this.walletService.withdrawLocked(request.userId, request.amount);
+        await this.walletService.withdrawLocked(request.userId, request.amount, {
+          type: 'WITHDRAWAL_COMPLETED',
+          referenceId: request.id,
+          source: 'WITHDRAWAL',
+        });
       } catch (err) {
         try {
           withdrawalRequestProcessingFailedCounter.inc();
@@ -135,7 +149,11 @@ export class WithdrawalRequestService {
       }
     } else {
       try {
-        await this.walletService.unlock(request.userId, request.amount);
+        await this.walletService.unlock(request.userId, request.amount, {
+          type: 'WITHDRAWAL_REVERSED',
+          referenceId: request.id,
+          source: 'WITHDRAWAL',
+        });
       } catch (err) {
         try {
           withdrawalRequestProcessingFailedCounter.inc();

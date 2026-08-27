@@ -33,7 +33,11 @@ describe('WithdrawalRequestService', () => {
     const service = new WithdrawalRequestService(repository, walletService);
     const request = await service.createRequest('user-1', 200, 'BRL' as Currency, 'test');
 
-    expect(walletService.lock).toHaveBeenCalledWith('user-1', 200);
+    expect(walletService.lock).toHaveBeenCalledWith(
+      'user-1',
+      200,
+      expect.objectContaining({ type: 'WITHDRAWAL_HOLD', source: 'WITHDRAWAL' }),
+    );
     expect(repository.create).toHaveBeenCalled();
     expect(request.status).toBe('PENDING');
   });
@@ -77,7 +81,11 @@ describe('WithdrawalRequestService', () => {
       'ok',
     );
 
-    expect(walletService.withdrawLocked).toHaveBeenCalledWith('user-1', 100);
+    expect(walletService.withdrawLocked).toHaveBeenCalledWith(
+      'user-1',
+      100,
+      expect.objectContaining({ type: 'WITHDRAWAL_COMPLETED', source: 'WITHDRAWAL' }),
+    );
     expect(result.status).toBe('APPROVED');
     expect(repository.update).toHaveBeenCalledWith(result);
   });
@@ -97,7 +105,11 @@ describe('WithdrawalRequestService', () => {
       'bloqueado',
     );
 
-    expect(walletService.unlock).toHaveBeenCalledWith('user-1', 150);
+    expect(walletService.unlock).toHaveBeenCalledWith(
+      'user-1',
+      150,
+      expect.objectContaining({ type: 'WITHDRAWAL_REVERSED', source: 'WITHDRAWAL' }),
+    );
     expect(result.status).toBe('REJECTED');
     expect(repository.update).toHaveBeenCalledWith(result);
   });

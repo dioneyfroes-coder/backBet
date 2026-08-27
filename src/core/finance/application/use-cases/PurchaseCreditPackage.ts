@@ -15,7 +15,15 @@ export class PurchaseCreditPackage {
   async execute(userId: string, packageId: string, idempotencyKey?: string) {
     const operation = () => executeWithWalletErrorMapping(async () => {
       const creditPackage = await this.creditPackageService.getById(packageId);
-      const wallet = await this.walletService.deposit(userId, creditPackage.totalCredits);
+      const wallet = await this.walletService.deposit(userId, creditPackage.totalCredits, {
+        type: 'DEPOSIT',
+        referenceId: packageId,
+        source: 'CREDIT_PACKAGE',
+        metadata: {
+          packageId,
+          packageCode: creditPackage.code,
+        },
+      });
       return {
         creditPackage,
         wallet,

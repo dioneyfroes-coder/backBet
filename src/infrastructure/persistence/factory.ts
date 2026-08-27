@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
 import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@/core/betting/domain/repositories/IEventRepository';
 import { ICreditPackageRepository } from '@/core/finance/domain/repositories/ICreditPackageRepository';
@@ -32,6 +33,19 @@ export async function createWalletRepository(): Promise<IWalletRepository> {
   }
   const { WalletRepository } = await import('@/core/finance/domain/repositories/WalletRepository');
   return new WalletRepository();
+}
+
+export async function createLedgerRepository(): Promise<ILedgerRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseLedgerRepository } = await import(
+      './mongoose/repositories/MongooseLedgerRepository'
+    );
+    return new MongooseLedgerRepository();
+  }
+  const { InMemoryLedgerRepository } = await import(
+    '@/core/finance/domain/repositories/InMemoryLedgerRepository'
+  );
+  return new InMemoryLedgerRepository();
 }
 
 export async function createBetRepository(): Promise<IBetRepository> {

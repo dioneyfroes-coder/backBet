@@ -80,7 +80,12 @@ describe('BetService', () => {
       });
 
       expect(transactionRunner.withTransaction).toHaveBeenCalledTimes(1);
-      expect(walletService.withdraw).toHaveBeenCalledWith('user-1', 100, undefined, { session });
+      expect(walletService.withdraw).toHaveBeenCalledWith(
+        'user-1',
+        100,
+        expect.objectContaining({ type: 'BET_DEBIT', source: 'BET' }),
+        { session },
+      );
       expect(betRepository.create).toHaveBeenCalledWith(expect.any(Bet), { session });
     });
 
@@ -97,7 +102,11 @@ describe('BetService', () => {
         type: 'SINGLE',
       });
 
-      expect(walletService.withdraw).toHaveBeenCalledWith('user-1', 100);
+      expect(walletService.withdraw).toHaveBeenCalledWith(
+        'user-1',
+        100,
+        expect.objectContaining({ type: 'BET_DEBIT', source: 'BET' }),
+      );
       expect(betRepository.create).toHaveBeenCalled();
       expect(bet.status).toBe('PENDING');
     });
@@ -188,7 +197,11 @@ describe('BetService', () => {
       });
 
       expect(result.status).toBe('CANCELED');
-      expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.amount.amount);
+      expect(walletService.deposit).toHaveBeenCalledWith(
+        'user-1',
+        bet.amount.amount,
+        expect.objectContaining({ type: 'BET_REFUND', source: 'BET' }),
+      );
       expect(betRepository.update).toHaveBeenCalledWith(result);
     });
 
@@ -220,7 +233,11 @@ describe('BetService', () => {
       });
 
       expect(result.status).toBe('WON');
-      expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.potentialReturn);
+      expect(walletService.deposit).toHaveBeenCalledWith(
+        'user-1',
+        bet.potentialReturn,
+        expect.objectContaining({ type: 'BET_WIN', source: 'BET' }),
+      );
 
       walletService.deposit.mockClear();
 

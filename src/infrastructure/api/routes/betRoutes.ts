@@ -9,6 +9,7 @@ import {
   createBetRepository,
   createEventRepository,
   createWalletRepository,
+  createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
 import { createRiskRepository } from '@/infrastructure/persistence/factory';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
@@ -20,6 +21,7 @@ import { GetEventBetsUseCase } from '@core/betting/application/use-cases/GetEven
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { appConfig } from '@/shared/config/appConfig';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
@@ -28,6 +30,7 @@ export type BetRoutesDeps = {
   betRepository?: IBetRepository;
   eventRepository?: IEventRepository;
   walletRepository?: IWalletRepository;
+  ledgerRepository?: ILedgerRepository;
 };
 
 export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router> {
@@ -37,7 +40,9 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
   const eventRepository: IEventRepository = deps.eventRepository ?? (await createEventRepository());
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
-  const walletService = new WalletService(walletRepository);
+  const ledgerRepository: ILedgerRepository =
+    deps.ledgerRepository ?? (await createLedgerRepository());
+  const walletService = new WalletService(walletRepository, ledgerRepository);
 
   const riskRepository: IRiskRepository = await createRiskRepository();
   const riskService = new RiskService(riskRepository, betRepository);

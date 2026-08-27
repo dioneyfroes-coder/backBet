@@ -8,12 +8,17 @@ import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddlewa
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { WalletController } from '../controllers/WalletController';
 import { WalletService } from '@core/finance/domain/services/WalletService';
-import { createWalletRepository, createUserRepository } from '@/infrastructure/persistence/factory';
+import {
+  createWalletRepository,
+  createUserRepository,
+  createLedgerRepository,
+} from '@/infrastructure/persistence/factory';
 import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { appConfig } from '@/shared/config/appConfig';
 import { createPixProvider } from '@/infrastructure/payments/pix';
 import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
@@ -26,6 +31,7 @@ import { idempotencyService } from '@/shared/services/IdempotencyService';
  */
 export type WalletRoutesDeps = {
   walletRepository?: IWalletRepository;
+  ledgerRepository?: ILedgerRepository;
   pixProvider?: PixProviderPort;
   userRepository?: IUserRepository;
 };
@@ -35,7 +41,9 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
 
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
-  const walletService = new WalletService(walletRepository);
+  const ledgerRepository: ILedgerRepository =
+    deps.ledgerRepository ?? (await createLedgerRepository());
+  const walletService = new WalletService(walletRepository, ledgerRepository);
   const pixProvider: PixProviderPort = deps.pixProvider ?? (await createPixProvider());
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
   const userService = new UserService(userRepository);

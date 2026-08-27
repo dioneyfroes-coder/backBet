@@ -170,4 +170,8 @@ export class Wallet {
 export type TransactionContext = {
   description?: string;
   metadata?: TransactionMetadata;
+  type?: import('./LedgerEntry').LedgerOperationType;
+  referenceId?: string;
+  source?: string;
+  status?: import('./LedgerEntry').LedgerStatus;
 };

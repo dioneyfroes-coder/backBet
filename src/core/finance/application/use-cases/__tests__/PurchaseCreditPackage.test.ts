@@ -23,7 +23,11 @@ describe('PurchaseCreditPackage', () => {
 
     const response = await useCase.execute('user-123', 'pkg-id');
 
-    expect(mockWalletService.deposit).toHaveBeenCalledWith('user-123', 110);
+    expect(mockWalletService.deposit).toHaveBeenCalledWith(
+      'user-123',
+      110,
+      expect.objectContaining({ type: 'DEPOSIT', source: 'CREDIT_PACKAGE', referenceId: 'pkg-id' }),
+    );
     expect(response.wallet).toBe(updatedWallet);
     expect(response.creditPackage).toBe(creditPackage);
   });

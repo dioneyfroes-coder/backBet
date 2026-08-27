@@ -47,6 +47,9 @@ export class Withdraw {
 
     const wallet = await executeWithWalletErrorMapping(() =>
       this.walletService.withdraw(userId, amount, {
+        type: 'WITHDRAWAL_COMPLETED',
+        source: 'PIX',
+        referenceId: payout.payoutId,
         description: description ?? 'Saque via Pix',
         metadata: {
           channel: 'PIX',

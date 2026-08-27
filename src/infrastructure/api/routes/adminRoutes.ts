@@ -11,12 +11,14 @@ import {
   createRiskRepository,
   createWalletRepository,
   createHouseTreasuryRepository,
+  createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
 import { AdminController } from '../controllers/AdminController';
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
 import { IEventRepository } from '@core/betting/domain/repositories/IEventRepository';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { BetService } from '@core/betting/domain/services/BetService';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
@@ -39,6 +41,7 @@ export type AdminRoutesDeps = {
   eventRepository?: IEventRepository;
   riskRepository?: IRiskRepository;
   walletRepository?: IWalletRepository;
+  ledgerRepository?: ILedgerRepository;
   houseTreasuryRepository?: IHouseTreasuryRepository;
   dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>;
 };
@@ -50,11 +53,13 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   const eventRepository: IEventRepository = deps.eventRepository ?? (await createEventRepository());
   const walletRepository: IWalletRepository =
     deps.walletRepository ?? (await createWalletRepository());
+  const ledgerRepository: ILedgerRepository =
+    deps.ledgerRepository ?? (await createLedgerRepository());
   const riskRepository: IRiskRepository = deps.riskRepository ?? (await createRiskRepository());
   const houseTreasuryRepository: IHouseTreasuryRepository =
     deps.houseTreasuryRepository ?? (await createHouseTreasuryRepository());
 
-  const walletService = new WalletService(walletRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository);
   const riskService = new RiskService(riskRepository, betRepository);
   const eventCatalogService = new EventCatalogService(eventRepository);
   const betService = new BetService(betRepository, eventRepository, walletService, riskService);

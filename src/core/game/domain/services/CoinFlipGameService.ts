@@ -55,6 +55,7 @@ export class CoinFlipGameService {
     this.ensureBetLimits(input.wager);
 
     // Verifica saldo suficiente antes de debitar, se método existir (para compatibilidade com mocks de teste)
+    const roundId = randomUUID();
     let updatedWallet;
     if (typeof this.walletService.findByUserId === 'function') {
       const wallet = await this.walletService.findByUserId(input.userId);
@@ -65,10 +66,18 @@ export class CoinFlipGameService {
         });
       }
       // Lock temporário do valor apostado
-      updatedWallet = await this.walletService.lock(input.userId, input.wager);
+      updatedWallet = await this.walletService.lock(input.userId, input.wager, {
+        type: 'STAKE_LOCK',
+        referenceId: roundId,
+        source: 'GAME',
+      });
     } else {
       // fallback para mocks antigos
-      updatedWallet = await this.walletService.lock(input.userId, input.wager);
+      updatedWallet = await this.walletService.lock(input.userId, input.wager, {
+        type: 'STAKE_LOCK',
+        referenceId: roundId,
+        source: 'GAME',
+      });
     }
 
     const result = this.engine.play({ choice: input.choice });
@@ -78,18 +87,30 @@ export class CoinFlipGameService {
     // Libera o valor "preso" e faz o fluxo de crédito/desbloqueio
     if (result.win) {
       // Retira o valor travado e credita prêmio + aposta
-      await this.walletService.withdrawLocked(input.userId, input.wager);
+      await this.walletService.withdrawLocked(input.userId, input.wager, {
+        type: 'STAKE_RELEASE',
+        referenceId: roundId,
+        source: 'GAME',
+      });
       const totalReturn = new Money(input.wager, currency)
         .add(new Money(payout, currency))
         .amount;
-      await this.walletService.deposit(input.userId, totalReturn);
+      await this.walletService.deposit(input.userId, totalReturn, {
+        type: 'GAME_WIN',
+        referenceId: roundId,
+        source: 'GAME',
+      });
     } else {
       // Apenas retira o valor travado (aposta perdida)
-      await this.walletService.withdrawLocked(input.userId, input.wager);
+      await this.walletService.withdrawLocked(input.userId, input.wager, {
+        type: 'STAKE_RELEASE',
+        referenceId: roundId,
+        source: 'GAME',
+      });
     }
 
     const round = new GameRound(
-      randomUUID(),
+      roundId,
       input.userId,
       'COIN_FLIP',
       Number(input.wager.toFixed(2)),
