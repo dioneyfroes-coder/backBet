@@ -65,6 +65,42 @@ describe('Bet entity', () => {
     ).toThrow('Invalid bet ID');
   });
 
+  it('rejects a zero stake as a specific betting rule', () => {
+    expect(
+      () =>
+        new Bet(
+          'bet-1',
+          'user-1',
+          'event-1',
+          'market-1',
+          new Money(0, 'BRL'),
+          new Odds(2.0),
+          'PENDING',
+          'SINGLE',
+          new Date(),
+          new Date(0),
+          '',
+        ),
+    ).toThrow('Bet amount must be greater than 0');
+  });
+
+  it('accepts a Money amount down to the minimum positive stake', () => {
+    const bet = new Bet(
+      'bet-1',
+      'user-1',
+      'event-1',
+      'market-1',
+      new Money(0.01, 'BRL'),
+      new Odds(2.0),
+      'PENDING',
+      'SINGLE',
+      new Date(),
+      new Date(0),
+      '',
+    );
+    expect(bet.amountCents).toBe(1);
+  });
+
   it('fails validation for missing reference identifiers', () => {
     const baseArgs = [
       { field: 'userId', value: '' },

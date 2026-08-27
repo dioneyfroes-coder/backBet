@@ -117,6 +117,14 @@ export class Bet {
         message: 'Invalid resolution date',
       });
     }
+
+    if (this.amount.getCents() <= 0) {
+      throw new DomainError({
+        code: 'BET_AMOUNT_NON_POSITIVE',
+        message: 'Bet amount must be greater than 0',
+        details: { amount: this.amount.amount },
+      });
+    }
   }
 
   // ---------- Utility ----------
