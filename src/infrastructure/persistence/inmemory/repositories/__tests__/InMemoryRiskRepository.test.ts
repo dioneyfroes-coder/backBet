@@ -75,4 +75,33 @@ describe('InMemoryRiskRepository', () => {
     expect(successes).toBe(2);
     expect(await repo.getExposure('user-5')).toBe(20);
   });
+
+  it('reserveCounter reserves within the default limit and rejects over it', async () => {
+    expect(await repo.reserveCounter('EVENT', 'event-1', 400000)).toBe(true);
+    expect((await repo.getCounter('EVENT', 'event-1'))?.exposureCents).toBe(400000);
+    // over the default per-event limit -> rejected, unchanged
+    expect(await repo.reserveCounter('EVENT', 'event-1', 1000000)).toBe(false);
+    expect((await repo.getCounter('EVENT', 'event-1'))?.exposureCents).toBe(400000);
+  });
+
+  it('decreaseCounter lowers the operational counter and setCounterExposure overwrites it', async () => {
+    await repo.reserveCounter('MARKET', 'market-1', 150000);
+    await repo.decreaseCounter('MARKET', 'market-1', 50000);
+    expect((await repo.getCounter('MARKET', 'market-1'))?.exposureCents).toBe(100000);
+
+    await repo.setCounterExposure('MARKET', 'market-1', 25000);
+    expect((await repo.getCounter('MARKET', 'market-1'))?.exposureCents).toBe(25000);
+  });
+
+  it('reserveCounter is atomic under concurrent contention per refId', async () => {
+    // default per-event limit is 5000 BRL = 500000 cents
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => repo.reserveCounter('EVENT', 'event-x', 100000)),
+    );
+    const successes = results.filter(Boolean).length;
+    expect(successes).toBe(5);
+    expect((await repo.getCounter('EVENT', 'event-x'))?.exposureCents).toBe(500000);
+    // other event is independent
+    expect(await repo.getCounter('EVENT', 'event-y')).toBeNull();
+  });
 });

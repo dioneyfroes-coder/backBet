@@ -34,9 +34,13 @@ export class BetRepository implements IBetRepository {
     return this.bets.filter((b) => b.userId === userId).map((bet) => this.clone(bet));
   }
 
-  async findByEventId(eventId: string): Promise<Bet[]> {
-    return this.bets.filter((b) => b.eventId === eventId).map((bet) => this.clone(bet));
-  }
+    async findByEventId(eventId: string): Promise<Bet[]> {
+      return this.bets.filter((b) => b.eventId === eventId).map((bet) => this.clone(bet));
+    }
+
+    async findByMarketId(marketId: string): Promise<Bet[]> {
+      return this.bets.filter((b) => b.marketId === marketId).map((bet) => this.clone(bet));
+    }
 
   async delete(id: string): Promise<boolean> {
     const initialLength = this.bets.length;

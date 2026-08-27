@@ -1,5 +1,7 @@
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { TransactionSession } from '@/core/shared/types/Transaction';
+import { RiskExposureScope } from '@/core/risk/types/risk.types';
+import { RiskExposureCounter } from '@/core/risk/domain/entities/RiskExposureCounter';
 
 export type RiskRepositoryOptions = { session?: TransactionSession };
 
@@ -16,4 +18,33 @@ export interface IRiskRepository {
    * guard used on the critical path when placing a bet.
    */
   reserveExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<boolean>;
+  /**
+   * Atomically reserves exposure on a shared counter (event/market).
+   * Returns false if exposure + amount would exceed the counter's limit, in
+   * which case nothing is changed.
+   */
+  reserveCounter(
+    scope: RiskExposureScope,
+    refId: string,
+    amount: number,
+    options?: RiskRepositoryOptions,
+  ): Promise<boolean>;
+  decreaseCounter(
+    scope: RiskExposureScope,
+    refId: string,
+    amount: number,
+    options?: RiskRepositoryOptions,
+  ): Promise<void>;
+  getCounter(
+    scope: RiskExposureScope,
+    refId: string,
+    options?: RiskRepositoryOptions,
+  ): Promise<RiskExposureCounter | null>;
+  /** Overwrites a counter's exposure (used by the reconciliation job). */
+  setCounterExposure(
+    scope: RiskExposureScope,
+    refId: string,
+    exposureCents: number,
+    options?: RiskRepositoryOptions,
+  ): Promise<void>;
 }

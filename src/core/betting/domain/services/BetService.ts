@@ -75,15 +75,27 @@ export class BetService {
       else await this.betRepository.create(bet);
       if (this.riskService) {
         const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
-        const reserved =
-          options !== undefined
-            ? await this.riskService.reserveExposure(bet.userId, liabilityCents, options)
-            : await this.riskService.reserveExposure(bet.userId, liabilityCents);
-        if (!reserved) {
+        const riskOptions = options ?? undefined;
+        const userReserved = await this.riskService.reserveExposure(
+          bet.userId,
+          liabilityCents,
+          riskOptions,
+        );
+        const eventReserved = await this.riskService.reserveEventExposure(
+          bet.eventId,
+          liabilityCents,
+          riskOptions,
+        );
+        const marketReserved = await this.riskService.reserveMarketExposure(
+          bet.marketId,
+          liabilityCents,
+          riskOptions,
+        );
+        if (!userReserved || !eventReserved || !marketReserved) {
           throw new DomainError({
             code: 'RISK_LIMIT_EXCEEDED',
             message: 'Bet rejected: exposure limit would be exceeded',
-            details: { liabilityCents },
+            details: { liabilityCents, userReserved, eventReserved, marketReserved },
           });
         }
       }
@@ -110,8 +122,10 @@ export class BetService {
       bet.cancel(input.reason);
       if (this.riskService) {
         const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
-        if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
-        else await this.riskService.reduceExposure(bet.userId, liabilityCents);
+        const riskOptions = session ? { session } : undefined;
+        await this.riskService.reduceExposure(bet.userId, liabilityCents, riskOptions);
+        await this.riskService.reduceEventExposure(bet.eventId, liabilityCents, riskOptions);
+        await this.riskService.reduceMarketExposure(bet.marketId, liabilityCents, riskOptions);
       }
       const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
       if (options)
@@ -143,8 +157,10 @@ export class BetService {
       bet.resolve(input.result);
       if (this.riskService) {
         const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
-        if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
-        else await this.riskService.reduceExposure(bet.userId, liabilityCents);
+        const riskOptions = session ? { session } : undefined;
+        await this.riskService.reduceExposure(bet.userId, liabilityCents, riskOptions);
+        await this.riskService.reduceEventExposure(bet.eventId, liabilityCents, riskOptions);
+        await this.riskService.reduceMarketExposure(bet.marketId, liabilityCents, riskOptions);
       }
       if (input.result === 'WON') {
         const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;

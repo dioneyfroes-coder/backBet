@@ -333,4 +333,86 @@ describe('BetService', () => {
       expect(await riskService.getExposureForUser('user-9')).toBe(280);
     });
   });
+
+  describe('event and market exposure counters', () => {
+    const buildService = (riskService: RiskService) => {
+      const localBetRepository = { ...betRepository } as any;
+      localBetRepository.create = jest.fn().mockResolvedValue(undefined);
+      localBetRepository.findByUserId = jest.fn().mockResolvedValue([]);
+      localBetRepository.findByEventId = jest.fn().mockResolvedValue([]);
+
+      const localWallet = { ...walletService } as any;
+      localWallet.withdraw = jest.fn().mockResolvedValue({ currency: 'BRL', userId: 'user-c' });
+      localWallet.deposit = jest.fn().mockResolvedValue(undefined);
+
+      const session = { id: 'counter-tx' };
+      const transactionRunner: TransactionRunner = {
+        withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => work(session)),
+      };
+      return new BetService(
+        localBetRepository,
+        eventRepository,
+        localWallet,
+        riskService,
+        transactionRunner,
+      );
+    };
+
+    it('accumulates event and market counters on placeBet and rejects at the market limit', async () => {
+      const riskRepository = new InMemoryRiskRepository();
+      await riskRepository.upsert(new RiskProfile('user-c', 0, 100000000));
+      const riskService = new RiskService(riskRepository);
+      const service = buildService(riskService);
+      eventRepository.findById.mockResolvedValue(makeEvent());
+
+      const place = () =>
+        service
+          .placeBet({
+            userId: 'user-c',
+            eventId: 'event-1',
+            marketId: 'market-a',
+            oddId: 'odd-a',
+            amount: 100, // liability at odds 2.4 = 140 BRL = 14000 cents
+            type: 'SINGLE',
+          })
+          .then(() => 'ok' as const)
+          .catch((e: DomainError) => e.code);
+
+      const results = await Promise.all(Array.from({ length: 30 }, () => place()));
+      const ok = results.filter((r) => r === 'ok').length;
+      // per-market limit is 3000 BRL = 300000 cents; each bet adds 140 BRL
+      const marketCapacity = Math.floor(300000 / 14000);
+      expect(ok).toBe(marketCapacity);
+      // event limit is 5000 BRL, so all market-limited surpluses still reserve at event
+      expect(await riskService.getEventExposure('event-1')).toBe(30 * 140);
+      expect(await riskService.getMarketExposure('market-a')).toBe((ok * 14000) / 100);
+    });
+
+    it('reduces event and market counters on cancelBet', async () => {
+      const riskRepository = new InMemoryRiskRepository();
+      await riskRepository.upsert(new RiskProfile('user-c', 0, 100000000));
+      const riskService = new RiskService(riskRepository);
+      const service = buildService(riskService);
+      eventRepository.findById.mockResolvedValue(makeEvent());
+
+      await service.placeBet({
+        userId: 'user-c',
+        eventId: 'event-1',
+        marketId: 'market-a',
+        oddId: 'odd-a',
+        amount: 100,
+        type: 'SINGLE',
+      });
+      expect(await riskService.getEventExposure('event-1')).toBe(140);
+      expect(await riskService.getMarketExposure('market-a')).toBe(140);
+
+      const bet = makeBet();
+      betRepository.findById.mockResolvedValue(bet);
+      await service.cancelBet({ betId: bet.id, reason: 'cancel', canceledBy: 'admin-1' });
+
+      // makeBet liability = 100 BRL @ odds 2 = 100 BRL; 140 - 100 = 40
+      expect(await riskService.getEventExposure('event-1')).toBe(40);
+      expect(await riskService.getMarketExposure('market-a')).toBe(40);
+    });
+  });
 });

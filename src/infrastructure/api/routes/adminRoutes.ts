@@ -100,6 +100,13 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   );
 
   router.post(
+    '/risk/users/:userId/reconcile',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.reconcileRiskForUser(req, res)),
+  );
+
+  router.post(
     '/bets/:betId/settle',
     protectedRoute,
     requireAdminRole,

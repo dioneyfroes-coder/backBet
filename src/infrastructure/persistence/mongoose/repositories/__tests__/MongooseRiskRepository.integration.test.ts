@@ -1,5 +1,6 @@
 import { MongooseRiskRepository } from '../MongooseRiskRepository';
 import { RiskProfileModel } from '../../schemas/RiskProfileSchema';
+import { RiskExposureCounterModel } from '../../schemas/RiskExposureCounterSchema';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 
 describe('MongooseRiskRepository (mocked model)', () => {
@@ -78,5 +79,76 @@ describe('MongooseRiskRepository (mocked model)', () => {
 
     expect(ok).toBe(false);
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  describe('exposure counters', () => {
+    const chainable = (result: unknown, withSession = false) => {
+      const q: any = { lean: jest.fn().mockResolvedValue(result) };
+      if (withSession) {
+        q.session = jest.fn().mockReturnValue(q);
+        q.then = undefined;
+      } else {
+        q.session = jest.fn().mockReturnThis();
+      }
+      return q;
+    };
+
+    it('getCounter returns null when no counter exists', async () => {
+      jest
+        .spyOn(RiskExposureCounterModel, 'findOne')
+        .mockReturnValue(chainable(null) as any);
+      const repo = new MongooseRiskRepository();
+      expect(await repo.getCounter('EVENT', 'evt-1')).toBeNull();
+    });
+
+    it('getCounter maps a stored record to the domain entity', async () => {
+      jest
+        .spyOn(RiskExposureCounterModel, 'findOne')
+        .mockReturnValue(
+          chainable({ _id: 'abc', scope: 'MARKET', refId: 'mkt-1', exposureCents: 125000, maxExposureCents: 300000 }) as any,
+        );
+      const repo = new MongooseRiskRepository();
+      const counter = await repo.getCounter('MARKET', 'mkt-1');
+      expect(counter?.refId).toBe('mkt-1');
+      expect(counter?.exposureCents).toBe(125000);
+      expect(counter?.maxExposureCents).toBe(300000);
+    });
+
+    it('reserveCounter returns true when the conditional increment matches', async () => {
+      const spy = jest
+        .spyOn(RiskExposureCounterModel, 'findOneAndUpdate')
+        .mockReturnValueOnce({} as any) // ensure-profile upsert
+        .mockReturnValueOnce(
+          chainable({ _id: 'x', scope: 'EVENT', refId: 'evt-1', exposureCents: 140000 }, true) as any,
+        );
+      const repo = new MongooseRiskRepository();
+      const ok = await repo.reserveCounter('EVENT', 'evt-1', 140000);
+
+      expect(ok).toBe(true);
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(spy.mock.calls[1][1]).toEqual({ $inc: { exposureCents: 140000 } });
+    });
+
+    it('reserveCounter returns false when the conditional increment matches nothing', async () => {
+      jest
+        .spyOn(RiskExposureCounterModel, 'findOneAndUpdate')
+        .mockReturnValueOnce({} as any) // ensure
+        .mockReturnValueOnce(chainable(null, true) as any); // no match
+      const repo = new MongooseRiskRepository();
+      expect(await repo.reserveCounter('EVENT', 'evt-1', 140000)).toBe(false);
+    });
+
+    it('setCounterExposure upserts the requested exposure', async () => {
+      const spy = jest
+        .spyOn(RiskExposureCounterModel, 'findOneAndUpdate')
+        .mockReturnValue({} as any);
+      const repo = new MongooseRiskRepository();
+      await repo.setCounterExposure('EVENT', 'evt-1', 50000);
+      expect(spy).toHaveBeenCalled();
+      expect(spy.mock.calls[0][1]).toEqual({
+        $set: { exposureCents: 50000 },
+        $setOnInsert: { scope: 'EVENT', refId: 'evt-1', maxExposureCents: expect.any(Number) },
+      });
+    });
   });
 });

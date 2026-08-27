@@ -128,6 +128,18 @@ export class MongooseBetRepository implements IBetRepository {
     }
   }
 
+  async findByMarketId(marketId: string): Promise<Bet[]> {
+    try {
+      const betsData = await BetModel.find({ marketId }).lean<BetRecordRaw[]>();
+      return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
+    } catch (error: unknown) {
+      const originalError = error instanceof Error ? error.message : 'unknown';
+      throw new AppError('Erro ao buscar apostas do mercado', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError,
+      });
+    }
+  }
+
   async findByStatus(status: BetStatus): Promise<Bet[]> {
     try {
       const betsData = await BetModel.find({ status }).lean<BetRecordRaw[]>();

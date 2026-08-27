@@ -10,6 +10,7 @@ export interface IBetRepository {
   findById(id: string, options?: BetRepositoryOptions): Promise<Bet | null>;
   findByUserId(userId: string): Promise<Bet[]>;
   findByEventId(eventId: string): Promise<Bet[]>;
+  findByMarketId(marketId: string): Promise<Bet[]>;
   findByStatus(status: BetStatus): Promise<Bet[]>;
   findAll?(filter?: { userId?: string; eventId?: string; status?: BetStatus }): Promise<Bet[]>;
   exists?(id: string): Promise<boolean>;

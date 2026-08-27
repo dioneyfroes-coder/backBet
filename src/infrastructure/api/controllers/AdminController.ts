@@ -84,6 +84,34 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
+   * /api/admin/risk/users/{userId}/reconcile:
+   *   post:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Reconcilia a exposição de risco de um usuário (estado operacional vs histórico de apostas)
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       '200':
+   *         description: Resultado da reconciliação
+   */
+  async reconcileRiskForUser(req: Request, res: Response) {
+    try {
+      const result = await this.riskService.reconcileUserRisk(req.params.userId);
+      return this.ok(res, result);
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
    * /api/admin/bets/{betId}/settle:
    *   post:
    *     tags:
