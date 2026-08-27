@@ -182,6 +182,26 @@ describe('Money Value Object', () => {
       const liability = stake.calculateLiability(2.0);
       expect(liability.currency).toBe('USD');
     });
+
+    it('should calculate liability for maximum odds (1000)', () => {
+      const stake = new Money(100, 'BRL');
+      const liability = stake.calculateLiability(1000);
+      expect(liability.amount).toBe(99_900); // 100 × 999 = 99.900
+      expect(liability.getCents()).toBe(9_990_000);
+    });
+
+    it('should calculate liability for minimum stake at minimum odds', () => {
+      const stake = new Money(0.01, 'BRL');
+      const liability = stake.calculateLiability(1.01);
+      expect(liability.getCents()).toBe(0); // 1 cent × 0.01 = 0.01 → 0 cent
+    });
+
+    it('should calculate liability for section 6 required matrix', () => {
+      expect(new Money(10, 'BRL').calculateLiability(1.01).amount).toBe(0.1); // 10 × 0.01
+      expect(new Money(10, 'BRL').calculateLiability(1.1).amount).toBe(1); // 10 × 0.10
+      expect(new Money(10, 'BRL').calculateLiability(2.0).amount).toBe(10); // 10 × 1.00
+      expect(new Money(100, 'BRL').calculateLiability(10.0).amount).toBe(900); // 100 × 9.00
+    });
   });
 
   describe('add method', () => {

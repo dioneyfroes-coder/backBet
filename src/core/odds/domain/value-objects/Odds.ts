@@ -47,19 +47,19 @@ export class Odds {
     }
   }
 
-  calculatePotentialReturn(stake: number): number {
-    if (typeof stake !== 'number' || stake <= 0 || isNaN(stake)) {
-      throw new DomainError({
-        code: 'ODDS_INVALID_STAKE',
-        message: 'Invalid stake amount',
-        details: { stake },
-      });
-    }
-    return Number((this.value * stake).toFixed(2));
+  /**
+   * Calcula a liability de uma aposta: stake × (odds - 1).
+   * Operação de domínio única, centralizada em Money.calculateLiability
+   * para que Bet, Risk e Treasury usem exatamente a mesma fórmula.
+   */
+  calculateLiability(
+    stake: import('@/core/shared/domain/value-objects/Money').Money,
+  ): import('@/core/shared/domain/value-objects/Money').Money {
+    return stake.calculateLiability(this.value);
   }
 
   /**
-   * Calculate potential return using Money value object for exact cents arithmetic.
+   * Calcula o retorno potencial usando Money para aritmética exata em centavos.
    */
   calculatePotentialReturnMoney(stake: import('@/core/shared/domain/value-objects/Money').Money): import('@/core/shared/domain/value-objects/Money').Money {
     return stake.multiply(this.value);

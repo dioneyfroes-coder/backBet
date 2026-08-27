@@ -26,7 +26,7 @@ export class RiskService {
       const bets = await this.betRepository.findByUserId(userId);
       const pending = bets.filter((b) => b.status === 'PENDING');
       const sumLiabilityCents = pending.reduce((acc, b) => {
-        const liability = b.amount.calculateLiability(b.odds.value);
+        const liability = b.odds.calculateLiability(b.amount);
         return acc + liability.getCents();
       }, 0);
       // Also include stored exposure if repository available
@@ -101,7 +101,7 @@ export class RiskService {
           (b) => b.status === 'PENDING' && b.eventId === eventId,
         );
         const exposureSameEventCents = pendingSameEvent.reduce(
-          (acc, b) => acc + b.amount.calculateLiability(b.odds.value).getCents(),
+          (acc, b) => acc + b.odds.calculateLiability(b.amount).getCents(),
           0,
         );
         if ((exposureSameEventCents + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
@@ -125,7 +125,7 @@ export class RiskService {
           (b) => b.status === 'PENDING' && b.marketId === marketId,
         );
         const exposureSameMarketCents = pendingSameMarket.reduce(
-          (acc, b) => acc + b.amount.calculateLiability(b.odds.value).getCents(),
+          (acc, b) => acc + b.odds.calculateLiability(b.amount).getCents(),
           0,
         );
         if ((exposureSameMarketCents + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {

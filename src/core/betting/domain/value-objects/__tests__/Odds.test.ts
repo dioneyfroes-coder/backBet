@@ -1,12 +1,13 @@
 import { FractionalOdds, OddFormat, Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 
 describe('Odds value object', () => {
   it('calculates potential return and exposes JSON', () => {
     const odds = new Odds(2.5);
 
     expect(odds.value).toBe(2.5);
-    expect(odds.calculatePotentialReturn(100)).toBe(250);
+    expect(odds.calculatePotentialReturnMoney(new Money(100, 'BRL')).amount).toBe(250);
     expect(odds.toString()).toBe('2.50');
     expect(odds.toJSON()).toEqual({ value: 2.5 });
   });
@@ -23,12 +24,25 @@ describe('Odds value object', () => {
     expect(() => new Odds('abc' as unknown as number)).toThrow('Odds value must be a valid number');
   });
 
-  it('throws when stakeholder is invalid', () => {
-    const odds = new Odds(1.2);
-    expect(() => odds.calculatePotentialReturn(-1)).toThrow(DomainError);
-    expect(() => odds.calculatePotentialReturn(-1)).toThrow('Invalid stake amount');
-    expect(() => odds.calculatePotentialReturn(NaN)).toThrow(DomainError);
-    expect(() => odds.calculatePotentialReturn(NaN)).toThrow('Invalid stake amount');
+  it('calculates liability as stake times (odds - 1)', () => {
+    const odds = new Odds(2.0);
+    const stake = new Money(100, 'BRL');
+
+    expect(odds.calculateLiability(stake).amount).toBe(100);
+  });
+
+  it('handles very large stakes preserving exact cents rounding', () => {
+    const odds = new Odds(3.75);
+    const stake = new Money(123_456_789.99, 'BRL');
+
+    expect(odds.calculatePotentialReturnMoney(stake).amount).toBe(462_962_962.46);
+  });
+
+  it('handles decimal odds and stakes with many fractional digits', () => {
+    const odds = new Odds(1.347891);
+    const stake = new Money(10.56, 'BRL');
+
+    expect(odds.calculatePotentialReturnMoney(stake).amount).toBe(14.23);
   });
 
   it('returns a new Odds when updated', () => {
@@ -41,20 +55,6 @@ describe('Odds value object', () => {
     expect(() => odds.update(0.5)).toThrow('Odds must be greater than or equal to 1.01');
     expect(() => odds.update(NaN)).toThrow(DomainError);
     expect(() => odds.update(NaN)).toThrow('Odds value must be a valid number');
-  });
-
-  it('handles very large stakes preserving rounding to two decimals', () => {
-    const odds = new Odds(3.75);
-    const stake = 123_456_789.987;
-
-    expect(odds.calculatePotentialReturn(stake)).toBe(462_962_962.45);
-  });
-
-  it('handles decimal odds and stakes with many fractional digits', () => {
-    const odds = new Odds(1.347891);
-    const stake = 10.5555;
-
-    expect(odds.calculatePotentialReturn(stake)).toBe(14.23);
   });
 
   it('compares odds instances correctly', () => {

@@ -62,7 +62,7 @@ export class BetService {
       if (session) await this.betRepository.create(bet, { session });
       else await this.betRepository.create(bet);
       if (this.riskService) {
-        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
         if (options) await this.riskService.registerExposure(bet.userId, liabilityCents, options);
         else await this.riskService.registerExposure(bet.userId, liabilityCents);
       }
@@ -88,7 +88,7 @@ export class BetService {
       }
       bet.cancel(input.reason);
       if (this.riskService) {
-        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
         if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
         else await this.riskService.reduceExposure(bet.userId, liabilityCents);
       }
@@ -110,7 +110,7 @@ export class BetService {
       const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
       bet.resolve(input.result);
       if (this.riskService) {
-        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
         if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
         else await this.riskService.reduceExposure(bet.userId, liabilityCents);
       }
