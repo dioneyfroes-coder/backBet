@@ -1,5 +1,6 @@
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
+import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 
 export class InMemoryRiskRepository implements IRiskRepository {
   private store: Map<string, RiskProfile> = new Map();
@@ -32,5 +33,15 @@ export class InMemoryRiskRepository implements IRiskRepository {
   async getExposure(userId: string): Promise<number> {
     const existing = this.store.get(userId);
     return existing ? existing.exposure : 0;
+  }
+
+  async reserveExposure(userId: string, amountCents: number): Promise<boolean> {
+    const existing =
+      this.store.get(userId) ??
+      new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER * 100);
+    if (existing.exposureCents + amountCents > existing.maxExposureCents) return false;
+    existing.increaseExposure(amountCents);
+    this.store.set(userId, existing);
+    return true;
   }
 }

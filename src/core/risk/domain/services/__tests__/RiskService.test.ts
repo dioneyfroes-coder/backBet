@@ -28,4 +28,29 @@ describe('RiskService (in-memory)', () => {
     const allowed = await rs.canPlaceBet(userId, 20, 2);
     expect(allowed).toBe(false);
   });
+
+  it('reserveExposure reserves atomically and rejects beyond the limit', async () => {
+    const rs = new RiskService();
+    const userId = 'user-3';
+
+    expect(await rs.reserveExposure(userId, 600000)).toBe(true); // 6000 BRL
+    expect(await rs.getExposureForUser(userId)).toBe(6000);
+
+    // remaining headroom is 10000 - 6000 = 4000 BRL = 400000 cents
+    expect(await rs.reserveExposure(userId, 400000)).toBe(true);
+    expect(await rs.reserveExposure(userId, 1)).toBe(false);
+    expect(await rs.getExposureForUser(userId)).toBe(10000);
+  });
+
+  it('reserveExposure serializes concurrent requests to not exceed the limit', async () => {
+    const rs = new RiskService();
+    const userId = 'user-4';
+    // limit 10000 BRL = 1000000 cents; each reservation 1000 BRL = 100000 cents -> max 10
+    const results = await Promise.all(
+      Array.from({ length: 30 }, () => rs.reserveExposure(userId, 100000)),
+    );
+    const successes = results.filter(Boolean).length;
+    expect(successes).toBe(10);
+    expect(await rs.getExposureForUser(userId)).toBe(10000);
+  });
 });

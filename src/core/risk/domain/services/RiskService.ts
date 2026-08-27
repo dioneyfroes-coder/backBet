@@ -21,25 +21,20 @@ export class RiskService {
   }
 
   async getExposureForUser(userId: string): Promise<number> {
-    // If we have a BetRepository we compute exposure using unsettled bets (PENDING)
-    if (this.betRepository) {
-      const bets = await this.betRepository.findByUserId(userId);
-      const pending = bets.filter((b) => b.status === 'PENDING');
-      const sumLiabilityCents = pending.reduce((acc, b) => {
-        const liability = b.odds.calculateLiability(b.amount);
-        return acc + liability.getCents();
-      }, 0);
-      // Also include stored exposure if repository available
-      if (this.riskRepository) {
-        const profile = await this.riskRepository.getByUserId(userId);
-        return (sumLiabilityCents + (profile?.exposureCents ?? 0)) / 100;
-      }
-      return sumLiabilityCents / 100;
-    }
-
+    // Operational exposure lives in RiskProfile.exposure (Fase 6 direction). Prefer
+    // the stored value whenever a risk repository is present; bet history is only a
+    // reconciliation/fallback source, not the authoritative operational state.
     if (this.riskRepository) {
       const profile = await this.riskRepository.getByUserId(userId);
       return profile?.exposure ?? 0;
+    }
+
+    if (this.betRepository) {
+      const bets = await this.betRepository.findByUserId(userId);
+      const pending = bets.filter((b) => b.status === 'PENDING');
+      return (
+        pending.reduce((acc, b) => acc + b.odds.calculateLiability(b.amount).getCents(), 0) / 100
+      );
     }
 
     const p = this.profiles.get(userId);
@@ -173,6 +168,28 @@ export class RiskService {
       this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER * 100);
     profile.increaseExposure(amountCents);
     this.profiles.set(userId, profile);
+  }
+
+  /**
+   * Atomically reserves exposure, failing (returning false) if the user's limit
+   * would be exceeded. This is the authoritative concurrency-safe guard on the
+   * bet placement critical path.
+   */
+  async reserveExposure(
+    userId: string,
+    amountCents: number,
+    options?: RiskRepositoryOptions,
+  ): Promise<boolean> {
+    if (this.riskRepository) {
+      if (options) return this.riskRepository.reserveExposure(userId, amountCents, options);
+      return this.riskRepository.reserveExposure(userId, amountCents);
+    }
+    const profile =
+      this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER * 100);
+    if (profile.exposureCents + amountCents > profile.maxExposureCents) return false;
+    profile.increaseExposure(amountCents);
+    this.profiles.set(userId, profile);
+    return true;
   }
 
   async reduceExposure(userId: string, amountCents: number, options?: RiskRepositoryOptions): Promise<void> {

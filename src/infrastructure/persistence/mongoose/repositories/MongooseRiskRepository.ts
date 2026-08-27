@@ -3,6 +3,7 @@ import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { RiskProfileModel } from '../schemas/RiskProfileSchema';
 import { AppError } from '@/shared/errors/AppError';
 import { RiskRepositoryOptions } from '@/core/risk/domain/repositories/IRiskRepository';
+import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 
 type RiskProfileRecord = {
   _id?: string | { toString(): string };
@@ -100,6 +101,49 @@ export class MongooseRiskRepository implements IRiskRepository {
       return (doc?.exposureCents ?? 0) / 100;
     } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição', 500, {
+        originalError: getErrorMessage(error),
+      });
+    }
+  }
+
+  async reserveExposure(
+    userId: string,
+    amountCents: number,
+    options: RiskRepositoryOptions = {},
+  ): Promise<boolean> {
+    try {
+      // Ensure the profile exists before applying the conditional increment.
+      // $setOnInsert sets the default limit only when creating a fresh document,
+      // so a brand-new profile starts with the configured max exposure instead of 0.
+      const ensure = RiskProfileModel.findOneAndUpdate(
+        { userId },
+        {
+          $setOnInsert: {
+            exposureCents: 0,
+            maxExposureCents: RISK_CONFIG.MAX_EXPOSURE_PER_USER * 100,
+          },
+        },
+        { upsert: true },
+      );
+      if (options.session) ensure.session(options.session as never);
+      await ensure;
+
+      // Atomic conditional increment: only matched (and updated) if the post-state
+      // stays within the limit. A single findOneAndUpdate on one document is atomic,
+      // so concurrent reservations serialize here.
+      const query = RiskProfileModel.findOneAndUpdate(
+        {
+          userId,
+          $expr: { $lte: [{ $add: ['$exposureCents', amountCents] }, '$maxExposureCents'] },
+        },
+        { $inc: { exposureCents: amountCents } },
+        { new: true },
+      );
+      if (options.session) query.session(options.session as never);
+      const res = await query.lean<RiskProfileRecord | null>();
+      return res !== null;
+    } catch (error: unknown) {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao reservar exposição', 500, {
         originalError: getErrorMessage(error),
       });
     }

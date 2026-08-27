@@ -9,4 +9,11 @@ export interface IRiskRepository {
   increaseExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void>;
   decreaseExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void>;
   getExposure(userId: string, options?: RiskRepositoryOptions): Promise<number>;
+  /**
+   * Atomically reserves additional exposure for a user.
+   * Only succeeds if exposure + amount <= maxExposure; otherwise returns false
+   * and leaves exposure unchanged. This is the authoritative concurrency-safe
+   * guard used on the critical path when placing a bet.
+   */
+  reserveExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<boolean>;
 }

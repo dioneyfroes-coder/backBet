@@ -75,8 +75,17 @@ export class BetService {
       else await this.betRepository.create(bet);
       if (this.riskService) {
         const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
-        if (options) await this.riskService.registerExposure(bet.userId, liabilityCents, options);
-        else await this.riskService.registerExposure(bet.userId, liabilityCents);
+        const reserved =
+          options !== undefined
+            ? await this.riskService.reserveExposure(bet.userId, liabilityCents, options)
+            : await this.riskService.reserveExposure(bet.userId, liabilityCents);
+        if (!reserved) {
+          throw new DomainError({
+            code: 'RISK_LIMIT_EXCEEDED',
+            message: 'Bet rejected: exposure limit would be exceeded',
+            details: { liabilityCents },
+          });
+        }
       }
       return bet;
     };

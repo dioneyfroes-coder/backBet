@@ -4,6 +4,10 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { Event, Market } from '../../entities/Event';
 import { TransactionRunner } from '@/core/shared/types/Transaction';
+import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { RiskService } from '@/core/risk/domain/services/RiskService';
+import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
+import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 const makeEvent = (status: 'SCHEDULED' | 'LIVE' | 'FINISHED' = 'SCHEDULED') =>
   new Event(
@@ -274,5 +278,59 @@ describe('BetService', () => {
 
     expect(await service.getUserBets('user-1')).toHaveLength(1);
     expect(await service.getEventBets('event-1')).toHaveLength(1);
+  });
+
+  describe('placeBet exposure atomicity', () => {
+    it('allows only the bets that fit within the exposure limit under concurrency', async () => {
+      const riskRepository = new InMemoryRiskRepository();
+      // limit 300 BRL = 30000 cents
+      await riskRepository.upsert(new RiskProfile('user-9', 0, 30000));
+      const riskService = new RiskService(riskRepository);
+
+      const localBetRepository = { ...betRepository } as any;
+      localBetRepository.create = jest.fn().mockResolvedValue(undefined);
+      localBetRepository.findById = jest.fn();
+      localBetRepository.findByUserId = jest.fn().mockResolvedValue([]);
+
+      const localWallet = { ...walletService } as any;
+      localWallet.withdraw = jest.fn().mockResolvedValue({ currency: 'BRL', userId: 'user-9' });
+
+      const session = { id: 'risk-tx' };
+      const transactionRunner: TransactionRunner = {
+        withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => work(session)),
+      };
+      const service = new BetService(
+        localBetRepository,
+        eventRepository,
+        localWallet,
+        riskService,
+        transactionRunner,
+      );
+
+      eventRepository.findById.mockResolvedValue(makeEvent());
+
+      const place = () =>
+        service
+          .placeBet({
+            userId: 'user-9',
+            eventId: 'event-1',
+            marketId: 'market-a',
+            oddId: 'odd-a',
+            amount: 100, // liability at odds 2.4 = 140 BRL = 14000 cents
+            type: 'SINGLE',
+          })
+          .then(() => 'ok' as const)
+          .catch((e: DomainError) => e.code);
+
+      const results = await Promise.all(Array.from({ length: 10 }, () => place()));
+      const ok = results.filter((r) => r === 'ok').length;
+      const limitExceeded = results.filter((r) => r === 'RISK_LIMIT_EXCEEDED').length;
+
+      // exactly the bets that fit within the limit succeed, the rest fail atomically
+      expect(ok).toBe(2);
+      expect(ok + limitExceeded).toBe(10);
+      // final exposure stays within the configured limit (280 BRL)
+      expect(await riskService.getExposureForUser('user-9')).toBe(280);
+    });
   });
 });

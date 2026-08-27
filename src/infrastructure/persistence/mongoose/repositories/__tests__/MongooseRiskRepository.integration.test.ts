@@ -50,4 +50,33 @@ describe('MongooseRiskRepository (mocked model)', () => {
     const v = await repo.getExposure('u2');
     expect(v).toBe(77);
   });
+
+  it('reserveExposure returns true when the conditional update matches', async () => {
+    const found = { lean: jest.fn().mockResolvedValue({ _id: 'x', exposureCents: 6000 } as any) };
+    const spy = jest
+      .spyOn(RiskProfileModel, 'findOneAndUpdate')
+      .mockReturnValueOnce({} as any) // ensure-profile upsert
+      .mockReturnValueOnce(found as any); // conditional increment
+
+    const repo = new MongooseRiskRepository();
+    const ok = await repo.reserveExposure('u1', 4000);
+
+    expect(ok).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls[1][1]).toEqual({ $inc: { exposureCents: 4000 } });
+  });
+
+  it('reserveExposure returns false when the conditional update matches nothing', async () => {
+    const noMatch = { lean: jest.fn().mockResolvedValue(null) };
+    const spy = jest
+      .spyOn(RiskProfileModel, 'findOneAndUpdate')
+      .mockReturnValueOnce({} as any) // ensure-profile upsert
+      .mockReturnValueOnce(noMatch as any); // conditional increment -> no match
+
+    const repo = new MongooseRiskRepository();
+    const ok = await repo.reserveExposure('u1', 4000);
+
+    expect(ok).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
 });
