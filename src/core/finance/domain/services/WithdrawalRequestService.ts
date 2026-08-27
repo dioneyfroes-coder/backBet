@@ -51,7 +51,7 @@ export class WithdrawalRequestService {
       amount,
       currency,
       new Date(),
-      'PENDING',
+      'REQUESTED',
       undefined,
       notes,
     );
@@ -94,26 +94,16 @@ export class WithdrawalRequestService {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
 
-    if (request.status !== 'PENDING') {
+    if (request.status !== 'REQUESTED' && request.status !== 'VALIDATING') {
       throw new AppError('BAD_REQUEST', 'Withdrawal request already processed', 400);
     }
 
-    if (action === 'APPROVED') {
-      try {
-        await this.walletService.withdrawLocked(request.userId, request.amount, {
-          type: 'WITHDRAWAL_COMPLETED',
-          referenceId: request.id,
-          source: 'WITHDRAWAL',
-        });
-      } catch (err) {
-        try {
-          withdrawalRequestProcessingFailedCounter.inc();
-        } catch (incErr) {
-          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
-        }
-        throw err;
-      }
+    // Validation step: REQUESTED -> VALIDATING
+    request.validateBy(adminId);
 
+    if (action === 'APPROVED') {
+      // Approval keeps the amount LOCKED (never disappears). The definitive
+      // debit happens only when the payout is completed by the worker.
       request.approve(adminId, notes);
 
       // persist approval before enqueuing the payout job (so workers see approved state)
@@ -165,6 +155,78 @@ export class WithdrawalRequestService {
       request.reject(adminId, notes);
     }
 
+    return this.withdrawalRequestRepository.update(request);
+  }
+
+  async markProcessing(requestId: string): Promise<WithdrawalRequest> {
+    const request = await this.withdrawalRequestRepository.findById(requestId);
+    if (!request) {
+      throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
+    }
+    request.markProcessing();
+    return this.withdrawalRequestRepository.update(request);
+  }
+
+  async completePayout(requestId: string): Promise<WithdrawalRequest> {
+    const request = await this.withdrawalRequestRepository.findById(requestId);
+    if (!request) {
+      throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
+    }
+    // Debit the locked amount only now, when the payout actually succeeded.
+    try {
+      await this.walletService.withdrawLocked(request.userId, request.amount, {
+        type: 'WITHDRAWAL_COMPLETED',
+        referenceId: request.id,
+        source: 'WITHDRAWAL',
+      });
+    } catch (err) {
+      try {
+        withdrawalRequestProcessingFailedCounter.inc();
+      } catch (incErr) {
+        console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+      }
+      throw err;
+    }
+    request.completePayout();
+    return this.withdrawalRequestRepository.update(request);
+  }
+
+  async failPayout(requestId: string): Promise<WithdrawalRequest> {
+    const request = await this.withdrawalRequestRepository.findById(requestId);
+    if (!request) {
+      throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
+    }
+    // Return the held amount to the available balance; payout never happened.
+    try {
+      await this.walletService.unlock(request.userId, request.amount, {
+        type: 'WITHDRAWAL_REVERSED',
+        referenceId: request.id,
+        source: 'WITHDRAWAL',
+      });
+      withdrawalRequestProcessingFailedCounter.inc();
+    } catch (err) {
+      try {
+        withdrawalRequestProcessingFailedCounter.inc();
+      } catch (incErr) {
+        console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+      }
+      throw err;
+    }
+    request.failPayout();
+    return this.withdrawalRequestRepository.update(request);
+  }
+
+  async cancelWithdrawal(requestId: string): Promise<WithdrawalRequest> {
+    const request = await this.withdrawalRequestRepository.findById(requestId);
+    if (!request) {
+      throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
+    }
+    await this.walletService.unlock(request.userId, request.amount, {
+      type: 'WITHDRAWAL_REVERSED',
+      referenceId: request.id,
+      source: 'WITHDRAWAL',
+    });
+    request.cancel();
     return this.withdrawalRequestRepository.update(request);
   }
 

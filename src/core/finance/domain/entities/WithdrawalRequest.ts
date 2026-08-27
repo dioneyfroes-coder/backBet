@@ -1,7 +1,17 @@
 import { AppError } from '@/shared/errors/AppError';
 import { Currency } from '../value-objects/Currency';
 
-export type WithdrawalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type WithdrawalStatus =
+  | 'REQUESTED'
+  | 'VALIDATING'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'CANCELED'
+  | 'FAILED'
+  | 'REVERSED';
+
 export type ApprovalAction = 'APPROVED' | 'REJECTED';
 
 export interface ApprovalLog {
@@ -11,6 +21,14 @@ export interface ApprovalLog {
   createdAt: Date;
 }
 
+const TERMINAL_STATUSES: ReadonlySet<WithdrawalStatus> = new Set<WithdrawalStatus>([
+  'REJECTED',
+  'COMPLETED',
+  'CANCELED',
+  'FAILED',
+  'REVERSED',
+]);
+
 export class WithdrawalRequest {
   constructor(
     public readonly id: string,
@@ -18,7 +36,7 @@ export class WithdrawalRequest {
     public readonly amount: number,
     public readonly currency: Currency,
     public readonly requestedAt: Date = new Date(),
-    public status: WithdrawalStatus = 'PENDING',
+    public status: WithdrawalStatus = 'REQUESTED',
     public processedAt?: Date,
     public readonly notes?: string,
     public approvalLogs: ApprovalLog[] = [],
@@ -28,21 +46,55 @@ export class WithdrawalRequest {
     }
   }
 
-  private addApprovalLog(adminId: string, action: ApprovalAction, notes?: string): void {
-    if (this.status !== 'PENDING') {
-      throw new AppError('BAD_REQUEST', 'Withdrawal request already processed', 400);
+  private transitionTo(next: WithdrawalStatus, allowed: ReadonlyArray<WithdrawalStatus>): void {
+    if (!allowed.includes(this.status)) {
+      throw new AppError(
+        'CONFLICT',
+        `Invalid withdrawal state transition: ${this.status} -> ${next}`,
+        409,
+      );
     }
-    this.approvalLogs.push({ adminId, action, notes, createdAt: new Date() });
-    this.status = action === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+    this.status = next;
     this.processedAt = new Date();
   }
 
+  get isTerminal(): boolean {
+    return TERMINAL_STATUSES.has(this.status);
+  }
+
+  validateBy(adminId: string): void {
+    this.transitionTo('VALIDATING', ['REQUESTED']);
+    void adminId;
+  }
+
   approve(adminId: string, notes?: string): void {
-    this.addApprovalLog(adminId, 'APPROVED', notes);
+    this.transitionTo('APPROVED', ['VALIDATING']);
+    this.approvalLogs.push({ adminId, action: 'APPROVED', notes, createdAt: new Date() });
   }
 
   reject(adminId: string, notes?: string): void {
-    this.addApprovalLog(adminId, 'REJECTED', notes);
+    this.transitionTo('REJECTED', ['VALIDATING']);
+    this.approvalLogs.push({ adminId, action: 'REJECTED', notes, createdAt: new Date() });
+  }
+
+  markProcessing(): void {
+    this.transitionTo('PROCESSING', ['APPROVED']);
+  }
+
+  completePayout(): void {
+    this.transitionTo('COMPLETED', ['PROCESSING']);
+  }
+
+  failPayout(): void {
+    this.transitionTo('FAILED', ['PROCESSING']);
+  }
+
+  cancel(): void {
+    this.transitionTo('CANCELED', ['REQUESTED', 'VALIDATING']);
+  }
+
+  reverse(): void {
+    this.transitionTo('REVERSED', ['PROCESSING', 'COMPLETED']);
   }
 
   toDTO() {

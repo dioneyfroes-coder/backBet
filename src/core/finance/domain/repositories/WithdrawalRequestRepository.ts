@@ -26,7 +26,9 @@ export class WithdrawalRequestRepository implements IWithdrawalRequestRepository
   }
 
   async listPending(limit?: number, offset?: number): Promise<WithdrawalRequest[]> {
-    const pending = this.requests.filter((r) => r.status === 'PENDING');
+    const pending = this.requests.filter(
+      (r) => r.status === 'REQUESTED' || r.status === 'VALIDATING',
+    );
     return pending.slice(offset || 0, (offset || 0) + (limit || pending.length));
   }
 }

@@ -44,8 +44,18 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
     },
     status: {
       type: String,
-      enum: ['PENDING', 'APPROVED', 'REJECTED'],
-      default: 'PENDING',
+      enum: [
+        'REQUESTED',
+        'VALIDATING',
+        'APPROVED',
+        'REJECTED',
+        'PROCESSING',
+        'COMPLETED',
+        'CANCELED',
+        'FAILED',
+        'REVERSED',
+      ],
+      default: 'REQUESTED',
     },
     requestedAt: {
       type: Date,

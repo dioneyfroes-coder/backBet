@@ -72,7 +72,9 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
   }
 
   async listPending(limit?: number, offset?: number): Promise<WithdrawalRequest[]> {
-    const docs = await WithdrawalRequestModel.find({ status: 'PENDING' })
+    const docs = await WithdrawalRequestModel.find({
+      status: { $in: ['REQUESTED', 'VALIDATING'] },
+    })
       .sort({ requestedAt: -1 })
       .skip(offset || 0)
       .limit(limit || 20)
