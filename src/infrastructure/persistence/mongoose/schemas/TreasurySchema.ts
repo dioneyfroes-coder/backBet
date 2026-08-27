@@ -1,5 +1,8 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { TreasuryLedgerType } from '@/core/treasury/domain/entities/TreasuryLedgerEntry';
+import {
+  TreasuryLedgerDirection,
+  TreasuryLedgerType,
+} from '@/core/treasury/domain/entities/TreasuryLedgerEntry';
 
 export interface IHouseTreasuryDocument extends Document {
   _id: mongoose.Types.ObjectId;
@@ -11,8 +14,13 @@ export interface IHouseTreasuryDocument extends Document {
   ledger: Array<{
     id: string;
     type: TreasuryLedgerType;
+    direction: TreasuryLedgerDirection;
     amountCents: number;
     currency: string;
+    profitBalanceAfterCents: number;
+    prizeReserveBalanceAfterCents: number;
+    source?: string;
+    referenceId?: string;
     description?: string;
     metadata?: Record<string, unknown>;
     createdAt: Date;
@@ -29,10 +37,19 @@ const ledgerSchema = new Schema(
       enum: ['PROFIT_INFLOW', 'PRIZE_TOP_UP', 'PRIZE_RELEASE'],
       required: true,
     },
+    direction: {
+      type: String,
+      enum: ['CREDIT', 'DEBIT'],
+      required: true,
+    },
     amountCents: { type: Number, required: true, min: 0 },
     currency: { type: String, required: true },
+    profitBalanceAfterCents: { type: Number, required: true, min: 0 },
+    prizeReserveBalanceAfterCents: { type: Number, required: true, min: 0 },
+    source: { type: String },
+    referenceId: { type: String },
     description: { type: String },
-    metadata: { type: Schema.Types.Mixed },
+    metadata: { type: Schema.Types.Mixed, default: undefined },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: false },

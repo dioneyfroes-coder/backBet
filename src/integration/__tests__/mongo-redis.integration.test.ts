@@ -61,4 +61,35 @@ describeReal('MongoDB + Redis integration', () => {
     expect([250, 400]).toContain(persisted?.profitBalance);
     expect(persisted?.version).toBe(2);
   });
+
+  it('round-trips treasury ledger enrichment fields and reconciles', async () => {
+    const subWalletId = `integration-${randomUUID()}`;
+    await repository.save(HouseWallet.create(subWalletId, 'BRL'));
+
+    let wallet = (await repository.getById(subWalletId))!;
+    wallet.recordProfitInflow(100_000, 'seed', {
+      source: 'integration',
+      referenceId: 'ref-1',
+    });
+    wallet.incrementVersion();
+    await repository.update(wallet);
+
+    wallet = (await repository.getById(subWalletId))!;
+    wallet.transferToPrizeReserve(40_000, 'reserve', { source: 'manual-topup' });
+    wallet.incrementVersion();
+    await repository.update(wallet);
+
+    const reloaded = (await repository.getById(subWalletId))!;
+    expect(reloaded.getLedger()[0]).toMatchObject({
+      type: 'PRIZE_TOP_UP',
+      direction: 'DEBIT',
+      amountCents: 40_000,
+      profitBalanceAfterCents: 60_000,
+      prizeReserveBalanceAfterCents: 40_000,
+      source: 'manual-topup',
+    });
+    expect(reloaded.reconcile()).toMatchObject({ consistent: true });
+
+    await HouseTreasuryModel.deleteOne({ walletId: subWalletId });
+  });
 });

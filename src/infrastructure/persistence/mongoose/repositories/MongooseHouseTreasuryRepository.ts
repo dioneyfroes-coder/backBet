@@ -106,8 +106,13 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
         return {
           id: dto.id,
           type: dto.type,
+          direction: dto.direction,
           amountCents: dto.amountCents,
           currency: dto.currency,
+          profitBalanceAfterCents: dto.profitBalanceAfterCents,
+          prizeReserveBalanceAfterCents: dto.prizeReserveBalanceAfterCents,
+          source: dto.source,
+          referenceId: dto.referenceId,
           description: dto.description,
           metadata: dto.metadata ?? undefined,
           createdAt: new Date(dto.createdAt),
@@ -130,14 +135,19 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
   }
 
   private mapLedgerEntry(entry: TreasuryLedgerRecord): TreasuryLedgerEntry {
-    return new TreasuryLedgerEntry(
-      entry.type,
-      entry.amountCents,
-      entry.currency as HouseWallet['currency'],
-      entry.description ?? undefined,
-      entry.metadata ?? undefined,
-      entry.id,
-      entry.createdAt instanceof Date ? entry.createdAt : new Date(entry.createdAt),
-    );
+    return new TreasuryLedgerEntry({
+      type: entry.type,
+      amountCents: entry.amountCents,
+      currency: entry.currency as HouseWallet['currency'],
+      direction: entry.direction,
+      profitBalanceAfterCents: entry.profitBalanceAfterCents,
+      prizeReserveBalanceAfterCents: entry.prizeReserveBalanceAfterCents,
+      source: entry.source ?? undefined,
+      referenceId: entry.referenceId ?? undefined,
+      description: entry.description ?? undefined,
+      metadata: entry.metadata ?? undefined,
+      id: entry.id,
+      createdAt: entry.createdAt instanceof Date ? entry.createdAt : new Date(entry.createdAt),
+    });
   }
 }

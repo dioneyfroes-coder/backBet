@@ -139,4 +139,42 @@ describe('HouseTreasuryService', () => {
     expect(result.transferredAmountCents).toBeGreaterThan(0);
     expect(snapshot.prizeReserveBalance).toBeGreaterThan(0);
   });
+
+  describe('reconcile()', () => {
+    it('reports a consistent treasury after valid operations', async () => {
+      const service = createService();
+      await service.recordProfit(1_000_000, 'seed', { source: 'test' });
+      await service.moveProfitToPrizeReserve(300_000, 'top-up');
+      await service.rebalance({
+        targetPrizeRatio: 0.4,
+        minProfitBufferCents: 100_000,
+        maxTransferCents: 400_000,
+      });
+
+      const result = await service.reconcile();
+      expect(result.consistent).toBe(true);
+      expect(result.walletId).toBe('house-primary');
+    });
+
+    it('detects a persisted balance that cannot be derived from the ledger', async () => {
+      const repository = new HouseTreasuryRepository();
+      const service = new HouseTreasuryService(repository);
+      await service.recordProfit(100_000, 'seed');
+
+      const corrupt = new HouseWallet(
+        'house-primary',
+        'BRL',
+        999_999,
+        0,
+        (await repository.getById('house-primary'))!.getLedgerEntries(),
+      );
+      await repository.save(corrupt);
+
+      const result = await service.reconcile();
+      expect(result.consistent).toBe(false);
+      expect(
+        result.checks.find((check) => check.label === 'newest-entry-matches-current-balances'),
+      ).toMatchObject({ ok: false });
+    });
+  });
 });

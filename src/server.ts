@@ -12,6 +12,7 @@ import '@/infrastructure/observability/cacheMetrics';
 import { createHouseTreasuryRepository } from '@/infrastructure/persistence/factory';
 import { HouseTreasuryService } from '@/core/treasury/domain/services/HouseTreasuryService';
 import { TreasuryRebalanceJob } from '@/infrastructure/jobs/TreasuryRebalanceJob';
+import { TreasuryReconciliationJob } from '@/infrastructure/jobs/TreasuryReconciliationJob';
 import { startContactWorker } from '@/infrastructure/mailer/ContactWorker';
 import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
 import type { Queue as BullQueue } from 'bull';
@@ -22,12 +23,15 @@ import type { Queue as BullQueue } from 'bull';
  */
 async function main() {
   let treasuryJob: TreasuryRebalanceJob | undefined;
+  let treasuryReconciliationJob: TreasuryReconciliationJob | undefined;
   let contactQueue: BullQueue | undefined;
   let withdrawalQueue: BullQueue | undefined;
 
   const stopJobs = () => {
     treasuryJob?.stop();
     treasuryJob = undefined;
+    treasuryReconciliationJob?.stop();
+    treasuryReconciliationJob = undefined;
     if (contactQueue) {
       // close asynchronously but don't block stopJobs
       void contactQueue.close().catch(() => undefined);
@@ -97,6 +101,11 @@ async function main() {
       maxTransferPerRun: appConfig.treasury.maxTransferPerRun,
     });
     treasuryJob.start();
+
+    treasuryReconciliationJob = new TreasuryReconciliationJob(treasuryService, {
+      intervalMs: appConfig.treasury.reconciliationIntervalMs,
+    });
+    treasuryReconciliationJob.start();
 
     // TODO: Registrar outras rotas
     // const betRoutes = createBetRoutes();

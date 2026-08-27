@@ -6,6 +6,7 @@ import {
   TreasuryLedgerMetadata,
   TreasuryLedgerType,
   TreasuryLedgerDTO,
+  treasuryDirectionForType,
 } from './TreasuryLedgerEntry';
 
 export type TreasuryTransferDirection = 'NONE' | 'PROFIT_TO_RESERVE' | 'RESERVE_TO_PROFIT';
@@ -25,6 +26,27 @@ export type TreasuryRebalanceResult = {
   direction: TreasuryTransferDirection;
   transferredAmountCents: number;
   targetPrizeRatio: number;
+};
+
+export type TreasuryReconciliationCheck = {
+  label: string;
+  ok: boolean;
+  detail?: Record<string, unknown>;
+};
+
+export type TreasuryReconciliationResult = {
+  walletId: string;
+  consistent: boolean;
+  checks: TreasuryReconciliationCheck[];
+};
+
+const DELTA_BY_TREASURY_TYPE: Record<
+  TreasuryLedgerType,
+  { profitDeltaSign: number; prizeReserveDeltaSign: number }
+> = {
+  PROFIT_INFLOW: { profitDeltaSign: 1, prizeReserveDeltaSign: 0 },
+  PRIZE_TOP_UP: { profitDeltaSign: -1, prizeReserveDeltaSign: 1 },
+  PRIZE_RELEASE: { profitDeltaSign: 1, prizeReserveDeltaSign: -1 },
 };
 
 const LEDGER_MAX_SIZE = 50;
@@ -97,7 +119,7 @@ export class HouseWallet {
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const money = Money.fromCents(amountCents, this._profit.currency);
+    const money = this.createMoney(amountCents);
     this._profit = this._profit.add(money);
     this.recordLedger('PROFIT_INFLOW', amountCents, description, metadata);
   }
@@ -107,7 +129,7 @@ export class HouseWallet {
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const money = Money.fromCents(amountCents, this._profit.currency);
+    const money = this.createMoney(amountCents);
     if (this._profit.isLessThan(money)) {
       throw new DomainError({
         code: 'TREASURY_INSUFFICIENT_PROFIT',
@@ -121,7 +143,7 @@ export class HouseWallet {
   }
 
   transferToProfit(amountCents: number, description?: string, metadata?: TreasuryLedgerMetadata): void {
-    const money = Money.fromCents(amountCents, this._profit.currency);
+    const money = this.createMoney(amountCents);
     if (this._prizeReserve.isLessThan(money)) {
       throw new DomainError({
         code: 'TREASURY_INSUFFICIENT_PRIZE_RESERVE',
@@ -198,6 +220,80 @@ export class HouseWallet {
     return [...this._ledger];
   }
 
+  /**
+   * Reconciliação da tesouraria: verifica que o ledger de movimentações é
+   * internamente consistente e que o saldo corrente bate com a última
+   * movimentação registrada. Nunca corrige silenciosamente — apenas reporta.
+   */
+  reconcile(): TreasuryReconciliationResult {
+    const checks: TreasuryReconciliationCheck[] = [];
+    const profitCurrent = this.profitBalanceCents;
+    const prizeReserveCurrent = this.prizeReserveBalanceCents;
+    const entries = this._ledger;
+
+    if (entries.length === 0) {
+      const zeroBalances = profitCurrent === 0 && prizeReserveCurrent === 0;
+      checks.push({
+        label: 'empty-ledger-with-zero-balances',
+        ok: zeroBalances,
+        detail: { profitCurrent, prizeReserveCurrent },
+      });
+      return { walletId: this._id, consistent: zeroBalances, checks };
+    }
+
+    const newest = entries[0];
+    const newestMatches =
+      newest.profitBalanceAfterCents === profitCurrent &&
+      newest.prizeReserveBalanceAfterCents === prizeReserveCurrent;
+    checks.push({
+      label: 'newest-entry-matches-current-balances',
+      ok: newestMatches,
+      detail: {
+        entryProfitAfter: newest.profitBalanceAfterCents,
+        entryPrizeReserveAfter: newest.prizeReserveBalanceAfterCents,
+        currentProfit: profitCurrent,
+        currentPrizeReserve: prizeReserveCurrent,
+      },
+    });
+
+    const invalidDirectionId = entries.find(
+      (entry) => entry.direction !== treasuryDirectionForType(entry.type),
+    )?.id;
+    checks.push({
+      label: 'entries-direction-matches-type',
+      ok: !invalidDirectionId,
+      ...(invalidDirectionId ? { detail: { entryId: invalidDirectionId } } : {}),
+    });
+
+    let consecutiveOk = true;
+    let failedLink: string | undefined;
+    for (let index = 0; index < entries.length - 1; index += 1) {
+      const newer = entries[index];
+      const older = entries[index + 1];
+      const delta = DELTA_BY_TREASURY_TYPE[newer.type];
+      const expectedOlderProfit =
+        newer.profitBalanceAfterCents - newer.amountCents * delta.profitDeltaSign;
+      const expectedOlderPrizeReserve =
+        newer.prizeReserveBalanceAfterCents - newer.amountCents * delta.prizeReserveDeltaSign;
+      if (
+        older.profitBalanceAfterCents !== expectedOlderProfit ||
+        older.prizeReserveBalanceAfterCents !== expectedOlderPrizeReserve
+      ) {
+        consecutiveOk = false;
+        failedLink = newer.id;
+        break;
+      }
+    }
+    checks.push({
+      label: 'consecutive-entries-consistent',
+      ok: consecutiveOk,
+      ...(failedLink ? { detail: { newerId: failedLink } } : {}),
+    });
+
+    const consistent = checks.every((check) => check.ok);
+    return { walletId: this._id, consistent, checks };
+  }
+
   snapshot(): TreasurySnapshot {
     return {
       walletId: this._id,
@@ -242,10 +338,31 @@ export class HouseWallet {
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const entry = new TreasuryLedgerEntry(type, amountCents, this.currency, description, metadata);
+    const entry = new TreasuryLedgerEntry({
+      type,
+      amountCents,
+      currency: this.currency,
+      direction: treasuryDirectionForType(type),
+      profitBalanceAfterCents: this.profitBalanceCents,
+      prizeReserveBalanceAfterCents: this.prizeReserveBalanceCents,
+      description,
+      metadata,
+      source: this.metadataSource(metadata),
+      referenceId: typeof metadata?.referenceId === 'string' ? metadata.referenceId : undefined,
+    });
     this._ledger.unshift(entry);
     if (this._ledger.length > LEDGER_MAX_SIZE) {
       this._ledger = this._ledger.slice(0, LEDGER_MAX_SIZE);
     }
+  }
+
+  private metadataSource(metadata?: TreasuryLedgerMetadata): string | undefined {
+    if (typeof metadata?.source === 'string') {
+      return metadata.source;
+    }
+    if (typeof metadata?.context === 'string') {
+      return metadata.context;
+    }
+    return undefined;
   }
 }

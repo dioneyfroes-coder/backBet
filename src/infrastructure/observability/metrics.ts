@@ -109,6 +109,13 @@ const optimisticLockConflictCounter = new Counter({
   registers: [registry],
 });
 
+const treasuryReconciliationMismatchCounter = new Counter({
+  name: 'backbet_treasury_reconciliation_mismatches_total',
+  help: 'Total de divergências detectadas na reconciliação da tesouraria',
+  labelNames: ['walletId'],
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -127,4 +134,5 @@ export {
   withdrawalPayoutFailedCounter,
   idempotencyClaimCounter,
   optimisticLockConflictCounter,
+  treasuryReconciliationMismatchCounter,
 };

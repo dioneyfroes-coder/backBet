@@ -249,6 +249,10 @@ export const appConfig = {
     minProfitBuffer: parsePositiveNumber(env.TREASURY_MIN_PROFIT_BUFFER, 100_000),
     maxTransferPerRun: parsePositiveNumber(env.TREASURY_MAX_TRANSFER_PER_RUN, 250_000),
     rebalanceIntervalMs: parsePositiveInt(env.TREASURY_REBALANCE_INTERVAL_MS, 300_000),
+    reconciliationIntervalMs: parsePositiveInt(
+      env.TREASURY_RECONCILIATION_INTERVAL_MS,
+      300_000,
+    ),
   },
   betRateLimit: {
     place: {

@@ -34,6 +34,7 @@ import { RecordTreasuryProfit } from '@/core/treasury/application/use-cases/Reco
 import { TransferProfitToPrize } from '@/core/treasury/application/use-cases/TransferProfitToPrize';
 import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/TransferPrizeToProfit';
 import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
+import { ReconcileTreasury } from '@/core/treasury/application/use-cases/ReconcileTreasury';
 import { appConfig } from '@/shared/config/appConfig';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 
@@ -82,6 +83,7 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     new RecordTreasuryProfit(treasuryService),
     new TransferProfitToPrize(treasuryService),
     new TransferPrizeToProfit(treasuryService),
+    new ReconcileTreasury(treasuryService),
     new RebalanceTreasury(treasuryService),
   );
 
@@ -165,6 +167,13 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     protectedRoute,
     requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.rebalance(req, res)),
+  );
+
+  router.post(
+    '/treasury/reconcile',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => treasuryController.reconcile(req, res)),
   );
 
   return router;

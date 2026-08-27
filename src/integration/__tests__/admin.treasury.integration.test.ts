@@ -10,6 +10,7 @@ import { RecordTreasuryProfit } from '@/core/treasury/application/use-cases/Reco
 import { TransferProfitToPrize } from '@/core/treasury/application/use-cases/TransferProfitToPrize';
 import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/TransferPrizeToProfit';
 import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
+import { ReconcileTreasury } from '@/core/treasury/application/use-cases/ReconcileTreasury';
 import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
 import {
   AuthenticatedRequest,
@@ -47,6 +48,7 @@ describe('Admin Treasury routes', () => {
       new RecordTreasuryProfit(treasuryService),
       new TransferProfitToPrize(treasuryService),
       new TransferPrizeToProfit(treasuryService),
+      new ReconcileTreasury(treasuryService),
       new RebalanceTreasury(treasuryService),
     );
 
@@ -79,6 +81,13 @@ describe('Admin Treasury routes', () => {
       protectedRoute,
       requireAdminRole,
       asyncHandler((req, res) => controller.rebalance(req, res)),
+    );
+
+    router.post(
+      '/treasury/reconcile',
+      protectedRoute,
+      requireAdminRole,
+      asyncHandler((req, res) => controller.reconcile(req, res)),
     );
 
     const server = createApiServer(0);
@@ -117,5 +126,27 @@ describe('Admin Treasury routes', () => {
     expect(rebalanceRes.status).toBe(200);
     expect(rebalanceRes.body.data.result.direction).toBe('PROFIT_TO_RESERVE');
     expect(rebalanceRes.body.data.summary.prizeReserveBalance).toBeGreaterThan(0);
+  });
+
+  it('reconciles the treasury and reports ledger fidelity', async () => {
+    await request(app)
+      .post('/api/admin/treasury/profit')
+      .send({ amount: 5_000, description: 'seed' });
+
+    const res = await request(app).post('/api/admin/treasury/reconcile');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.reconciliation.walletId).toBe(appConfig.treasury.walletId);
+    expect(res.body.data.reconciliation.consistent).toBe(true);
+    const labels = res.body.data.reconciliation.checks.map((check: { label: string }) => check.label);
+    expect(labels).toContain('newest-entry-matches-current-balances');
+    expect(labels).toContain('consecutive-entries-consistent');
+  });
+
+  it('rejects non-admin users from the treasury reconcile route', async () => {
+    appConfig.admin.allowedUserIds = ['another-admin'];
+    const res = await request(app).post('/api/admin/treasury/reconcile');
+
+    expect(res.status).toBe(403);
   });
 });

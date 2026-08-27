@@ -6,6 +6,7 @@ import { RecordTreasuryProfit } from '@/core/treasury/application/use-cases/Reco
 import { TransferProfitToPrize } from '@/core/treasury/application/use-cases/TransferProfitToPrize';
 import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/TransferPrizeToProfit';
 import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
+import { ReconcileTreasury } from '@/core/treasury/application/use-cases/ReconcileTreasury';
 import { TreasuryAmountDTO, TreasuryRebalanceDTO } from '../dtos/TreasuryDTOs';
 import { TreasuryLedgerMetadata } from '@/core/treasury/domain/entities/TreasuryLedgerEntry';
 import { appConfig } from '@/shared/config/appConfig';
@@ -17,6 +18,7 @@ export class TreasuryController extends BaseController {
     private readonly recordProfitUseCase: RecordTreasuryProfit,
     private readonly transferProfitToPrizeUseCase: TransferProfitToPrize,
     private readonly transferPrizeToProfitUseCase: TransferPrizeToProfit,
+    private readonly reconcileUseCase: ReconcileTreasury,
     private readonly rebalanceUseCase: RebalanceTreasury,
   ) {
     super();
@@ -94,6 +96,11 @@ export class TreasuryController extends BaseController {
       message: 'Valor movido para lucro',
       summary,
     });
+  }
+
+  async reconcile(_req: Request, res: Response) {
+    const reconciliation = await this.reconcileUseCase.execute();
+    return this.ok(res, { reconciliation });
   }
 
   async rebalance(req: Request, res: Response) {

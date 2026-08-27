@@ -1,5 +1,10 @@
 import { Currency } from '@/core/finance/domain/value-objects/Currency';
-import { HouseWallet, TreasuryRebalanceResult, TreasurySnapshot } from '../entities/HouseWallet';
+import {
+  HouseWallet,
+  TreasuryRebalanceResult,
+  TreasuryReconciliationResult,
+  TreasurySnapshot,
+} from '../entities/HouseWallet';
 import { TreasuryLedgerMetadata } from '../entities/TreasuryLedgerEntry';
 import { IHouseTreasuryRepository } from '../repositories/IHouseTreasuryRepository';
 
@@ -28,6 +33,15 @@ export class HouseTreasuryService {
   async getLedger(limit?: number) {
     const wallet = await this.loadWallet();
     return wallet.getLedger(limit);
+  }
+
+  /**
+   * Reconciliação periódica: o saldo da casa deve ser derivável do ledger.
+   * Detecta e reporta divergências — nunca corrige silenciosamente.
+   */
+  async reconcile(): Promise<TreasuryReconciliationResult> {
+    const wallet = await this.loadWallet();
+    return wallet.reconcile();
   }
 
   async recordProfit(amountCents: number, description?: string, metadata?: TreasuryLedgerMetadata) {
