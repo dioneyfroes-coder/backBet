@@ -6,26 +6,26 @@ export class InMemoryRiskRepository implements IRiskRepository {
 
   async getByUserId(userId: string): Promise<RiskProfile | null> {
     const p = this.store.get(userId) ?? null;
-    return p ? new RiskProfile(p.userId, p.exposure, p.maxExposure) : null;
+    if (!p) return null;
+    return new RiskProfile(p.userId, p.exposureCents, p.maxExposureCents, p.currency);
   }
 
   async upsert(profile: RiskProfile): Promise<void> {
     this.store.set(
       profile.userId,
-      new RiskProfile(profile.userId, profile.exposure, profile.maxExposure),
+      new RiskProfile(profile.userId, profile.exposureCents, profile.maxExposureCents, profile.currency),
     );
   }
 
-  async increaseExposure(userId: string, amount: number): Promise<void> {
+  async increaseExposure(userId: string, amountCents: number): Promise<void> {
     const existing = this.store.get(userId) ?? new RiskProfile(userId, 0, 0);
-    existing.exposure = Number((existing.exposure + amount).toFixed(2));
+    existing.increaseExposure(amountCents);
     this.store.set(userId, existing);
   }
 
-  async decreaseExposure(userId: string, amount: number): Promise<void> {
+  async decreaseExposure(userId: string, amountCents: number): Promise<void> {
     const existing = this.store.get(userId) ?? new RiskProfile(userId, 0, 0);
-    existing.exposure = Number((existing.exposure - Math.abs(amount)).toFixed(2));
-    if (existing.exposure < 0) existing.exposure = 0;
+    existing.decreaseExposure(amountCents);
     this.store.set(userId, existing);
   }
 

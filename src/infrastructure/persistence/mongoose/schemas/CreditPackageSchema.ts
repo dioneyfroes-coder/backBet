@@ -4,10 +4,10 @@ import { Currency } from '@/core/finance/domain/value-objects/Currency';
 export interface ICreditPackageDocument extends Document {
   code: string;
   label: string;
-  baseAmount: number;
-  bonusAmount: number;
+  baseAmountCents: number;
+  bonusAmountCents: number;
   currency: Currency;
-  price: number;
+  priceCents: number;
   description?: string;
   isActive: boolean;
   createdAt: Date;
@@ -26,12 +26,12 @@ const creditPackageSchema = new Schema<ICreditPackageDocument>(
       type: String,
       required: true,
     },
-    baseAmount: {
+    baseAmountCents: {
       type: Number,
       required: true,
       min: 0,
     },
-    bonusAmount: {
+    bonusAmountCents: {
       type: Number,
       required: true,
       min: 0,
@@ -42,7 +42,7 @@ const creditPackageSchema = new Schema<ICreditPackageDocument>(
       enum: ['BRL', 'USD', 'EUR'],
       default: 'BRL',
     },
-    price: {
+    priceCents: {
       type: Number,
       required: true,
       min: 0,

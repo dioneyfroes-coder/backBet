@@ -1,5 +1,5 @@
 import { Bet } from '../entities/Bet';
-import { BetAmount } from '../value-objects/BetAmount';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { BetType } from '../../types/bet.types';
 import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
@@ -36,7 +36,7 @@ export class BetFactory {
       userId,
       eventId,
       marketId,
-      new BetAmount(amount, currency),
+      new Money(amount, currency as SupportedCurrency),
       odds,
       'PENDING',
       type,

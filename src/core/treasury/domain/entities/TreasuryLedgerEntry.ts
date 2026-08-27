@@ -15,7 +15,7 @@ export type TreasuryLedgerMetadata = {
 export type TreasuryLedgerDTO = {
   id: string;
   type: TreasuryLedgerType;
-  amount: number;
+  amountCents: number;
   currency: Currency;
   description?: string;
   metadata?: TreasuryLedgerMetadata;
@@ -28,18 +28,18 @@ export class TreasuryLedgerEntry {
 
   constructor(
     private readonly type: TreasuryLedgerType,
-    private readonly amount: number,
+    private readonly amountCents: number,
     private readonly currency: Currency,
     private readonly description?: string,
     private readonly metadata?: TreasuryLedgerMetadata,
     id?: string,
     createdAt?: Date,
   ) {
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
       throw new DomainError({
         code: 'TREASURY_INVALID_AMOUNT',
         message: 'Ledger amount must be positive',
-        details: { amount },
+        details: { amountCents },
       });
     }
 
@@ -59,7 +59,7 @@ export class TreasuryLedgerEntry {
     return {
       id: this._id,
       type: this.type,
-      amount: this.amount,
+      amountCents: this.amountCents,
       currency: this.currency,
       description: this.description,
       metadata: this.metadata,

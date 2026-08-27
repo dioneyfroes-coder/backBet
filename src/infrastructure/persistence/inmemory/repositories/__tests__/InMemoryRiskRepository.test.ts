@@ -9,7 +9,7 @@ describe('InMemoryRiskRepository', () => {
   });
 
   it('should upsert and return profile via getByUserId', async () => {
-    const p = new RiskProfile('user-1', 12.5, 1000);
+    const p = new RiskProfile('user-1', 1250, 100000);
     await repo.upsert(p);
 
     const got = await repo.getByUserId('user-1');
@@ -20,19 +20,19 @@ describe('InMemoryRiskRepository', () => {
   });
 
   it('should increaseExposure and getExposure', async () => {
-    await repo.upsert(new RiskProfile('user-2', 1.25, 500));
-    await repo.increaseExposure('user-2', 3.75);
+    await repo.upsert(new RiskProfile('user-2', 125, 50000));
+    await repo.increaseExposure('user-2', 375);
     const exposure = await repo.getExposure('user-2');
     expect(exposure).toBe(5);
   });
 
   it('should decreaseExposure and normalize negative to zero', async () => {
-    await repo.upsert(new RiskProfile('user-3', 2.5, 200));
-    await repo.decreaseExposure('user-3', 1.25);
+    await repo.upsert(new RiskProfile('user-3', 250, 20000));
+    await repo.decreaseExposure('user-3', 125);
     expect(await repo.getExposure('user-3')).toBe(1.25);
 
     // decrease more than current exposure -> normalize to zero
-    await repo.decreaseExposure('user-3', 10);
+    await repo.decreaseExposure('user-3', 1000);
     expect(await repo.getExposure('user-3')).toBe(0);
   });
 

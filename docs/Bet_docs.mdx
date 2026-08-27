@@ -21,7 +21,7 @@ src/core/betting/
 		factories/BetFactory.ts
 		repositories/*
 		services/BetService.ts
-		value-objects/{BetAmount,Odds}.ts
+		value-objects/Odds.ts
 	types/bet.types.ts
 src/infrastructure/
 	api/controllers/BetController.ts
@@ -40,7 +40,7 @@ src/infrastructure/
 ### Entidades
 
 - `Bet` (`domain/entities/Bet.ts`)
-	- Campos: `id`, `userId`, `eventId`, `marketId`, `amount: BetAmount`, `odds: Odds`, `status`, `type`, `createdAt`, `resolvedAt?`, `cancellationReason?`.
+	- Campos: `id`, `userId`, `eventId`, `marketId`, `amount: Money`, `odds: Odds`, `status`, `type`, `createdAt`, `resolvedAt?`, `cancellationReason?`.
 	- Métodos: `resolve(result)`, `cancel(reason)`, `potentialReturn` (usa `Odds.calculatePotentialReturn`).
 	- Regras: somente apostas `PENDING` podem ser resolvidas/canceladas; validações de IDs e datas lançam `DomainError`.
 
@@ -50,7 +50,7 @@ src/infrastructure/
 
 ### Value Objects
 
-- `BetAmount` valida valores positivos e restringe moedas suportadas.
+- `Money` (value object compartilhado de `src/core/shared`) valida valores positivos, garante até duas casas decimais e restringe moedas suportadas.
 - `Odds` valida cotações > 0 e expõe helpers de cálculo de retorno.
 
 ### DTOs e tipos (`types/bet.types.ts`)
@@ -116,7 +116,7 @@ export const PlaceBetDTO = z.object({
 	eventId: z.string().uuid(),
 	marketId: z.string(),
 	oddId: z.string(),
-	amount: z.number().positive().min(0.01),
+	amount: z.number().positive().min(0.01), // reais (decimal) — convertido para amountCents internamente
 	type: z.enum(['SINGLE', 'MULTIPLE']).optional().default('SINGLE'),
 	currency: z.enum(['BRL', 'USD', 'EUR']).optional().default('BRL'),
 });
@@ -165,4 +165,4 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 
 ---
 
-**Última atualização:** 23 de novembro de 2025
+**Última atualização:** 26 de agosto de 2026

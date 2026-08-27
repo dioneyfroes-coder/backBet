@@ -8,7 +8,7 @@ describe('HouseTreasuryService', () => {
 
   it('records profit and persists snapshot', async () => {
     const service = createService();
-    const snapshot = await service.recordProfit(2500, 'bonus');
+    const snapshot = await service.recordProfit(250_000, 'bonus');
 
     expect(snapshot.profitBalance).toBe(2500);
     expect(snapshot.prizeReserveBalance).toBe(0);
@@ -32,7 +32,7 @@ describe('HouseTreasuryService', () => {
       withTransaction,
     };
 
-    await new HouseTreasuryService(repository).recordProfit(100, 'transactional profit');
+    await new HouseTreasuryService(repository).recordProfit(10_000, 'transactional profit');
 
     expect(withTransaction).toHaveBeenCalledTimes(1);
     expect(getById).toHaveBeenCalledWith('house-primary', { session });
@@ -48,11 +48,11 @@ describe('HouseTreasuryService', () => {
     expect(firstRead).not.toBeNull();
     expect(secondRead).not.toBeNull();
 
-    firstRead!.recordProfitInflow(100);
+    firstRead!.recordProfitInflow(10_000);
     firstRead!.incrementVersion();
     await repository.update(firstRead!);
 
-    secondRead!.recordProfitInflow(200);
+    secondRead!.recordProfitInflow(20_000);
     secondRead!.incrementVersion();
 
     await expect(repository.update(secondRead!)).rejects.toMatchObject({
@@ -64,11 +64,11 @@ describe('HouseTreasuryService', () => {
   it('allows only one concurrent profit update for the same wallet version', async () => {
     const repository = new HouseTreasuryRepository();
     const service = new HouseTreasuryService(repository);
-    await service.recordProfit(1_000, 'seed');
+    await service.recordProfit(100_000, 'seed');
 
     const results = await Promise.allSettled([
-      service.recordProfit(250, 'concurrent profit A'),
-      service.recordProfit(400, 'concurrent profit B'),
+      service.recordProfit(25_000, 'concurrent profit A'),
+      service.recordProfit(40_000, 'concurrent profit B'),
     ]);
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
@@ -84,18 +84,18 @@ describe('HouseTreasuryService', () => {
       totalBalance: expect.any(Number),
     });
     const snapshot = await service.getSnapshot();
-    expect([1_250, 1_400]).toContain(snapshot.profitBalance);
+    expect([1250, 1400]).toContain(snapshot.profitBalance);
     expect(snapshot.totalBalance).toBe(snapshot.profitBalance + snapshot.prizeReserveBalance);
   });
 
   it('preserves treasury balances during concurrent rebalances', async () => {
     const repository = new HouseTreasuryRepository();
     const service = new HouseTreasuryService(repository);
-    await service.recordProfit(10_000, 'seed');
+    await service.recordProfit(1_000_000, 'seed');
 
     const results = await Promise.allSettled([
-      service.rebalance({ targetPrizeRatio: 0.4, minProfitBuffer: 2_000 }),
-      service.rebalance({ targetPrizeRatio: 0.4, minProfitBuffer: 2_000 }),
+      service.rebalance({ targetPrizeRatio: 0.4, minProfitBufferCents: 200_000 }),
+      service.rebalance({ targetPrizeRatio: 0.4, minProfitBufferCents: 200_000 }),
     ]);
     const fulfilled = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
@@ -107,36 +107,36 @@ describe('HouseTreasuryService', () => {
       statusCode: 409,
     });
     await expect(service.getSnapshot()).resolves.toMatchObject({
-      profitBalance: 6_000,
-      prizeReserveBalance: 4_000,
-      totalBalance: 10_000,
+      profitBalance: 6000,
+      prizeReserveBalance: 4000,
+      totalBalance: 10000,
     });
   });
 
   it('moves funds between accounts', async () => {
     const service = createService();
-    await service.recordProfit(5000, 'seed');
-    const snapshot = await service.moveProfitToPrizeReserve(2000, 'reserve top-up');
+    await service.recordProfit(500_000, 'seed');
+    const snapshot = await service.moveProfitToPrizeReserve(200_000, 'reserve top-up');
 
     expect(snapshot.prizeReserveBalance).toBe(2000);
     expect(snapshot.profitBalance).toBe(3000);
 
-    const released = await service.movePrizeReserveToProfit(500, 'manual release');
+    const released = await service.movePrizeReserveToProfit(50_000, 'manual release');
     expect(released.profitBalance).toBe(3500);
     expect(released.prizeReserveBalance).toBe(1500);
   });
 
   it('rebalances using configured targets', async () => {
     const service = createService();
-    await service.recordProfit(10_000, 'seed');
+    await service.recordProfit(1_000_000, 'seed');
 
     const { result, snapshot } = await service.rebalance({
       targetPrizeRatio: 0.4,
-      minProfitBuffer: 2_000,
+      minProfitBufferCents: 200_000,
     });
 
     expect(result.direction).toBe('PROFIT_TO_RESERVE');
-    expect(result.transferredAmount).toBeGreaterThan(0);
+    expect(result.transferredAmountCents).toBeGreaterThan(0);
     expect(snapshot.prizeReserveBalance).toBeGreaterThan(0);
   });
 });

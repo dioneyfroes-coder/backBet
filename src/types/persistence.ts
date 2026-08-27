@@ -23,9 +23,9 @@ export interface BetRecord {
   eventId: string;
   marketId: string;
   oddId: string;
-  amount: number;
+  amountCents: number;
   odds: number;
-  potentialReturn: number;
+  potentialReturnCents: number;
   status: BetStatus;
   type: BetType;
   currency: string;
@@ -38,10 +38,10 @@ export interface BetRecord {
 export interface WalletTransactionRecord {
   id: string;
   type: TransactionType;
-  amount: number;
+  amountCents: number;
   currency: string;
   userId: string;
-  description?: string | null;
+  description?: string;
   createdAt: Date | string;
   metadata?: Record<string, unknown> | null;
 }
@@ -50,8 +50,8 @@ export interface WalletRecord {
   _id: MongoId;
   userId: string;
   version: number;
-  balance: number;
-  lockedBalance: number;
+  balanceCents: number;
+  lockedBalanceCents: number;
   currency: string;
   transactions: WalletTransactionRecord[];
   createdAt: Date;
@@ -61,8 +61,8 @@ export interface WalletRecord {
 export interface RiskProfileRecord {
   _id: MongoId;
   userId: string;
-  exposure: number;
-  maxExposure: number;
+  exposureCents: number;
+  maxExposureCents: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,7 +70,7 @@ export interface RiskProfileRecord {
 export interface TreasuryLedgerRecord {
   id: string;
   type: TreasuryLedgerType;
-  amount: number;
+  amountCents: number;
   currency: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -82,8 +82,8 @@ export interface HouseTreasuryRecord {
   walletId: string;
   version: number;
   currency: string;
-  profitBalance: number;
-  prizeReserveBalance: number;
+  profitBalanceCents: number;
+  prizeReserveBalanceCents: number;
   ledger: TreasuryLedgerRecord[];
   createdAt: Date;
   updatedAt: Date;

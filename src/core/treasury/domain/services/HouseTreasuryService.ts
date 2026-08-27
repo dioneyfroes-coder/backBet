@@ -30,10 +30,10 @@ export class HouseTreasuryService {
     return wallet.getLedger(limit);
   }
 
-  async recordProfit(amount: number, description?: string, metadata?: TreasuryLedgerMetadata) {
+  async recordProfit(amountCents: number, description?: string, metadata?: TreasuryLedgerMetadata) {
     return this.repository.withTransaction(async (session) => {
       const wallet = await this.loadWallet(session);
-      wallet.recordProfitInflow(amount, description, metadata);
+      wallet.recordProfitInflow(amountCents, description, metadata);
       wallet.incrementVersion();
       await this.repository.update(wallet, { session });
       return wallet.snapshot();
@@ -41,13 +41,13 @@ export class HouseTreasuryService {
   }
 
   async moveProfitToPrizeReserve(
-    amount: number,
+    amountCents: number,
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ) {
     return this.repository.withTransaction(async (session) => {
       const wallet = await this.loadWallet(session);
-      wallet.transferToPrizeReserve(amount, description, metadata);
+      wallet.transferToPrizeReserve(amountCents, description, metadata);
       wallet.incrementVersion();
       await this.repository.update(wallet, { session });
       return wallet.snapshot();
@@ -55,13 +55,13 @@ export class HouseTreasuryService {
   }
 
   async movePrizeReserveToProfit(
-    amount: number,
+    amountCents: number,
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ) {
     return this.repository.withTransaction(async (session) => {
       const wallet = await this.loadWallet(session);
-      wallet.transferToProfit(amount, description, metadata);
+      wallet.transferToProfit(amountCents, description, metadata);
       wallet.incrementVersion();
       await this.repository.update(wallet, { session });
       return wallet.snapshot();
@@ -70,17 +70,17 @@ export class HouseTreasuryService {
 
   async rebalance(options: {
     targetPrizeRatio: number;
-    minProfitBuffer: number;
-    maxTransfer?: number;
+    minProfitBufferCents: number;
+    maxTransferCents?: number;
   }): Promise<{ snapshot: TreasurySnapshot; result: TreasuryRebalanceResult }> {
     return this.repository.withTransaction(async (session) => {
       const wallet = await this.loadWallet(session);
       const result = wallet.rebalance(
         options.targetPrizeRatio,
-        options.minProfitBuffer,
-        options.maxTransfer,
+        options.minProfitBufferCents,
+        options.maxTransferCents,
       );
-      if (result.transferredAmount > 0) {
+      if (result.transferredAmountCents > 0) {
         wallet.incrementVersion();
         await this.repository.update(wallet, { session });
       }

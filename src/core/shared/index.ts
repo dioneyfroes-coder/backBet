@@ -15,10 +15,10 @@ export type { AggregateRoot } from './domain/entities/AggregateRoot';
 // ============ Value Objects ============
 export { UniqueId } from './domain/value-objects/UniqueId';
 export { Money } from './domain/value-objects/Money';
+export type { SupportedCurrency } from './domain/value-objects/Money';
 
 // ============ Types ============
 export type {
-  SupportedCurrency,
   ResourceStatus,
   DomainError,
   Result,

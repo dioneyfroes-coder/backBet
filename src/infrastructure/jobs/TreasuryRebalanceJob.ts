@@ -44,13 +44,15 @@ export class TreasuryRebalanceJob {
     try {
       const { result } = await this.treasuryService.rebalance({
         targetPrizeRatio: this.options.targetPrizeRatio,
-        minProfitBuffer: this.options.minProfitBuffer,
-        maxTransfer: this.options.maxTransferPerRun,
+        minProfitBufferCents: Math.round(this.options.minProfitBuffer * 100),
+        maxTransferCents: this.options.maxTransferPerRun
+          ? Math.round(this.options.maxTransferPerRun * 100)
+          : undefined,
       });
       writeStructuredLog({
         component: 'treasury-rebalance-job',
         action: 'rebalance',
-        transferredAmount: result.transferredAmount,
+        transferredAmountCents: result.transferredAmountCents,
         direction: result.direction,
         targetPrizeRatio: result.targetPrizeRatio,
       });

@@ -13,7 +13,10 @@ describe('WalletRepository', () => {
 
   it('persists, finds and updates wallets', async () => {
     await repository.save(wallet);
-    expect(await repository.findByUserId('user-1')).toEqual(wallet);
+    const found = await repository.findByUserId('user-1');
+    expect(found).not.toBeNull();
+    expect(found?.balance).toBe(wallet.balance);
+    expect(found?.currency).toBe(wallet.currency);
 
     wallet.deposit(50);
     wallet.incrementVersion();

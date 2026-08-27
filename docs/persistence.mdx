@@ -43,3 +43,18 @@ export function createRiskRepository() {
 
 - Use o fallback in-memory para testes rápidos e CI.
 - Habilite Mongoose em ambientes de staging/prod apenas quando o Mongo estiver disponível e com a string de conexão correta.
+
+## Convenção de campos monetários (Cents)
+
+Todos os schemas Mongoose usam o sufixo `Cents` para campos monetários, armazenando valores como **centavos inteiros**. Isso evita imprecisão de ponto flutuante e torna a representação explícita.
+
+| Schema | Campo de domínio (reais) | Campo de persistência (centavos) |
+|--------|--------------------------|----------------------------------|
+| `WalletSchema` | `balance`, `lockedBalance` | `balanceCents`, `lockedBalanceCents` |
+| `BetSchema` | `amount`, `potentialReturn` | `amountCents`, `potentialReturnCents` |
+| `RiskProfileSchema` | `exposure`, `maxExposure` | `exposureCents`, `maxExposureCents` |
+| `TreasurySchema` | `profitBalance`, `prizeReserveBalance` | `profitBalanceCents`, `prizeReserveBalanceCents` |
+| `CreditPackageSchema` | `baseAmount`, `bonusAmount`, `price` | `baseAmountCents`, `bonusAmountCents`, `priceCents` |
+| `WithdrawalRequestSchema` | `amount` | `amountCents` |
+
+**Fluxo de conversão:** Controller recebe reais (decimal) da API → `Math.round(value * 100)` → persiste centavos → repositório `mapToDomain` usa `Money.fromCents()` → domínio trabalha em reais via getters (`balance`, `amount`, etc.).

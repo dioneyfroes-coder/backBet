@@ -24,12 +24,14 @@ O `RiskService` tem dois propósitos principais:
 
 Essas chamadas são feitas de forma resiliente: falha na camada de risco pode ser configurada para ser tolerada (modo permissivo) ou bloqueante (modo estrito) via configuração.
 
+> **Persistência:** o `RiskProfile` armazena `exposureCents` e `maxExposureCents` (centavos inteiros) no Mongoose schema. A API e o domínio trabalham em reais via getters `exposure`/`maxExposure` que derivam o valor dividindo por 100.
+
 ## Regras implementadas
 
 - **Velocity limits (limite por janela):** impede que um usuário crie mais que `MAX_BETS_PER_WINDOW` dentro de `VELOCITY_WINDOW_SECONDS`.
 - **Limites de exposição por evento/market:** soma da exposição reservada para um `eventId` ou `marketId` não pode ultrapassar `MAX_EXPOSURE_PER_EVENT` / `MAX_EXPOSURE_PER_MARKET`.
 - **Whitelist / Blacklist:** `WHITELIST_USER_IDS` e `BLACKLIST_USER_IDS` permitem exceções e bloqueios explícitos.
-- **Liability:** calculada como `liability = stake * (odds - 1)` (arredondar para 2 casas) e usada para comparar contra exposições atuais.
+- **Liability:** calculada como `liability = stake * (odds - 1)` via `Money.calculateLiability()` (arredondado em centavos) e usada para comparar contra exposições atuais.
 
 ## Configuração (variáveis relevantes)
 

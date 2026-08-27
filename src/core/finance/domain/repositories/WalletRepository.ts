@@ -1,7 +1,7 @@
 // src/core/finance/repositories/WalletRepository.ts
 import { IWalletRepository } from '../../domain/repositories/IWalletRepository';
 import { Wallet } from '../../domain/entities/Wallet';
-import { Money } from '@/core/shared/domain/value-objects/Money';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { Transaction } from '../../domain/entities/Transaction';
 import { AppError } from '@/shared/errors/AppError';
 
@@ -59,8 +59,8 @@ export class WalletRepository implements IWalletRepository {
       _lockedBalance: Money;
       _transactions: Transaction[];
     };
-    internals._balance = new Money(wallet.balance, wallet.currency);
-    internals._lockedBalance = new Money(wallet.lockedBalance, wallet.currency);
+    internals._balance = Money.fromCents(wallet.balanceCents, wallet.currency as SupportedCurrency);
+    internals._lockedBalance = Money.fromCents(wallet.lockedBalanceCents, wallet.currency as SupportedCurrency);
     internals._transactions = wallet.getTransactions();
     return cloned;
   }

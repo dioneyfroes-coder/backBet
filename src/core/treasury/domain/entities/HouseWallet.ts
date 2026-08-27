@@ -1,5 +1,5 @@
 import { Currency, CurrencyValueObject } from '@/core/finance/domain/value-objects/Currency';
-import { Money } from '@/core/shared/domain/value-objects/Money';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import {
   TreasuryLedgerEntry,
@@ -14,13 +14,16 @@ export type TreasurySnapshot = {
   walletId: string;
   currency: Currency;
   profitBalance: number;
+  profitBalanceCents: number;
   prizeReserveBalance: number;
+  prizeReserveBalanceCents: number;
   totalBalance: number;
+  totalBalanceCents: number;
 };
 
 export type TreasuryRebalanceResult = {
   direction: TreasuryTransferDirection;
-  transferredAmount: number;
+  transferredAmountCents: number;
   targetPrizeRatio: number;
 };
 
@@ -34,14 +37,14 @@ export class HouseWallet {
   constructor(
     private readonly _id: string,
     currency: Currency,
-    profitBalance = 0,
-    prizeReserveBalance = 0,
+    profitBalanceCents = 0,
+    prizeReserveBalanceCents = 0,
     ledgerEntries: TreasuryLedgerEntry[] = [],
     private _version = 1,
   ) {
-    const normalizedCurrency = new CurrencyValueObject(currency).toString();
-    this._profit = new Money(Math.max(0, profitBalance), normalizedCurrency);
-    this._prizeReserve = new Money(Math.max(0, prizeReserveBalance), normalizedCurrency);
+    const normalizedCurrency = new CurrencyValueObject(currency).toString() as SupportedCurrency;
+    this._profit = Money.fromCents(Math.max(0, profitBalanceCents), normalizedCurrency);
+    this._prizeReserve = Money.fromCents(Math.max(0, prizeReserveBalanceCents), normalizedCurrency);
     this._ledger = [...ledgerEntries];
   }
 
@@ -69,110 +72,122 @@ export class HouseWallet {
     return this._profit.amount;
   }
 
+  get profitBalanceCents(): number {
+    return this._profit.getCents();
+  }
+
   get prizeReserveBalance(): number {
     return this._prizeReserve.amount;
+  }
+
+  get prizeReserveBalanceCents(): number {
+    return this._prizeReserve.getCents();
   }
 
   get totalBalance(): number {
     return this._profit.add(this._prizeReserve).amount;
   }
 
+  get totalBalanceCents(): number {
+    return this._profit.add(this._prizeReserve).getCents();
+  }
+
   recordProfitInflow(
-    amount: number,
+    amountCents: number,
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const money = this.createMoney(amount);
+    const money = Money.fromCents(amountCents, this._profit.currency);
     this._profit = this._profit.add(money);
-    this.recordLedger('PROFIT_INFLOW', amount, description, metadata);
+    this.recordLedger('PROFIT_INFLOW', amountCents, description, metadata);
   }
 
   transferToPrizeReserve(
-    amount: number,
+    amountCents: number,
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const money = this.createMoney(amount);
+    const money = Money.fromCents(amountCents, this._profit.currency);
     if (this._profit.isLessThan(money)) {
       throw new DomainError({
         code: 'TREASURY_INSUFFICIENT_PROFIT',
         message: 'Not enough profit balance to transfer',
-        details: { available: this.profitBalance, requested: amount },
+        details: { available: this.profitBalanceCents, requested: amountCents },
       });
     }
     this._profit = this._profit.subtract(money);
     this._prizeReserve = this._prizeReserve.add(money);
-    this.recordLedger('PRIZE_TOP_UP', amount, description, metadata);
+    this.recordLedger('PRIZE_TOP_UP', amountCents, description, metadata);
   }
 
-  transferToProfit(amount: number, description?: string, metadata?: TreasuryLedgerMetadata): void {
-    const money = this.createMoney(amount);
+  transferToProfit(amountCents: number, description?: string, metadata?: TreasuryLedgerMetadata): void {
+    const money = Money.fromCents(amountCents, this._profit.currency);
     if (this._prizeReserve.isLessThan(money)) {
       throw new DomainError({
         code: 'TREASURY_INSUFFICIENT_PRIZE_RESERVE',
         message: 'Not enough prize reserve to release',
-        details: { available: this.prizeReserveBalance, requested: amount },
+        details: { available: this.prizeReserveBalanceCents, requested: amountCents },
       });
     }
     this._prizeReserve = this._prizeReserve.subtract(money);
     this._profit = this._profit.add(money);
-    this.recordLedger('PRIZE_RELEASE', amount, description, metadata);
+    this.recordLedger('PRIZE_RELEASE', amountCents, description, metadata);
   }
 
   rebalance(
     targetPrizeRatio: number,
-    minProfitBuffer: number,
-    maxTransfer?: number,
+    minProfitBufferCents: number,
+    maxTransferCents?: number,
   ): TreasuryRebalanceResult {
     this.ensureRatio(targetPrizeRatio);
-    if (!Number.isFinite(minProfitBuffer) || minProfitBuffer < 0) {
+    if (!Number.isFinite(minProfitBufferCents) || minProfitBufferCents < 0) {
       throw new DomainError({
         code: 'TREASURY_INVALID_BUFFER',
         message: 'Profit buffer must be non-negative',
-        details: { minProfitBuffer },
+        details: { minProfitBufferCents },
       });
     }
 
-    const total = this.totalBalance;
-    if (total === 0) {
-      return { direction: 'NONE', transferredAmount: 0, targetPrizeRatio };
+    const totalCents = this.totalBalanceCents;
+    if (totalCents === 0) {
+      return { direction: 'NONE', transferredAmountCents: 0, targetPrizeRatio };
     }
 
-    const desiredPrizeByRatio = total * targetPrizeRatio;
-    const maxPrizeAfterBuffer = Math.max(0, total - minProfitBuffer);
-    const desiredPrize = Math.max(0, Math.min(desiredPrizeByRatio, maxPrizeAfterBuffer));
-    const diff = desiredPrize - this.prizeReserveBalance;
-    const transferCap =
-      typeof maxTransfer === 'number' && maxTransfer > 0 ? maxTransfer : Number.POSITIVE_INFINITY;
+    const desiredPrizeByRatioCents = Math.round(totalCents * targetPrizeRatio);
+    const maxPrizeAfterBufferCents = Math.max(0, totalCents - minProfitBufferCents);
+    const desiredPrizeCents = Math.max(0, Math.min(desiredPrizeByRatioCents, maxPrizeAfterBufferCents));
+    const diffCents = desiredPrizeCents - this.prizeReserveBalanceCents;
+    const transferCapCents =
+      typeof maxTransferCents === 'number' && maxTransferCents > 0 ? maxTransferCents : Number.POSITIVE_INFINITY;
 
-    if (diff > 0) {
-      const availableProfit = Math.max(0, this.profitBalance - minProfitBuffer);
-      const possible = Math.min(diff, availableProfit, transferCap);
-      if (possible <= 0) {
-        return { direction: 'NONE', transferredAmount: 0, targetPrizeRatio };
+    if (diffCents > 0) {
+      const availableProfitCents = Math.max(0, this.profitBalanceCents - minProfitBufferCents);
+      const possibleCents = Math.min(diffCents, availableProfitCents, transferCapCents);
+      if (possibleCents <= 0) {
+        return { direction: 'NONE', transferredAmountCents: 0, targetPrizeRatio };
       }
-      this.transferToPrizeReserve(possible, 'Automatic treasury rebalance', {
+      this.transferToPrizeReserve(possibleCents, 'Automatic treasury rebalance', {
         context: 'rebalance',
         targetPrizeRatio,
-        targetPrizeAmount: desiredPrize,
+        targetPrizeAmount: desiredPrizeCents,
       });
-      return { direction: 'PROFIT_TO_RESERVE', transferredAmount: possible, targetPrizeRatio };
+      return { direction: 'PROFIT_TO_RESERVE', transferredAmountCents: possibleCents, targetPrizeRatio };
     }
 
-    if (diff < 0) {
-      const releaseNeeded = Math.min(Math.abs(diff), this.prizeReserveBalance, transferCap);
-      if (releaseNeeded <= 0) {
-        return { direction: 'NONE', transferredAmount: 0, targetPrizeRatio };
+    if (diffCents < 0) {
+      const releaseNeededCents = Math.min(Math.abs(diffCents), this.prizeReserveBalanceCents, transferCapCents);
+      if (releaseNeededCents <= 0) {
+        return { direction: 'NONE', transferredAmountCents: 0, targetPrizeRatio };
       }
-      this.transferToProfit(releaseNeeded, 'Automatic treasury rebalance', {
+      this.transferToProfit(releaseNeededCents, 'Automatic treasury rebalance', {
         context: 'rebalance',
         targetPrizeRatio,
-        targetPrizeAmount: desiredPrize,
+        targetPrizeAmount: desiredPrizeCents,
       });
-      return { direction: 'RESERVE_TO_PROFIT', transferredAmount: releaseNeeded, targetPrizeRatio };
+      return { direction: 'RESERVE_TO_PROFIT', transferredAmountCents: releaseNeededCents, targetPrizeRatio };
     }
 
-    return { direction: 'NONE', transferredAmount: 0, targetPrizeRatio };
+    return { direction: 'NONE', transferredAmountCents: 0, targetPrizeRatio };
   }
 
   getLedger(limit = LEDGER_MAX_SIZE): TreasuryLedgerDTO[] {
@@ -188,22 +203,25 @@ export class HouseWallet {
       walletId: this._id,
       currency: this.currency,
       profitBalance: this.profitBalance,
+      profitBalanceCents: this.profitBalanceCents,
       prizeReserveBalance: this.prizeReserveBalance,
+      prizeReserveBalanceCents: this.prizeReserveBalanceCents,
       totalBalance: this.totalBalance,
+      totalBalanceCents: this.totalBalanceCents,
     };
   }
 
-  private createMoney(amount: number): Money {
-    this.ensurePositiveAmount(amount);
-    return new Money(amount, this.currency);
+  private createMoney(amountCents: number): Money {
+    this.ensurePositiveAmount(amountCents);
+    return Money.fromCents(amountCents, this._profit.currency);
   }
 
-  private ensurePositiveAmount(amount: number): void {
-    if (!Number.isFinite(amount) || amount <= 0) {
+  private ensurePositiveAmount(amountCents: number): void {
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
       throw new DomainError({
         code: 'TREASURY_INVALID_AMOUNT',
         message: 'Amount must be positive',
-        details: { amount },
+        details: { amountCents },
       });
     }
   }
@@ -220,11 +238,11 @@ export class HouseWallet {
 
   private recordLedger(
     type: TreasuryLedgerType,
-    amount: number,
+    amountCents: number,
     description?: string,
     metadata?: TreasuryLedgerMetadata,
   ): void {
-    const entry = new TreasuryLedgerEntry(type, amount, this.currency, description, metadata);
+    const entry = new TreasuryLedgerEntry(type, amountCents, this.currency, description, metadata);
     this._ledger.unshift(entry);
     if (this._ledger.length > LEDGER_MAX_SIZE) {
       this._ledger = this._ledger.slice(0, LEDGER_MAX_SIZE);

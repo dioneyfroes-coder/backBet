@@ -2,7 +2,7 @@
 import { IBetRepository } from '../../domain/repositories/IBetRepository';
 import { Bet } from '../../domain/entities/Bet';
 import { AppError } from '@/shared/errors/AppError';
-import { BetAmount } from '../value-objects/BetAmount';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@/core/odds/domain/value-objects/Odds';
 
 export class BetRepository implements IBetRepository {
@@ -54,7 +54,7 @@ export class BetRepository implements IBetRepository {
       bet.userId,
       bet.eventId,
       bet.marketId,
-      new BetAmount(bet.amount.value, bet.amount.currency),
+      Money.fromCents(bet.amount.getCents(), bet.amount.currency),
       new Odds(bet.odds.value),
       bet.status,
       bet.type,

@@ -24,12 +24,12 @@ Domain (interfaces) → Persistence factory → Mongoose repo → Schema → Mon
 | Contexto | Interface | Implementação Mongo | Schema principal | Observações |
 | --- | --- | --- | --- | --- |
 | Usuários | `IUserRepository` | `src/infrastructure/persistence/mongoose/repositories/MongooseUserRepository.ts` | `schemas/UserSchema.ts` | Índices únicos em `email` e `username`; sincroniza IDs do provedor de identidade quando configurado. |
-| Carteiras | `IWalletRepository` | `MongooseWalletRepository.ts` | `schemas/WalletSchema.ts` | Mantém `transactions[]` embutidas; usa projeções para histórico paginado. |
+| Carteiras | `IWalletRepository` | `MongooseWalletRepository.ts` | `schemas/WalletSchema.ts` | Mantém `transactions[]` embutidas; campos de saldo usam `balanceCents`/`lockedBalanceCents` (centavos inteiros); usa projeções para histórico paginado. |
 | Apostas | `IBetRepository` | `MongooseBetRepository.ts` | `schemas/BetSchema.ts` | Índices combinados por `status`, `userId`, `eventId`. |
 | Eventos | `IEventRepository` | *(in-memory apenas)* | — | Planejado para futura coleção. |
 | Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository.ts` | `schemas/CreditPackageSchema.ts` | Campos derivados (`bonusPercent`) calculados no domínio antes de persistir. |
 | Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository.ts` | `schemas/WithdrawalRequestSchema.ts` | Guarda audit trail (`approverId`, `approvedAt`). |
-| Risco | `IRiskRepository` | `MongooseRiskRepository.ts` | `schemas/RiskProfileSchema.ts` | Fallback `InMemoryRiskRepository` disponível quando `USE_MONGOOSE_PERSISTENCE=false`. |
+| Risco | `IRiskRepository` | `MongooseRiskRepository.ts` | `schemas/RiskProfileSchema.ts` | Campos `exposureCents`/`maxExposureCents` (centavos inteiros). Fallback `InMemoryRiskRepository` disponível quando `USE_MONGOOSE_PERSISTENCE=false`. |
 
 ## Ativando/desativando Mongo
 

@@ -4,17 +4,18 @@ export interface IWalletDocument extends Document {
   _id: mongoose.Types.ObjectId;
   userId: string;
   version: number;
-  balance: number;
-  lockedBalance: number;
+  balanceCents: number;
+  lockedBalanceCents: number;
   currency: string;
   transactions: Array<{
     id: string;
     type: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
-    amount: number;
+    amountCents: number;
     currency: string;
     userId: string;
     description?: string;
-    createdAt: Date;
+    metadata?: Record<string, unknown> | null;
+    createdAt: Date | string;
   }>;
   createdAt: Date;
   updatedAt: Date;
@@ -34,13 +35,13 @@ const walletSchema = new Schema<IWalletDocument>(
       default: 1,
       min: 1,
     },
-    balance: {
+    balanceCents: {
       type: Number,
       required: true,
       default: 0,
       min: 0,
     },
-    lockedBalance: {
+    lockedBalanceCents: {
       type: Number,
       required: true,
       default: 0,
@@ -59,7 +60,7 @@ const walletSchema = new Schema<IWalletDocument>(
           enum: ['deposit', 'withdraw', 'lock', 'unlock', 'withdraw_locked'],
           lowercase: true,
         },
-        amount: Number,
+        amountCents: { type: Number, required: true, min: 0 },
         currency: String,
         userId: String,
         description: String,

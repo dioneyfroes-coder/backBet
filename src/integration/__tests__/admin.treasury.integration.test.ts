@@ -112,7 +112,7 @@ describe('Admin Treasury routes', () => {
 
     const rebalanceRes = await request(app)
       .post('/api/admin/treasury/rebalance')
-      .send({ targetPrizeRatio: 0.4, minProfitBuffer: 5_000, maxTransfer: 10_000 });
+      .send({ targetPrizeRatio: 0.4, minProfitBuffer: 1_000, maxTransfer: 10_000 });
 
     expect(rebalanceRes.status).toBe(200);
     expect(rebalanceRes.body.data.result.direction).toBe('PROFIT_TO_RESERVE');

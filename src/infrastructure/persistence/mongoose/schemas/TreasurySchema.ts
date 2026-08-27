@@ -6,12 +6,12 @@ export interface IHouseTreasuryDocument extends Document {
   walletId: string;
   version: number;
   currency: string;
-  profitBalance: number;
-  prizeReserveBalance: number;
+  profitBalanceCents: number;
+  prizeReserveBalanceCents: number;
   ledger: Array<{
     id: string;
     type: TreasuryLedgerType;
-    amount: number;
+    amountCents: number;
     currency: string;
     description?: string;
     metadata?: Record<string, unknown>;
@@ -29,7 +29,7 @@ const ledgerSchema = new Schema(
       enum: ['PROFIT_INFLOW', 'PRIZE_TOP_UP', 'PRIZE_RELEASE'],
       required: true,
     },
-    amount: { type: Number, required: true, min: 0 },
+    amountCents: { type: Number, required: true, min: 0 },
     currency: { type: String, required: true },
     description: { type: String },
     metadata: { type: Schema.Types.Mixed },
@@ -57,13 +57,13 @@ const houseTreasurySchema = new Schema<IHouseTreasuryDocument>(
       enum: ['BRL', 'USD', 'EUR'],
       default: 'BRL',
     },
-    profitBalance: {
+    profitBalanceCents: {
       type: Number,
       required: true,
       default: 0,
       min: 0,
     },
-    prizeReserveBalance: {
+    prizeReserveBalanceCents: {
       type: Number,
       required: true,
       default: 0,

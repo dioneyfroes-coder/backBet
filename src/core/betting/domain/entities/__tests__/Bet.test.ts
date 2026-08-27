@@ -1,9 +1,9 @@
 import { Bet } from '../Bet';
-import { BetAmount } from '../../value-objects/BetAmount';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 const makeBet = (): Bet => {
-  const amount = new BetAmount(100, 'BRL');
+  const amount = new Money(100, 'BRL');
   const odds = new Odds(2.0);
   return new Bet(
     'bet-1',
@@ -54,7 +54,7 @@ describe('Bet entity', () => {
           'user-1',
           'event-1',
           'market-1',
-          new BetAmount(50, 'BRL'),
+          new Money(50, 'BRL'),
           new Odds(1.5),
           'PENDING',
           'SINGLE',
@@ -78,7 +78,7 @@ describe('Bet entity', () => {
         userId: 'user-1',
         eventId: 'event-1',
         marketId: 'market-1',
-        amount: new BetAmount(50, 'BRL'),
+        amount: new Money(50, 'BRL'),
         odds: new Odds(1.5),
         status: 'PENDING' as const,
         type: 'SINGLE' as const,
@@ -121,7 +121,7 @@ describe('Bet entity', () => {
           'user-1',
           'event-1',
           'market-1',
-          new BetAmount(40, 'BRL'),
+          new Money(40, 'BRL'),
           new Odds(1.5),
           'PENDING',
           'SINGLE',
@@ -138,7 +138,7 @@ describe('Bet entity', () => {
           'user-1',
           'event-1',
           'market-1',
-          new BetAmount(40, 'BRL'),
+          new Money(40, 'BRL'),
           new Odds(1.5),
           'PENDING',
           'SINGLE',

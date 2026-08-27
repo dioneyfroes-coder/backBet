@@ -5,7 +5,7 @@ describe('CreditPackage entity', () => {
   const currency: Currency = 'BRL';
 
   it('computes total credits and DTO', () => {
-    const pkg = new CreditPackage('pkg-1', 'CODE', 'Starter', 100, 20, currency, 99.9, 'desc');
+    const pkg = new CreditPackage('pkg-1', 'CODE', 'Starter', 10000, 2000, currency, 9990, 'desc');
 
     expect(pkg.totalCredits).toBe(120);
     expect(pkg.toDTO()).toMatchObject({ totalCredits: 120, currency });

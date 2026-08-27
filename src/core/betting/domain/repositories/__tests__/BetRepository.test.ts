@@ -1,6 +1,6 @@
 import { BetRepository } from '../../repositories/BetRepository';
 import { Bet } from '../../entities/Bet';
-import { BetAmount } from '../../value-objects/BetAmount';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 
 describe('BetRepository in-memory', () => {
@@ -14,7 +14,7 @@ describe('BetRepository in-memory', () => {
       'user-a',
       'event-a',
       'market-a',
-      new BetAmount(10, 'BRL'),
+      new Money(10, 'BRL'),
       new Odds(1.5),
       'PENDING',
       'SINGLE',

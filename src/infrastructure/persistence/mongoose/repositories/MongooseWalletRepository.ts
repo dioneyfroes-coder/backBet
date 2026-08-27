@@ -24,8 +24,17 @@ const sanitizeUserId = (userId: string): string => {
   return userId.trim();
 };
 
-const serializeTransactions = (transactions: Transaction[]): ITransactionDTO[] =>
-  transactions.map((tx) => tx.toDTO());
+const serializeTransactions = (transactions: Transaction[]): WalletTransactionRecord[] =>
+  transactions.map((tx) => ({
+    id: tx.id,
+    userId: tx.userId,
+    type: tx.type,
+    amountCents: Math.round(tx.amount * 100),
+    currency: tx.currency,
+    description: tx.description,
+    createdAt: tx.createdAt,
+    metadata: tx.metadata ?? undefined,
+  }));
 
 const parseTransactions = (transactions: WalletTransactionRecord[] = []): Transaction[] =>
   transactions.map(
@@ -34,7 +43,7 @@ const parseTransactions = (transactions: WalletTransactionRecord[] = []): Transa
         tx.id,
         tx.userId,
         tx.type,
-        tx.amount,
+        tx.amountCents / 100,
         tx.currency,
         tx.description ?? undefined,
         tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
@@ -55,8 +64,8 @@ export class MongooseWalletRepository implements IWalletRepository {
       const walletData: Partial<IWalletDocument> = {
         userId: wallet.userId,
         version: wallet.version,
-        balance: wallet.balance,
-        lockedBalance: wallet.lockedBalance,
+        balanceCents: wallet.balanceCents,
+        lockedBalanceCents: wallet.lockedBalanceCents,
         currency: wallet.currency,
         transactions: serializeTransactions(wallet.getTransactions()),
         createdAt: new Date(),
@@ -110,8 +119,8 @@ export class MongooseWalletRepository implements IWalletRepository {
     try {
       const walletData: Partial<IWalletDocument> = {
         version: wallet.version,
-        balance: wallet.balance,
-        lockedBalance: wallet.lockedBalance,
+        balanceCents: wallet.balanceCents,
+        lockedBalanceCents: wallet.lockedBalanceCents,
         transactions: serializeTransactions(wallet.getTransactions()),
         updatedAt: new Date(),
       };
@@ -197,7 +206,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         transactions: transactions.slice(safeOffset, end).map((tx) => ({
           id: tx.id,
           type: tx.type,
-          amount: tx.amount,
+          amount: tx.amountCents / 100,
           description: tx.description ?? undefined,
           createdAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
           userId: tx.userId,
@@ -220,9 +229,9 @@ export class MongooseWalletRepository implements IWalletRepository {
   private mapToDomain(data: WalletRecord): Wallet {
     const wallet = new Wallet(data.userId, data.currency as Wallet['currency']);
     const mutableWallet = wallet as unknown as WalletInternals;
-    mutableWallet._balance = new Money(data.balance, data.currency as Wallet['currency']);
-    mutableWallet._lockedBalance = new Money(
-      data.lockedBalance,
+    mutableWallet._balance = Money.fromCents(data.balanceCents, data.currency as Wallet['currency']);
+    mutableWallet._lockedBalance = Money.fromCents(
+      data.lockedBalanceCents,
       data.currency as Wallet['currency'],
     );
     mutableWallet._transactions = parseTransactions(data.transactions);

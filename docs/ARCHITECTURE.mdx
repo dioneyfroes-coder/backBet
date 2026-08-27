@@ -22,7 +22,7 @@ A seguir detalhamos cada área funcional e as decisões de engenharia que susten
 |----------|-----------|-------------------------|----------------------|
 | User Core | `src/core/user` | Cadastro, autenticação local, sincronização com provedores de identidade, atualização de perfil e e-mail. | `User`, `Email` VO |
 | Finance Core | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito e workflow de solicitações de saque (locks/unlock). | `Wallet`, `Money`, `Currency` |
-| Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `BetAmount`, `Odds` |
+| Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `Money`, `Odds` |
 | Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados e contratos genéricos. | - |
 
 Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) consumidas pela camada de aplicação. Implementações concretas são providas por factories que escolhem entre MongoDB/Mongoose e stores in-memory, permitindo testes rápidos e produção durável.
@@ -44,7 +44,7 @@ Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRe
 
 ### 3. Domain Layer
 - Entidades estendem `AggregateRoot` e expõem métodos para mutações válidas (`Wallet.lockFunds`, `Bet.cancel`).
-- Value Objects encapsulam validações (`Email`, `Money`, `BetAmount`, `Odds`).
+- Value Objects encapsulam validações (`Email`, `Money`, `Odds`).
 - Erros de domínio herdam de `DomainError`, permitindo tradução direta para `AppError` na camada API.
 
 ### 4. Infraestrutura

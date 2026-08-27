@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { IWalletDTO } from '../../types/wallet.types';
 import { Transaction, TransactionMetadata, TransactionType } from './Transaction';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
-import { Money } from '@/core/shared/domain/value-objects/Money';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 
 export class Wallet {
@@ -36,8 +36,16 @@ export class Wallet {
     return this._balance.amount;
   }
 
+  get balanceCents(): number {
+    return this._balance.getCents();
+  }
+
   get lockedBalance(): number {
     return this._lockedBalance.amount;
+  }
+
+  get lockedBalanceCents(): number {
+    return this._lockedBalance.getCents();
   }
 
   get currency(): Currency {
@@ -123,7 +131,7 @@ export class Wallet {
   }
 
   private createMoney(amount: number): Money {
-    return new Money(amount, this.currency);
+    return new Money(amount, this.currency as SupportedCurrency);
   }
 
   private ensurePositiveAmount(amount: number): void {

@@ -8,7 +8,7 @@ describe('MongooseRiskRepository (mocked model)', () => {
   });
 
   it('should return profile from findOne', async () => {
-    const fakeDoc = { userId: 'user-x', exposure: 150, maxExposure: 500 } as any;
+    const fakeDoc = { userId: 'user-x', exposureCents: 15000, maxExposureCents: 50000 } as any;
     jest
       .spyOn(RiskProfileModel, 'findOne')
       .mockReturnValue({ lean: jest.fn().mockResolvedValue(fakeDoc) } as any);
@@ -24,19 +24,19 @@ describe('MongooseRiskRepository (mocked model)', () => {
   it('should call findOneAndUpdate on increaseExposure', async () => {
     const spy = jest.spyOn(RiskProfileModel, 'findOneAndUpdate').mockResolvedValue({} as any);
     const repo = new MongooseRiskRepository();
-    await repo.increaseExposure('u1', 42);
+    await repo.increaseExposure('u1', 4200);
     expect(spy).toHaveBeenCalled();
   });
 
   it('should call findOneAndUpdate on decreaseExposure and normalize negative', async () => {
-    const leanResult = { _id: 'abc', exposure: -10 } as any;
+    const leanResult = { _id: 'abc', exposureCents: -1000 } as any;
     const spy = jest
       .spyOn(RiskProfileModel, 'findOneAndUpdate')
       .mockReturnValue({ lean: jest.fn().mockResolvedValue(leanResult) } as any);
     const findById = jest.spyOn(RiskProfileModel, 'findByIdAndUpdate').mockResolvedValue({} as any);
 
     const repo = new MongooseRiskRepository();
-    await repo.decreaseExposure('u1', 20);
+    await repo.decreaseExposure('u1', 2000);
 
     expect(spy).toHaveBeenCalled();
     expect(findById).toHaveBeenCalled();
@@ -45,7 +45,7 @@ describe('MongooseRiskRepository (mocked model)', () => {
   it('should return exposure via getExposure', async () => {
     jest
       .spyOn(RiskProfileModel, 'findOne')
-      .mockReturnValue({ lean: jest.fn().mockResolvedValue({ exposure: 77 } as any) } as any);
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue({ exposureCents: 7700 } as any) } as any);
     const repo = new MongooseRiskRepository();
     const v = await repo.getExposure('u2');
     expect(v).toBe(77);

@@ -3,8 +3,8 @@ import { executeWithTreasuryErrorMapping } from '../errors/TreasuryErrorMapper';
 
 export type RebalanceTreasuryInput = {
   targetPrizeRatio: number;
-  minProfitBuffer: number;
-  maxTransfer?: number;
+  minProfitBufferCents: number;
+  maxTransferCents?: number;
 };
 
 export class RebalanceTreasury {

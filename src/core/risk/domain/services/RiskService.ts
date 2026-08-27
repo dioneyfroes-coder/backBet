@@ -5,6 +5,7 @@ import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepositor
 import { BetStatus } from '@/core/betting/types/bet.types';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { RiskRepositoryOptions } from '../repositories/IRiskRepository';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 
 export class RiskService {
   // If repository is provided, use it; otherwise fallback to in-memory map for compatibility/tests
@@ -24,17 +25,16 @@ export class RiskService {
     if (this.betRepository) {
       const bets = await this.betRepository.findByUserId(userId);
       const pending = bets.filter((b) => b.status === 'PENDING');
-      const sumLiability = pending.reduce((acc, b) => {
-        // liability = stake * (odds - 1)
-        const liability = Number((b.amount.value * (b.odds.value - 1)).toFixed(2));
-        return acc + liability;
+      const sumLiabilityCents = pending.reduce((acc, b) => {
+        const liability = b.amount.calculateLiability(b.odds.value);
+        return acc + liability.getCents();
       }, 0);
       // Also include stored exposure if repository available
       if (this.riskRepository) {
         const profile = await this.riskRepository.getByUserId(userId);
-        return sumLiability + (profile?.exposure ?? 0);
+        return (sumLiabilityCents + (profile?.exposureCents ?? 0)) / 100;
       }
-      return sumLiability;
+      return sumLiabilityCents / 100;
     }
 
     if (this.riskRepository) {
@@ -56,7 +56,9 @@ export class RiskService {
     // Basic checks: single stake limit
     if (stake > RISK_CONFIG.MAX_SINGLE_STAKE) return false;
 
-    const liability = Number((stake * (oddsValue - 1)).toFixed(2));
+    const stakeMoney = new Money(stake, 'BRL');
+    const liability = stakeMoney.calculateLiability(oddsValue);
+    const liabilityCents = liability.getCents();
 
     const currentExposure = await this.getExposureForUser(userId);
 
@@ -98,19 +100,19 @@ export class RiskService {
         const pendingSameEvent = bets.filter(
           (b) => b.status === 'PENDING' && b.eventId === eventId,
         );
-        const exposureSameEvent = pendingSameEvent.reduce(
-          (acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)),
+        const exposureSameEventCents = pendingSameEvent.reduce(
+          (acc, b) => acc + b.amount.calculateLiability(b.odds.value).getCents(),
           0,
         );
-        if (exposureSameEvent + liability > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
+        if ((exposureSameEventCents + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
           writeStructuredLog(
             {
               event: 'risk_reject',
               userId,
               reason: 'event_exposure_limit',
               eventId,
-              exposureSameEvent,
-              liability,
+              exposureSameEvent: exposureSameEventCents / 100,
+              liability: liability.amount,
             },
             'warn',
           );
@@ -122,19 +124,19 @@ export class RiskService {
         const pendingSameMarket = bets.filter(
           (b) => b.status === 'PENDING' && b.marketId === marketId,
         );
-        const exposureSameMarket = pendingSameMarket.reduce(
-          (acc, b) => acc + Number((b.amount.value * (b.odds.value - 1)).toFixed(2)),
+        const exposureSameMarketCents = pendingSameMarket.reduce(
+          (acc, b) => acc + b.amount.calculateLiability(b.odds.value).getCents(),
           0,
         );
-        if (exposureSameMarket + liability > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {
+        if ((exposureSameMarketCents + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {
           writeStructuredLog(
             {
               event: 'risk_reject',
               userId,
               reason: 'market_exposure_limit',
               marketId,
-              exposureSameMarket,
-              liability,
+              exposureSameMarket: exposureSameMarketCents / 100,
+              liability: liability.amount,
             },
             'warn',
           );
@@ -143,14 +145,14 @@ export class RiskService {
       }
     }
 
-    if (currentExposure + liability > maxExposure) {
+    if (currentExposure + liability.amount > maxExposure) {
       writeStructuredLog(
         {
           event: 'risk_reject',
           userId,
           reason: 'exceeds_max_exposure',
           currentExposure,
-          liability,
+          liability: liability.amount,
           maxExposure,
         },
         'warn',
@@ -161,27 +163,27 @@ export class RiskService {
     return true;
   }
 
-  async registerExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void> {
+  async registerExposure(userId: string, amountCents: number, options?: RiskRepositoryOptions): Promise<void> {
     if (this.riskRepository) {
-      if (options) await this.riskRepository.increaseExposure(userId, amount, options);
-      else await this.riskRepository.increaseExposure(userId, amount);
+      if (options) await this.riskRepository.increaseExposure(userId, amountCents, options);
+      else await this.riskRepository.increaseExposure(userId, amountCents);
       return;
     }
     const profile =
-      this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER);
-    profile.increaseExposure(amount);
+      this.profiles.get(userId) ?? new RiskProfile(userId, 0, RISK_CONFIG.MAX_EXPOSURE_PER_USER * 100);
+    profile.increaseExposure(amountCents);
     this.profiles.set(userId, profile);
   }
 
-  async reduceExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void> {
+  async reduceExposure(userId: string, amountCents: number, options?: RiskRepositoryOptions): Promise<void> {
     if (this.riskRepository) {
-      if (options) await this.riskRepository.decreaseExposure(userId, amount, options);
-      else await this.riskRepository.decreaseExposure(userId, amount);
+      if (options) await this.riskRepository.decreaseExposure(userId, amountCents, options);
+      else await this.riskRepository.decreaseExposure(userId, amountCents);
       return;
     }
     const profile = this.profiles.get(userId);
     if (!profile) return;
-    profile.decreaseExposure(amount);
+    profile.decreaseExposure(amountCents);
     this.profiles.set(userId, profile);
   }
 }

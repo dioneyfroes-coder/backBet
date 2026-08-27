@@ -10,7 +10,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     return new WithdrawalRequest(
       doc.requestId,
       doc.userId,
-      doc.amount,
+      doc.amountCents / 100,
       doc.currency,
       doc.requestedAt,
       doc.status,
@@ -24,7 +24,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     const doc = await WithdrawalRequestModel.create({
       requestId: request.id,
       userId: request.userId,
-      amount: request.amount,
+      amountCents: Math.round(request.amount * 100),
       currency: request.currency,
       status: request.status,
       requestedAt: request.requestedAt,

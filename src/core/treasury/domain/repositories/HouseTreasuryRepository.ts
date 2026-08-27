@@ -41,8 +41,8 @@ export class HouseTreasuryRepository implements IHouseTreasuryRepository {
     return new HouseWallet(
       wallet.id,
       wallet.currency,
-      wallet.profitBalance,
-      wallet.prizeReserveBalance,
+      wallet.profitBalanceCents,
+      wallet.prizeReserveBalanceCents,
       wallet.getLedgerEntries(),
       wallet.version,
     );

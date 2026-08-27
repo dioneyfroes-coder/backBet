@@ -14,7 +14,7 @@ describe('PurchaseCreditPackage', () => {
   });
 
   it('deposits base plus bonus credits for the user', async () => {
-    const creditPackage = new CreditPackage('pkg-id', 'bronze', 'Bronze', 100, 10, 'BRL', 90);
+    const creditPackage = new CreditPackage('pkg-id', 'bronze', 'Bronze', 10000, 1000, 'BRL', 9000);
     (mockCreditPackageService.getById as jest.Mock).mockResolvedValue(creditPackage);
     const updatedWallet = { userId: 'user-123', balance: 110 } as any;
     (mockWalletService.deposit as jest.Mock).mockResolvedValue(updatedWallet);

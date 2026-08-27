@@ -5,7 +5,7 @@ import type { Currency } from '@/core/finance/domain/value-objects/Currency';
 export interface IWithdrawalRequestDocument extends Document {
   requestId: string;
   userId: string;
-  amount: number;
+  amountCents: number;
   currency: Currency;
   status: WithdrawalStatus;
   requestedAt: Date;
@@ -32,10 +32,10 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
       required: true,
       index: true,
     },
-    amount: {
+    amountCents: {
       type: Number,
       required: true,
-      min: 0,
+      min: 1,
     },
     currency: {
       type: String,

@@ -1,6 +1,11 @@
-export type Currency = 'BRL' | 'USD' | 'EUR';
-
+/**
+ * Currency type — single source of truth for the entire system.
+ * Re-exports SupportedCurrency from Money as the canonical type.
+ */
+import { SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+
+export type Currency = SupportedCurrency;
 
 const SUPPORTED_CURRENCIES: Currency[] = ['BRL', 'USD', 'EUR'];
 

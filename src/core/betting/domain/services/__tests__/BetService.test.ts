@@ -1,6 +1,6 @@
 import { BetService } from '../BetService';
 import { Bet } from '../../entities/Bet';
-import { BetAmount } from '../../value-objects/BetAmount';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { Event, Market } from '../../entities/Event';
 import { TransactionRunner } from '@/core/shared/types/Transaction';
@@ -24,7 +24,7 @@ const makeBet = (): Bet =>
     'user-1',
     'event-1',
     'market-a',
-    new BetAmount(100, 'BRL'),
+    new Money(100, 'BRL'),
     new Odds(2),
     'PENDING',
     'SINGLE',
@@ -188,7 +188,7 @@ describe('BetService', () => {
       });
 
       expect(result.status).toBe('CANCELED');
-      expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.amount.value);
+      expect(walletService.deposit).toHaveBeenCalledWith('user-1', bet.amount.amount);
       expect(betRepository.update).toHaveBeenCalledWith(result);
     });
 

@@ -1,7 +1,7 @@
 import { IBetRepository, BetRepositoryOptions } from '@/core/betting/domain/repositories/IBetRepository';
 import { Bet } from '@/core/betting/domain/entities/Bet';
 import { BetStatus } from '@/core/betting/types/bet.types';
-import { BetAmount } from '@/core/betting/domain/value-objects/BetAmount';
+import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { AppError } from '@/shared/errors/AppError';
 import { BetModel, IBetDocument } from '../schemas/BetSchema';
@@ -20,12 +20,12 @@ export class MongooseBetRepository implements IBetRepository {
         eventId: bet.eventId,
         marketId: bet.marketId,
         oddId: bet.id,
-        amount: bet.amount.value,
+        amountCents: bet.amountCents,
         odds: bet.odds.value,
-        potentialReturn: bet.potentialReturn,
+        potentialReturnCents: bet.potentialReturnCents,
         status: bet.status,
         type: bet.type,
-        currency: 'BRL',
+        currency: bet.amount.currency,
         createdAt: bet.createdAt,
         resolvedAt: bet.resolvedAt,
         cancellationReason: bet.cancellationReason,
@@ -191,7 +191,7 @@ export class MongooseBetRepository implements IBetRepository {
       data.userId,
       data.eventId,
       data.marketId,
-      new BetAmount(data.amount, data.currency),
+      Money.fromCents(data.amountCents, data.currency as SupportedCurrency),
       new Odds(data.odds),
       data.status,
       data.type,

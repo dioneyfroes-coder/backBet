@@ -99,14 +99,14 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       walletId: wallet.id,
       version: wallet.version,
       currency: wallet.currency,
-      profitBalance: wallet.profitBalance,
-      prizeReserveBalance: wallet.prizeReserveBalance,
+      profitBalanceCents: wallet.profitBalanceCents,
+      prizeReserveBalanceCents: wallet.prizeReserveBalanceCents,
       ledger: wallet.getLedgerEntries().map((entry) => {
         const dto = entry.toDTO();
         return {
           id: dto.id,
           type: dto.type,
-          amount: dto.amount,
+          amountCents: dto.amountCents,
           currency: dto.currency,
           description: dto.description,
           metadata: dto.metadata ?? undefined,
@@ -122,8 +122,8 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     return new HouseWallet(
       record.walletId,
       record.currency as HouseWallet['currency'],
-      record.profitBalance,
-      record.prizeReserveBalance,
+      record.profitBalanceCents,
+      record.prizeReserveBalanceCents,
       ledgerEntries,
       record.version ?? 1,
     );
@@ -132,7 +132,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
   private mapLedgerEntry(entry: TreasuryLedgerRecord): TreasuryLedgerEntry {
     return new TreasuryLedgerEntry(
       entry.type,
-      entry.amount,
+      entry.amountCents,
       entry.currency as HouseWallet['currency'],
       entry.description ?? undefined,
       entry.metadata ?? undefined,

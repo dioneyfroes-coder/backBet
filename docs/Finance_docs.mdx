@@ -6,7 +6,7 @@ slug: "/docs/finance"
 
 # Core Finance
 
-> Camada responsável por créditos dos usuários (balance + lockedBalance), pacotes promocionais e solicitações de saque. Tudo é construído sobre DDD, value objects e use cases reutilizáveis por Auth, Betting e painéis administrativos.
+> Camada responsável por créditos dos usuários (balance/balanceCents + lockedBalance/lockedBalanceCents), pacotes promocionais e solicitações de saque. Tudo é construído sobre DDD, value objects e use cases reutilizáveis por Auth, Betting e painéis administrativos.
 
 ## Estrutura
 
@@ -38,7 +38,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 ## Domínio e entidades
 
 ### Wallet (`src/core/finance/domain/entities/Wallet.ts`)
-- Mantém `balance`, `lockedBalance`, `currency` e histórico de `Transaction`.
+- Mantém `balance` (reais), `balanceCents` (centavos para persistência), `lockedBalance` / `lockedBalanceCents`, `currency` e histórico de `Transaction`.
 - Expõe operações atômicas: `deposit`, `withdraw`, `lock`, `unlock`, `withdrawLocked`, todas validadas por `Money` (value object compartilhado) e lançando `DomainError` (`WALLET_INVALID_AMOUNT`, `WALLET_INSUFFICIENT_FUNDS`, etc.).
   - **Importante:** qualquer tentativa de saque (`withdraw`) ou aposta com valor zero ou negativo é rejeitada com erro de validação.
 - `recordTransaction` agora aceita `TransactionContext` com `description` + `metadata` (ex.: `channel: "PIX"`, referencias do gateway), persistindo o payload para auditoria mesmo quando usamos provedores simulados.
@@ -48,7 +48,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 - Não há persistência própria; cabe ao repositório escolher salvar em Mongo/Mongoose ou manter em memória.
 
 ### CreditPackage (`src/core/finance/domain/entities/CreditPackage.ts`)
-- Define pacotes com `baseAmount`, `bonusAmount`, `totalCredits`, `price` e `isActive`.
+- Define pacotes com `baseAmountCents`, `bonusAmountCents`, `totalCreditsCents`, `priceCents` e `isActive`. Getters em reais (`baseAmount`, `bonusAmount`, `totalCredits`, `price`) são derivados dividindo por 100.
 - Usado para `PurchaseCreditPackage`, retornando `creditPackage.toDTO()` para front e painel.
 
 ### WithdrawalRequest (`src/core/finance/domain/entities/WithdrawalRequest.ts`)
@@ -61,17 +61,19 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 ## Sistema monetário (padrão: BRL)
 
 - O valor monetário em todo o core financeiro é representado pelo value object `Money` (`src/core/shared/domain/value-objects/Money.ts`). Ele garante que qualquer depósito, saque, bloqueio ou transação:
-  - use um número positivo ≥ 0 com duas casas decimais (internamente `Money.amount`);
+  - use um número positivo ≥ 0 com duas casas decimais (internamente `Money.amount` em reais);
   - respeite sempre a mesma moeda (`Money.currency`). Qualquer tentativa de somar/subtrair moedas diferentes dispara `DomainError('MONEY_CURRENCY_MISMATCH')` e o mapper `WalletErrorMapper` converte isso em um `AppError` 400 que chega claro ao front-end;
   - envolva apenas `SUPPORTED_CURRENCIES`, que hoje inclui `['BRL', 'USD', 'EUR']` e permite modularmente adicionar novos códigos no futuro sem quebrar a lógica de domínio.
+  - `Money.getCents()` retorna o valor em centavos inteiros (para persistência); `Money.fromCents(cents, currency)` cria um `Money` a partir de centavos inteiros;
+  - A persistência (Mongoose) armazena valores em centavos inteiros (`balanceCents`, `amountCents`, `exposureCents`, etc.) e converte de volta via `Money.fromCents()` ao hidratar. O domínio e a API trabalham em reais (decimal).
 - No momento operamos exclusivamente em `BRL`. O onboarding, as apostas e as integrações Pix usam `CurrencyValueObject` com valor padrão `BRL`, e o backend fornece sempre `currency: 'BRL'` nas respostas (`Wallet.toDTO()`, `WalletDepositResponse`, `WalletWithdrawResponse`, etc.).
 - Para suportar outra moeda futuramente: basta adicionar o código desejado a `SUPPORTED_CURRENCIES`, garantir que o `CurrencyValueObject` aceite o novo código, configurar os tamanhos mínimos/max e traduzir as taxas em `appConfig.wallet.limits` se necessário. Essa modularidade preserva todos os métodos `Money.add/subtract/multiply` sem mudanças.
 
 ## Boas práticas para consumir o sistema monetário no frontend
 
-1. **Use os dados oficiais da resposta ao invés de recalcular o saldo.** A API retorna `{ data: { balance, lockedBalance, currency } }` para `/api/wallets/me`. Confie nesses valores e apenas formate com a `currency` enviada.
+1. **Use os dados oficiais da resposta ao invés de recalcular o saldo.** A API retorna `{ data: { balance, lockedBalance, currency } }` para `/api/wallets/me` (valores em reais, não centavos). Confie nesses valores e apenas formate com a `currency` enviada.
 2. **Formate com `Intl.NumberFormat('pt-BR', { style: 'currency', currency })`.** Isso garante corretas casas decimais e separador de milhares. Nunca multiplique ou divida os valores exibidos para obter um novo saldo — o backend já faz isso com o `Money` value object e registra transações.
-3. **Envie valores como números decimais com duas casas (ex.: `10.00`).** O backend valida `amount > 0` e aplica `Money` antes de qualquer alteração. Strings ou formatos com vírgula serão rejeitados pelo Zod/`CreateWithdrawalRequestDTO`, portanto use sempre o ponto (`.`) como separador decimal nas requisições.
+3. **Envie valores como números decimais com duas casas (ex.: `10.00`).** O backend valida `amount > 0` e aplica `Money` antes de qualquer alteração. Strings ou formatos com vírgula serão rejeitados pelo Zod/`CreateWithdrawalRequestDTO`, portanto use sempre o ponto (`.`) como separador decimal nas requisições. Internamente o valor é convertido para centavos (ex.: `10.00` → `amountCents: 1000`) antes de persistir.
 4. **Considere o campo `lockedBalance` ao mostrar disponibilidade.** O saldo livre é `balance - lockedBalance`. Atividades como `coin-flip` primeiro chamam `wallet.withdraw(userId, wager)` e só depois registram o resultado; nenhum outro campo precisa ser atualizado manualmente.
 5. **Mantenha front-end desacoplado da moeda concreta.** Embora hoje seja `BRL`, sempre consulte `currency` no payload (por exemplo, `wallet.currency` no histórico) para evitar suposições. Quando outras moedas forem liberadas, a API continuará informando o código correto graças ao mesmo `Money.toString()` usado internamente.
 
@@ -84,8 +86,10 @@ export type CurrencyCode = 'BRL';
 
 export interface WalletSnapshot {
   userId: string;
-  balance: MoneyAmount;
+  balance: MoneyAmount;      // reais (decimal) — API response
+  balanceCents: number;       // centavos (inteiro) — persistência
   lockedBalance: MoneyAmount;
+  lockedBalanceCents: number;
   currency: CurrencyCode;
 }
 
@@ -107,7 +111,7 @@ const formatter = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 2,
 });
 
-formatter.format(wallet.balance); // ex: "R$ 1.000,00"
+formatter.format(wallet.balance); // wallet.balance retorna reais (não centavos)
 ```
 
 Para enviar um saque/deposito, mantenha um objeto simples em JSON e use o ponto como separador decimal:
@@ -117,7 +121,7 @@ await fetch('/api/wallets/withdraw', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    amount: 10.0, // número, não string com vírgula
+    amount: 10.0, // número em reais (decimal), convertido para amountCents internamente
     currency: 'BRL',
     pixKey: user.pixKey,
     description: 'Coin flip wager',
@@ -125,7 +129,7 @@ await fetch('/api/wallets/withdraw', {
 });
 ```
 
-Repare que `amount` sempre é um `number` com duas casas decimais. Se precisar gerar o valor dinamicamente, calcule no JavaScript e use `Number(wager.toFixed(2))` antes de enviar para evitar imprecisão de ponto flutuante.
+Repare que `amount` sempre é um `number` em reais com duas casas decimais. O backend converte internamente para centavos (`amountCents`) ao persistir. Se precisar gerar o valor dinamicamente, calcule no JavaScript e use `Number(wager.toFixed(2))` antes de enviar para evitar imprecisão de ponto flutuante.
 
 Essa abordagem documenta o fluxo monetário, garante consistência e mantém a porta aberta para adicionar novas moedas sem refatorar cada endpoint/backoffice.
 
@@ -223,6 +227,8 @@ const MetaSchema = z.object({
   requestId: z.string().optional(),
 });
 
+// Schema de persistência (Mongoose) usa nomes diferentes:
+// balanceCents, lockedBalanceCents (inteiros em centavos)
 const WalletSnapshotSchema = z.object({
   userId: z.string().uuid(),
   balance: z.number(),
@@ -303,10 +309,10 @@ export const ApiErrorSchema = z.object({
   
 ## Tesouraria da casa
 
-- **HouseWallet:** o módulo da carteiras da casa vive em `src/core/treasury/domain/entities/HouseWallet.ts`. Ele mantém dois `Money` separados (`profit` e `prizeReserve`) e ensina o `HouseTreasuryService` a registrar lucratividade, transferir entre reservas e rebalancear o alvo de prêmio (`targetPrizeRatio`). Cada movimentação gera um `TreasuryLedgerEntry` (apenas 50 entradas retidas) com `type`, `amount`, `currency`, `description` e `metadata` (ex.: `source`, `referenceId`, `actorId`).
+- **HouseWallet:** o módulo da carteiras da casa vive em `src/core/treasury/domain/entities/HouseWallet.ts`. Ele mantém dois `Money` separados (`profit` e `prizeReserve`) e persiste como `profitBalanceCents` e `prizeReserveBalanceCents` (inteiros em centavos) no Mongoose schema. O `HouseTreasuryService` registra lucratividade, transfer entre reservas e rebalanceamento do alvo de prêmio (`targetPrizeRatio`). Cada movimentação gera um `TreasuryLedgerEntry` (apenas 50 entradas retidas) com `type`, `amountCents`, `currency`, `description` e `metadata` (ex.: `source`, `referenceId`, `actorId`).
 - **Fluxo de apostas:** quando o `BetService` é executado, o stake sai da carteira do usuário via `WalletService.withdraw` e só depois o retorno (quando houver) é depositado de volta. O spread entre o valor pago e o valor devolvido entra como lucro (`RecordTreasuryProfit`) na carteira da casa antes de ser empurrado para `prizeReserve` se o buffer estiver alto demais. Isso garante que o percentual da casa fique separado do saldo do usuário e do dinheiro destinado a prêmios.
-- **Valores iniciais:** usamos o script `npm run seed:treasury -- 5000 "Seed inicial"` para registrar um lucro teórico de R$5.000 na carteira da casa e garantir que a parada comece com `profitBalance`=5000, `prizeReserveBalance`=0. O walletId padrão é `house-primary` e sempre opera em `BRL` a menos que você sobrescreva `appConfig.treasury.currency`.
-- **Monitoramento e investigação:** o admin pode chamar `/api/admin/treasury/summary` (GET) para ver `profitBalance`, `prizeReserveBalance`, `totalBalance` e o objeto `config` (`targetPrizeRatio`, `minProfitBuffer`, `maxTransferPerRun`). Há também `/api/admin/treasury/ledger?limit=25` para listar as entradas (`type`, `amount`, `description`, `createdAt`, `metadata`). Rebalanceamentos manuais (`POST /api/admin/treasury/rebalance`) ou movimentações manuais (`POST /api/admin/treasury/profit`, `/profit-to-prize`, `/prize-to-profit`) passam pelo mesmo service e aparecem no ledger com `source`/`context` no metadata. Todas essas rotas exigem `protectedRoute` + `requireAdminRole`, de modo que só painéis administrativos/autenticados com escopo elevam estado.
+- **Valores iniciais:** usamos o script `npm run seed:treasury -- 5000 "Seed inicial"` para registrar um lucro teórico de R$5.000 na carteira da casa e garantir que a parada comece com `profitBalanceCents`=500000, `prizeReserveBalanceCents`=0 (ou em reais: `profitBalance`=5000, `prizeReserveBalance`=0). O walletId padrão é `house-primary` e sempre opera em `BRL` a menos que você sobrescreva `appConfig.treasury.currency`.
+- **Monitoramento e investigação:** o admin pode chamar `/api/admin/treasury/summary` (GET) para ver `profitBalance`/`profitBalanceCents`, `prizeReserveBalance`/`prizeReserveBalanceCents`, `totalBalance`/`totalBalanceCents` e o objeto `config` (`targetPrizeRatio`, `minProfitBuffer`, `maxTransferPerRun`). Há também `/api/admin/treasury/ledger?limit=25` para listar as entradas (`type`, `amount`, `description`, `createdAt`, `metadata`). Rebalanceamentos manuais (`POST /api/admin/treasury/rebalance`) ou movimentações manuais (`POST /api/admin/treasury/profit`, `/profit-to-prize`, `/prize-to-profit`) passam pelo mesmo service e aparecem no ledger com `source`/`context` no metadata. Todas essas rotas exigem `protectedRoute` + `requireAdminRole`, de modo que só painéis administrativos/autenticados com escopo elevam estado.
 - **Como checar o saldo atual:** mesmo que você tenha semeado 5k, o valor exato muda conforme operadores registram lucros e rebalanceamentos. Use o summary acima (`GET /api/admin/treasury/summary`, o controller responde `{ summary, config }`) para ver o valor atualizado; o campo `totalBalance` corresponde ao que chamamos de "saldo da casa" atualmente disponível. O mesmo endpoint também informa se o `targetPrizeRatio` (geralmente 0.6) está sendo respeitado.
 - **Finance:** `AUTH_*` e `RATE_LIMIT_*` globais ainda protegem rotas pois herdam o middleware padrão definido em `app.ts`.
 

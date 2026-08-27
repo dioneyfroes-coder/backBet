@@ -62,9 +62,9 @@ export class BetService {
       if (session) await this.betRepository.create(bet, { session });
       else await this.betRepository.create(bet);
       if (this.riskService) {
-        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
-        if (options) await this.riskService.registerExposure(bet.userId, liability, options);
-        else await this.riskService.registerExposure(bet.userId, liability);
+        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        if (options) await this.riskService.registerExposure(bet.userId, liabilityCents, options);
+        else await this.riskService.registerExposure(bet.userId, liabilityCents);
       }
       return bet;
     };
@@ -88,13 +88,13 @@ export class BetService {
       }
       bet.cancel(input.reason);
       if (this.riskService) {
-        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
-        if (session) await this.riskService.reduceExposure(bet.userId, liability, { session });
-        else await this.riskService.reduceExposure(bet.userId, liability);
+        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
+        else await this.riskService.reduceExposure(bet.userId, liabilityCents);
       }
       const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
-      if (options) await this.walletService.deposit(bet.userId, bet.amount.value, undefined, options);
-      else await this.walletService.deposit(bet.userId, bet.amount.value);
+      if (options) await this.walletService.deposit(bet.userId, bet.amount.amount, undefined, options);
+      else await this.walletService.deposit(bet.userId, bet.amount.amount);
       bet.incrementVersion();
       if (session) await this.betRepository.update(bet, { session });
       else await this.betRepository.update(bet);
@@ -110,9 +110,9 @@ export class BetService {
       const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
       bet.resolve(input.result);
       if (this.riskService) {
-        const liability = Math.round(bet.amount.value * (bet.odds.value - 1) * 100) / 100;
-        if (session) await this.riskService.reduceExposure(bet.userId, liability, { session });
-        else await this.riskService.reduceExposure(bet.userId, liability);
+        const liabilityCents = bet.amount.calculateLiability(bet.odds.value).getCents();
+        if (session) await this.riskService.reduceExposure(bet.userId, liabilityCents, { session });
+        else await this.riskService.reduceExposure(bet.userId, liabilityCents);
       }
       if (input.result === 'WON') {
         const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;

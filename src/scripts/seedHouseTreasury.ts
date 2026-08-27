@@ -21,7 +21,7 @@ function parseArgs(): ParsedArgs {
 
   if (!Number.isFinite(amount) || amount <= 0) {
     console.error(
-      '✗ Informe um valor numérico positivo. Ex: npm run seed:treasury -- 5000 "Seed inicial"',
+      '✗ Informe um valor numérico positivo (em reais). Ex: npm run seed:treasury -- 5000 "Seed inicial"',
     );
     process.exit(1);
   }
@@ -51,7 +51,8 @@ async function main() {
     });
 
     const before = await treasuryService.getSnapshot();
-    const after = await treasuryService.recordProfit(amount, description, {
+    const amountCents = Math.round(amount * 100);
+    const after = await treasuryService.recordProfit(amountCents, description, {
       context: 'seed-script',
       source: 'seedHouseTreasury',
     });

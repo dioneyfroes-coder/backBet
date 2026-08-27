@@ -7,8 +7,8 @@ import { RiskRepositoryOptions } from '@/core/risk/domain/repositories/IRiskRepo
 type RiskProfileRecord = {
   _id?: string | { toString(): string };
   userId: string;
-  exposure: number;
-  maxExposure: number;
+  exposureCents: number;
+  maxExposureCents: number;
 };
 
 const getErrorMessage = (error: unknown): string =>
@@ -22,7 +22,7 @@ const normalizeRecordId = (id?: RiskProfileRecord['_id']): string | null => {
 };
 
 const mapToDomain = (record: RiskProfileRecord): RiskProfile =>
-  new RiskProfile(record.userId, record.exposure, record.maxExposure);
+  new RiskProfile(record.userId, record.exposureCents, record.maxExposureCents);
 
 export class MongooseRiskRepository implements IRiskRepository {
   async getByUserId(userId: string): Promise<RiskProfile | null> {
@@ -41,7 +41,7 @@ export class MongooseRiskRepository implements IRiskRepository {
     try {
       const query = RiskProfileModel.findOneAndUpdate(
         { userId: profile.userId },
-        { exposure: profile.exposure, maxExposure: profile.maxExposure },
+        { exposureCents: profile.exposureCents, maxExposureCents: profile.maxExposureCents },
         { upsert: true, new: true },
       );
       if (options.session) query.session(options.session as never);
@@ -53,11 +53,11 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
-  async increaseExposure(userId: string, amount: number, options: RiskRepositoryOptions = {}): Promise<void> {
+  async increaseExposure(userId: string, amountCents: number, options: RiskRepositoryOptions = {}): Promise<void> {
     try {
       const query = RiskProfileModel.findOneAndUpdate(
         { userId },
-        { $inc: { exposure: amount } },
+        { $inc: { exposureCents: amountCents } },
         { upsert: true },
       );
       if (options.session) query.session(options.session as never);
@@ -69,20 +69,20 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
-  async decreaseExposure(userId: string, amount: number, options: RiskRepositoryOptions = {}): Promise<void> {
+  async decreaseExposure(userId: string, amountCents: number, options: RiskRepositoryOptions = {}): Promise<void> {
     try {
       const query = RiskProfileModel.findOneAndUpdate(
         { userId },
-        { $inc: { exposure: -Math.abs(amount) } },
+        { $inc: { exposureCents: -Math.abs(amountCents) } },
         { new: true },
       );
       if (options.session) query.session(options.session as never);
       const res = await query.lean<RiskProfileRecord | null>();
 
-      if (res && res.exposure < 0) {
+      if (res && res.exposureCents < 0) {
         const normalizedId = normalizeRecordId(res._id);
         if (normalizedId) {
-          const correction = RiskProfileModel.findByIdAndUpdate(normalizedId, { exposure: 0 });
+          const correction = RiskProfileModel.findByIdAndUpdate(normalizedId, { exposureCents: 0 });
           if (options.session) correction.session(options.session as never);
           await correction;
         }
@@ -97,7 +97,7 @@ export class MongooseRiskRepository implements IRiskRepository {
   async getExposure(userId: string): Promise<number> {
     try {
       const doc = await RiskProfileModel.findOne({ userId }).lean<RiskProfileRecord | null>();
-      return doc?.exposure ?? 0;
+      return (doc?.exposureCents ?? 0) / 100;
     } catch (error: unknown) {
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição', 500, {
         originalError: getErrorMessage(error),

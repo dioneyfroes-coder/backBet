@@ -58,6 +58,13 @@ export class Odds {
     return Number((this.value * stake).toFixed(2));
   }
 
+  /**
+   * Calculate potential return using Money value object for exact cents arithmetic.
+   */
+  calculatePotentialReturnMoney(stake: import('@/core/shared/domain/value-objects/Money').Money): import('@/core/shared/domain/value-objects/Money').Money {
+    return stake.multiply(this.value);
+  }
+
   compareTo(other: Odds): number {
     if (!(other instanceof Odds)) {
       throw new DomainError({

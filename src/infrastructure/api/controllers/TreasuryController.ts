@@ -45,8 +45,9 @@ export class TreasuryController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
+    const amountCents = Math.round(payload.amount * 100);
     const snapshot = await this.recordProfitUseCase.execute(
-      payload.amount,
+      amountCents,
       payload.description,
       this.metadataFromPayload(payload),
     );
@@ -63,8 +64,9 @@ export class TreasuryController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
+    const amountCents = Math.round(payload.amount * 100);
     const summary = await this.transferProfitToPrizeUseCase.execute(
-      payload.amount,
+      amountCents,
       payload.description,
       this.metadataFromPayload({ ...payload, source: 'manual-topup' }),
     );
@@ -81,8 +83,9 @@ export class TreasuryController extends BaseController {
       return this.badRequest(res, 'Dados inválidos');
     }
 
+    const amountCents = Math.round(payload.amount * 100);
     const summary = await this.transferPrizeToProfitUseCase.execute(
-      payload.amount,
+      amountCents,
       payload.description,
       this.metadataFromPayload({ ...payload, source: 'manual-release' }),
     );
@@ -102,10 +105,12 @@ export class TreasuryController extends BaseController {
         ? payload.targetPrizeRatio
         : config.targetPrizeRatio;
     const targetPrizeRatio = Math.min(ratioRange.max, Math.max(ratioRange.min, requestedRatio));
+    const minProfitBufferCents = Math.round((payload.minProfitBuffer ?? config.minProfitBuffer) * 100);
+    const maxTransferCents = payload.maxTransfer ? Math.round(payload.maxTransfer * 100) : config.maxTransferPerRun ? Math.round(config.maxTransferPerRun * 100) : undefined;
     const { snapshot, result } = await this.rebalanceUseCase.execute({
       targetPrizeRatio,
-      minProfitBuffer: payload.minProfitBuffer ?? config.minProfitBuffer,
-      maxTransfer: payload.maxTransfer ?? config.maxTransferPerRun,
+      minProfitBufferCents,
+      maxTransferCents,
     });
 
     return this.ok(res, {

@@ -1,7 +1,6 @@
 //src/core/betting/domain/entities/Bet.ts
 
 import { BetStatus, BetType } from '../../types/bet.types';
-import { BetAmount } from '../value-objects/BetAmount';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
@@ -16,7 +15,7 @@ export class Bet {
     public readonly userId: string,
     public readonly eventId: string,
     public readonly marketId: string,
-    public readonly amount: BetAmount,
+    public readonly amount: Money,
     public readonly odds: Odds,
     status: BetStatus,
     public readonly type: BetType,
@@ -53,9 +52,15 @@ export class Bet {
   }
 
   get potentialReturn(): number {
-    return new Money(this.amount.value, this.amount.currency as SupportedCurrency)
-      .multiply(this.odds.value)
-      .amount;
+    return this.amount.multiply(this.odds.value).amount;
+  }
+
+  get potentialReturnCents(): number {
+    return this.amount.multiply(this.odds.value).getCents();
+  }
+
+  get amountCents(): number {
+    return this.amount.getCents();
   }
 
   // ---------- Domain Methods ----------
@@ -121,7 +126,7 @@ export class Bet {
       userId: this.userId,
       eventId: this.eventId,
       marketId: this.marketId,
-      amount: this.amount.value,
+      amount: this.amount.amount,
       odds: this.odds.value,
       status: this._status,
       type: this.type,

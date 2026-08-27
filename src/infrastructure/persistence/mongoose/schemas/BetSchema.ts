@@ -7,9 +7,9 @@ export interface IBetDocument extends Document {
   eventId: string;
   marketId: string;
   oddId: string;
-  amount: number;
+  amountCents: number;
   odds: number;
-  potentialReturn: number;
+  potentialReturnCents: number;
   status: 'PENDING' | 'WON' | 'LOST' | 'CANCELED';
   type: 'SINGLE' | 'MULTIPLE';
   currency: string;
@@ -45,17 +45,17 @@ const betSchema = new Schema<IBetDocument>(
       type: String,
       required: true,
     },
-    amount: {
+    amountCents: {
       type: Number,
       required: true,
-      min: 0.01,
+      min: 1,
     },
     odds: {
       type: Number,
       required: true,
       min: 1.0,
     },
-    potentialReturn: {
+    potentialReturnCents: {
       type: Number,
       required: true,
       min: 0,
