@@ -51,6 +51,24 @@ describe('Money Value Object', () => {
       expect(() => new Money(0.001, 'BRL')).toThrow('Money amount must have at most 2 decimal places');
     });
 
+    it('should reject amounts with more than 2 decimals expressed in scientific notation', () => {
+      expect(() => new Money(0.0001, 'BRL')).toThrow(
+        'Money amount must have at most 2 decimal places',
+      );
+      expect(() => new Money(1e-7, 'BRL')).toThrow(
+        'Money amount must have at most 2 decimal places',
+      );
+      expect(() => new Money(1.23456789, 'BRL')).toThrow(
+        'Money amount must have at most 2 decimal places',
+      );
+    });
+
+    it('should accept small valid amounts without silent rounding', () => {
+      const money = new Money(0.01, 'BRL');
+      expect(money.amount).toBe(0.01);
+      expect(money.getCents()).toBe(1);
+    });
+
     it('should accept amounts with exactly 2 decimal places', () => {
       const money = new Money(10.99, 'BRL');
       expect(money.amount).toBe(10.99);

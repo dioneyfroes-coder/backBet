@@ -83,14 +83,26 @@ export class Money {
         details: { currency: this.currency },
       });
     }
-    const parts = amount.toString().split('.');
-    if (parts[1] && parts[1].length > 2) {
+    if (this.decimalPlaces(amount) > 2) {
       throw new DomainError({
         code: 'MONEY_TOO_MANY_DECIMALS',
         message: 'Money amount must have at most 2 decimal places',
         details: { amount },
       });
     }
+  }
+
+  /**
+   * Número de casas decimais do valor, expandindo notação científica
+   * (ex: 1e-7 → 7 casas) para nunca arredondar silenciosamente.
+   */
+  private decimalPlaces(amount: number): number {
+    const plain = amount.toLocaleString('en-US', {
+      useGrouping: false,
+      maximumFractionDigits: 20,
+    });
+    const dotIndex = plain.indexOf('.');
+    return dotIndex === -1 ? 0 : plain.length - dotIndex - 1;
   }
 
   add(other: Money): Money {
