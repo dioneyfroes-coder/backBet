@@ -2,10 +2,11 @@ import { AppError } from '@/shared/errors/AppError';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
 import { idempotencyClaimCounter } from '@/infrastructure/observability/metrics';
+import { MongoIdempotencyStore } from '@/infrastructure/persistence/mongoose/stores/MongoIdempotencyStore';
 
-type IdempotencyRecord<T> = {
+export type IdempotencyRecord<T> = {
   fingerprint: string;
-  status: 'PROCESSING' | 'COMPLETED';
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED';
   result?: T;
 };
 
@@ -113,7 +114,11 @@ export class IdempotencyService {
   }
 
   private operationFromKey(key: string): string {
-    return key.split(':')[1] || 'unknown';
+    const parts = key.split(':');
+    // Standard: "userId:op:rest" — the operation is parts[1].
+    // Worker keys: "withdrawal-payout:<uuid>" / "contact-email:<...>" — use parts[0].
+    if (parts.length >= 3) return parts[1];
+    return parts[0] || 'unknown';
   }
 
   private resolveExisting<T>(
@@ -138,5 +143,9 @@ export class IdempotencyService {
 }
 
 export const idempotencyService = new IdempotencyService(
-  cacheConfig.enabled ? new RedisIdempotencyStore() : new InMemoryIdempotencyStore(),
+  process.env.USE_MONGOOSE_PERSISTENCE === 'true'
+    ? new MongoIdempotencyStore()
+    : cacheConfig.enabled
+      ? new RedisIdempotencyStore()
+      : new InMemoryIdempotencyStore(),
 );

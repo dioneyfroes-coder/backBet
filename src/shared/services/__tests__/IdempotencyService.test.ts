@@ -44,4 +44,46 @@ describe('IdempotencyService', () => {
     release();
     await expect(first).resolves.toBe('done');
   });
+
+  it('treats an expired/lost-response retry as a replay when the result is durable', async () => {
+    // Simula "request A depois de resposta perdida / após timeout": a resposta
+    // original foi gravada (COMPLETED) e, no retry, é devolvida sem re-executar.
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue({ id: 'op-1' });
+    const key = 'user-1:deposit:tx-1';
+
+    await service.execute(key, 'fingerprint-1', operation);
+    // dado que o cliente não recebeu a resposta, repete a mesma requisição
+    await service.execute(key, 'fingerprint-1', operation);
+
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('restoreResult rehydrates the replayed result into a domain entity', async () => {
+    const service = createService();
+    type RawBet = { id: string; status: string };
+    const raw: RawBet = { id: 'bet-1', status: 'WON' };
+    const operation = jest.fn<Promise<RawBet>, []>().mockResolvedValue(raw);
+    const key = 'bet-1:bet-settle:req-1';
+    const fingerprint = JSON.stringify({ betId: 'bet-1' });
+    const restore = (r: RawBet) => ({ ...r, rehydrated: true });
+
+    const first = await service.execute(key, fingerprint, operation, restore);
+    // the first execution returns the raw operation result
+    expect(first).toEqual({ id: 'bet-1', status: 'WON' });
+
+    const replay = await service.execute(key, fingerprint, operation, restore);
+    expect(operation).toHaveBeenCalledTimes(1);
+    // the replay is rehydrated through restoreResult
+    expect(replay).toEqual({ id: 'bet-1', status: 'WON', rehydrated: true });
+  });
+
+  it('rejects an empty Idempotency-Key as invalid', async () => {
+    const service = createService();
+    await expect(service.execute('   ', 'fp', async () => 'x')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      statusCode: 400,
+    });
+  });
 });

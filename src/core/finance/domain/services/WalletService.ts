@@ -33,6 +33,7 @@ export class WalletService {
 
   async deposit(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
+    if (await this.ledgerAlreadyApplied(context, 'DEPOSIT', options)) return wallet;
     wallet.deposit(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
@@ -63,6 +64,7 @@ export class WalletService {
 
   async withdraw(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
+    if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
     wallet.withdraw(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
@@ -74,6 +76,7 @@ export class WalletService {
 
   async lock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
+    if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_HOLD', options)) return wallet;
     wallet.lock(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
@@ -85,6 +88,7 @@ export class WalletService {
 
   async unlock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
+    if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_REVERSED', options)) return wallet;
     wallet.unlock(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
@@ -96,6 +100,7 @@ export class WalletService {
 
   async withdrawLocked(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
+    if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
     wallet.withdrawLocked(amount, context);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
@@ -103,6 +108,33 @@ export class WalletService {
     await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw_locked', wallet, amount, context);
     return wallet;
+  }
+
+  private ledgerTransactionId(
+    context: TransactionContext | undefined,
+    defaultType: LedgerOperationType,
+  ): string {
+    return context?.referenceId ? `${context.type ?? defaultType}:${context.referenceId}` : '';
+  }
+
+  /**
+   * Guarda de idempotência no nível do ledger: quando a operação possui uma
+   * referência determinística (referenceId), se o movimento correspondente já
+   * foi registrado, esta chamada é uma repetição e NÃO deve mutar o saldo
+   * novamente. Protege contra retries sequenciais fora do middleware (ex. após
+   * expiração da Idempotency-Key ou perda da resposta).
+   */
+  private async ledgerAlreadyApplied(
+    context: TransactionContext | undefined,
+    defaultType: LedgerOperationType,
+    options?: WalletRepositoryOptions,
+  ): Promise<boolean> {
+    if (!this.ledgerRepository) return false;
+    const transactionId = this.ledgerTransactionId(context, defaultType);
+    if (!transactionId) return false;
+    return options
+      ? this.ledgerRepository.exists(transactionId, options)
+      : this.ledgerRepository.exists(transactionId);
   }
 
   private async appendLedger(

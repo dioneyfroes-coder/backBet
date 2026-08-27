@@ -3,6 +3,7 @@ import { ICreateBetDTO } from '../../types/bet.types';
 import { Bet } from '../../domain/entities/Bet';
 import { executeWithBetErrorMapping } from '../errors/BetErrorMapper';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { restoreBet } from './restoreBet';
 
 export class PlaceBetUseCase {
   constructor(
@@ -19,20 +20,7 @@ export class PlaceBetUseCase {
       `${input.userId}:bet:${idempotencyKey}`,
       JSON.stringify(input),
       operation,
-      (raw) =>
-        new Bet(
-          raw.id,
-          raw.userId,
-          raw.eventId,
-          raw.marketId,
-          raw.amount,
-          raw.odds,
-          raw.status,
-          raw.type,
-          new Date(raw.createdAt),
-          raw.resolvedAt ? new Date(raw.resolvedAt) : undefined,
-          raw.cancellationReason,
-        ),
+      restoreBet,
     );
   }
 }

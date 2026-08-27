@@ -35,6 +35,7 @@ import { TransferProfitToPrize } from '@/core/treasury/application/use-cases/Tra
 import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/TransferPrizeToProfit';
 import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
 import { appConfig } from '@/shared/config/appConfig';
+import { idempotencyService } from '@/shared/services/IdempotencyService';
 
 export type AdminRoutesDeps = {
   betRepository?: IBetRepository;
@@ -69,7 +70,7 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   });
 
   const adminController = new AdminController(
-    new ResolveBetUseCase(betService),
+    new ResolveBetUseCase(betService, idempotencyService),
     new UpdateEventStatusUseCase(eventCatalogService),
     riskService,
     eventCatalogService,

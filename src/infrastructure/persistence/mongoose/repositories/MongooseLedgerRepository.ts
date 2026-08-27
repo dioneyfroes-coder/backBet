@@ -57,6 +57,15 @@ export class MongooseLedgerRepository implements ILedgerRepository {
     return LedgerEntryModel.countDocuments({ userId });
   }
 
+  async exists(
+    transactionId: string,
+    options: LedgerRepositoryOptions = {},
+  ): Promise<boolean> {
+    const query = LedgerEntryModel.exists({ transactionId });
+    if (options.session) query.session(options.session as never);
+    return Boolean(await query);
+  }
+
   async withTransaction<T>(work: (session: unknown) => Promise<T>): Promise<T> {
     const session = await LedgerEntryModel.startSession();
     try {

@@ -93,11 +93,7 @@ export class BetController extends BaseController {
       amount: payload.amount,
       type: payload.type === 'MULTIPLE' ? 'MULTIPLE' : 'SINGLE',
     };
-    const idempotencyKey = typeof req.get === 'function'
-      ? req.get('Idempotency-Key')
-      : (Array.isArray(req.headers?.['idempotency-key'])
-        ? req.headers['idempotency-key'][0]
-        : req.headers?.['idempotency-key']);
+    const idempotencyKey = this.getIdempotencyKey(req);
     const bet = idempotencyKey
       ? await this.placeBetUseCase.execute(input, idempotencyKey)
       : await this.placeBetUseCase.execute(input);
@@ -147,11 +143,21 @@ export class BetController extends BaseController {
       betId: req.params.betId,
       ...(req.body || {}),
     }) as CancelBetDTOType;
-    const bet = await this.cancelBetUseCase.execute({
-      betId: payload.betId,
-      reason: payload.reason ?? '',
-      canceledBy: userId,
-    });
+    const idempotencyKey = this.getIdempotencyKey(req);
+    const bet = idempotencyKey
+      ? await this.cancelBetUseCase.execute(
+          {
+            betId: payload.betId,
+            reason: payload.reason ?? '',
+            canceledBy: userId,
+          },
+          idempotencyKey,
+        )
+      : await this.cancelBetUseCase.execute({
+          betId: payload.betId,
+          reason: payload.reason ?? '',
+          canceledBy: userId,
+        });
     await flushEventOddsCache(bet.eventId).catch((error) =>
       console.warn('Failed to flush event cache', error),
     );
@@ -181,5 +187,13 @@ export class BetController extends BaseController {
 
     const bets = await this.getUserBetsUseCase.execute(userId);
     return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+  }
+
+  private getIdempotencyKey(req: Request): string | undefined {
+    if (typeof req.get === 'function') {
+      return req.get('Idempotency-Key') ?? undefined;
+    }
+    const header = req.headers?.['idempotency-key'];
+    return Array.isArray(header) ? header[0] : (header as string | undefined);
   }
 }

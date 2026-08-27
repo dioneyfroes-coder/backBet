@@ -5,6 +5,7 @@ export type LedgerRepositoryOptions = { session?: TransactionSession };
 
 export interface ILedgerRepository {
   append(entry: LedgerEntry, options?: LedgerRepositoryOptions): Promise<LedgerEntry>;
+  exists(transactionId: string, options?: LedgerRepositoryOptions): Promise<boolean>;
   findByUserId(
     userId: string,
     options?: { limit?: number; offset?: number },

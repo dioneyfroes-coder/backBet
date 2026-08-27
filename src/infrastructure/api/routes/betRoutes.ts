@@ -60,7 +60,7 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
 
   // use-cases (thin wrappers / orchestration)
   const placeBetUseCase = new PlaceBetUseCase(betService, idempotencyService);
-  const cancelBetUseCase = new CancelBetUseCase(betService);
+  const cancelBetUseCase = new CancelBetUseCase(betService, idempotencyService);
   const getUserBetsUseCase = new GetUserBetsUseCase(betService);
   const getEventBetsUseCase = new GetEventBetsUseCase(betService);
 

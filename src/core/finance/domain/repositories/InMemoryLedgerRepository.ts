@@ -28,6 +28,10 @@ export class InMemoryLedgerRepository implements ILedgerRepository {
     return this.entries.filter((e) => e.userId === userId).length;
   }
 
+  async exists(transactionId: string, _options?: LedgerRepositoryOptions): Promise<boolean> {
+    return this.findIndex(transactionId) >= 0;
+  }
+
   async withTransaction<T>(work: (session: TransactionSession) => Promise<T>): Promise<T> {
     return work({});
   }

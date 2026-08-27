@@ -144,11 +144,23 @@ export class AdminController extends BaseController {
   async settleBet(req: Request, res: Response) {
     try {
       const payload = this.validateSchema(SettleBetDTO, req.body) as SettleBetDTOType;
-      const bet = await this.resolveBetUseCase.execute({
-        betId: req.params.betId,
-        result: payload.result,
-        marketResult: payload.marketResult,
-      });
+      const idempotencyKey = typeof req.get === 'function'
+        ? req.get('Idempotency-Key') ?? undefined
+        : undefined;
+      const bet = idempotencyKey
+        ? await this.resolveBetUseCase.execute(
+            {
+              betId: req.params.betId,
+              result: payload.result,
+              marketResult: payload.marketResult,
+            },
+            idempotencyKey,
+          )
+        : await this.resolveBetUseCase.execute({
+            betId: req.params.betId,
+            result: payload.result,
+            marketResult: payload.marketResult,
+          });
       return this.ok(res, bet.toJSON());
     } catch (error) {
       return this.handleError(error, res);
