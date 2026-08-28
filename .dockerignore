@@ -1,0 +1,47 @@
+# Controle de versão / IDE
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+.roo
+.continue
+
+# Dependências e build
+node_modules
+dist
+coverage
+.nyc_output
+
+# Arquivos com segredos / contexto local (package.json, package-lock.json e
+# tsconfig.json ficam dentro do contexto — o Dockerfile os exige)
+.env
+.env.*
+!.env.example
+logs
+*.log
+uploads
+
+# Documentação e arquivos de apoio (não são necessários na imagem)
+docs
+*.md
+*.mdx
+refactoring_plan.txt
+todo.txt
+
+# Configurações de execução fora do container (worker direto via node,
+# sem PM2, ecosystem nem scripts auxiliares)
+ecosystem.*.config.cjs
+scripts
+jest.config.js
+eslint.config.js
+.prettierrc
+tsconfig.dev.json
+tsconfig.test.json
+
+# Imagens soltas na raiz
+*.png
+*.jpg
+*.jpeg
+*.gif

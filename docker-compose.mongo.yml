@@ -1,0 +1,81 @@
+# =============================================================================
+# BackBet — Compose do MongoDB (server02)
+#
+# Este arquivo sobe NO server02 (outro host local), executando o MongoDB que a
+# aplicação do server01 irá consumir via MONGODB_URI.
+#
+# IMPORTANTE (arquitetura):
+#   O BackBet usa transações MongoDB (wallet/ledger/bet/treasury). Transações
+#   exigem replica set. Por isso o mongod sobe em modo "--replSet rs0" com UM
+#   nó, e o serviço "mongo-rs-init" executa o rs.initiate() automaticamente.
+#   O output do rs.initiate() anuncia "MONGO_RS_HOST:27017", que deve ser o
+#   endereço do server02 VISTO pelo server01 (ex.: IP local da LAN).
+#
+# Uso (no server02):
+#   cp .env.example .env      # e preencha MONGO_ROOT_PASSWORD + MONGO_RS_HOST
+#   docker compose -f docker-compose.mongo.yml up -d
+#
+# Segurança: o MongoDB não deve ficar publicamente acessível. Por padrão o
+# bind é 0.0.0.0:27017; em um teste local, restrinja o firewall do server02
+# (ex.: ufw allow from <ip-do-server01> to any port 27017) ou use MONGO_BIND_IP
+# apontando para o IP LAN do server02.
+# =============================================================================
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_ROOT_USER:-admin}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:?Defina MONGO_ROOT_PASSWORD no .env do server02}"
+      MONGO_INITDB_DATABASE: "${MONGO_INITDB_DATABASE:-backbet}"
+      MONGO_INITDB_APP_USERNAME: "${MONGODB_APP_USER:-backbet}"
+      MONGO_INITDB_APP_PASSWORD: "${MONGODB_APP_PASSWORD:?Defina MONGODB_APP_PASSWORD no .env do server02}"
+    ports:
+      - "${MONGO_BIND_IP:-0.0.0.0}:27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./deploy/mongo/init-app-user.sh:/docker-entrypoint-initdb.d/init-app-user.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongo-rs-init:
+    image: mongo:7
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_ROOT_USER: "${MONGO_ROOT_USER:-admin}"
+      MONGO_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:?Defina MONGO_ROOT_PASSWORD no .env do server02}"
+      MONGO_RS_HOST: "${MONGO_RS_HOST:?Defina MONGO_RS_HOST no .env: o IP/hostname do server02 como VISTO pelo server01 (ex.: 192.168.0.20)}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        URI="mongodb://$${MONGO_ROOT_USER}:$${MONGO_ROOT_PASSWORD}@mongodb:27017/admin?authSource=admin"
+        state=$(mongosh "$${URI}" --quiet --eval 'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+        if [ "$${state}" = "1" ]; then
+          echo "Replica set rs0 já iniciado (PRIMARY). Nada a fazer."
+        else
+          echo "Iniciando replica set rs0 com host anunciado: $${MONGO_RS_HOST}:27017"
+          mongosh "$${URI}" --quiet --eval \
+            "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '$${MONGO_RS_HOST}:27017' }] })" || true
+          sleep 3
+          mongosh "$${URI}" --quiet --eval \
+            'try { printjson(db.adminCommand({ replSetGetStatus: 1 })) } catch (e) { print("Ainda nao PRIMARY: " + e) }'
+          echo "rs-init concluído. Verifique myState: 1 (PRIMARY) no log acima."
+        fi
+
+volumes:
+  mongodb_data:

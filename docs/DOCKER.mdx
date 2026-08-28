@@ -1,0 +1,226 @@
+---
+title: "Docker — Fase 17"
+description: "Empacotamento da aplicação e implantação em dois servidores locais (server01: aplicação + Redis; server02: MongoDB)."
+slug: "/docs/docker"
+---
+
+# Docker — Fase 17
+
+## Visão geral
+
+Este projeto assume o ambiente real:
+
+```text
+PC de desenvolvimento
+   │  (Windows — escreve código, roda testes, valida build)
+   ▼
+server01 (Linux/Ubuntu + Docker)          server02 (Linux/Ubuntu + Docker)
+   ├── backbet (API)                        └── mongodb:7 (replica set rs0)
+   ├── withdrawal-worker                       192.168.x.x:27017
+   ├── contact-worker                           com autenticação
+   └── redis:7 (cache + filas Bull)
+
+         MONGODB_URI aponta do server01 → server02
+```
+
+O **MongoDB não fica no mesmo host da aplicação** — por isso o compose da
+aplicação (`docker-compose.yml`) não define um serviço `mongodb`; ele apenas
+recebe a `MONGODB_URI` do server02.
+
+> Requisito técnico: o app usa transações MongoDB (wallet, ledger, bet,
+> treasury). Transações exigem **replica set** — por isso o server02 roda um
+> replica set de nó único (`rs0`) e o `rs.initiate()` é executado
+> automaticamente na primeira subida.
+
+## Arquivos desta fase
+
+| Arquivo | Onde roda | Função |
+|---|---|---|
+| `Dockerfile` | server01 | build multi-stage (builder + runtime produção) |
+| `.dockerignore` | build context | mantém o contexto pequeno e sem segredos |
+| `docker-compose.yml` | server01 | API + Redis + workers (1 comando) |
+| `docker-compose.mongo.yml` | server02 | MongoDB single-node replica set + usuário da app |
+| `docker-compose.observability.yml` | server01 (opcional) | Prometheus + Grafana + OpenTelemetry Collector |
+| `deploy/mongo/init-app-user.sh` | server02 | cria o usuário `readWrite` da aplicação |
+| `deploy/observability/*` | server01 (opcional) | configs de Prometheus, OTel e Grafana |
+| `.env.example` | ambos | modelo seguro de variáveis |
+
+## Pré-requisitos
+
+- Docker Engine + Compose v2 no server01 e no server02 (Ubuntu:
+  `sudo apt install docker.io docker-compose-v2` e habilite o serviço).
+- As portas 3000 (server01) e 27017 (server02) liberadas no firewall entre os
+  dois hosts da LAN.
+
+---
+
+## Passo 1 — MongoDB no server02
+
+Leve para o server02 (git clone/cópia do repositório) e rode:
+
+```bash
+cp .env.example .env
+# edite o .env e preencha:
+#   MONGO_ROOT_PASSWORD=senha-forte            (usuário admin)
+#   MONGODB_APP_PASSWORD=senha-da-app          (usuário readWrite do backbet)
+#   MONGO_RS_HOST=192.168.x.y                  (IP do server02 VISTO pelo server01)
+# opcional: MONGO_BIND_IP=192.168.x.y          (bind no IP da LAN em vez de 0.0.0.0)
+
+docker compose -f docker-compose.mongo.yml up -d
+```
+
+Na primeira subida ocorre, em ordem:
+
+1. O mongod inicia em modo replica set (`--replSet rs0`);
+2. O entrypoint cria o usuário `admin` (raiz) e o usuário da aplicação
+   (`readWrite` apenas no banco `backbet`);
+3. `mongo-rs-init` executa `rs.initiate()` anunciando `MONGO_RS_HOST:27017`.
+
+Validação no server02:
+
+```bash
+docker compose -f docker-compose.mongo.yml ps
+docker compose -f docker-compose.mongo.yml exec mongodb mongosh \
+  "mongodb://admin:SUA_SENHA@127.0.0.1:27017/admin?authSource=admin" \
+  --eval 'db.adminCommand({ replSetGetStatus: 1 }).members'
+docker compose -f docker-compose.mongo.yml exec mongodb mongosh \
+  "mongodb://admin:SUA_SENHA@127.0.0.1:27017/admin?authSource=admin" \
+  --eval 'db.getSiblingDB("admin").getUsers()'
+```
+
+Espere `myState: 1` (`PRIMARY`) e o usuário `backbet` listado.
+
+### Firewall
+
+Mantenha o MongoDB privado. Nos testes locais, libere apenas para o server01:
+
+```bash
+sudo ufw allow from <ip-do-server01> to any port 27017 proto tcp
+```
+
+---
+
+## Passo 2 — Imagem da aplicação
+
+Há duas maneiras. A mais simples para o server01 local é **build no próprio
+server01**. Alternativa (build no PC de dev + transferência):
+
+```bash
+# no PC de desenvolvimento
+docker build -t backbet:latest .
+docker save backbet:latest | gzip > backbet.tar.gz
+scp backbet.tar.gz user@server01:/tmp/
+# no server01
+docker load < /tmp/backbet.tar.gz
+```
+
+---
+
+## Passo 3 — Subir a aplicação no server01
+
+```bash
+cp .env.example .env
+# edite o .env e preencha:
+#   JWT_SECRET=valor-forte                       (gere com: openssl rand -hex 32)
+#   MONGODB_URI=mongodb://backbet:senha-da-app@192.168.x.y:27017/backbet?authSource=admin&replicaSet=rs0
+# opcionais: BACKBET_PORT, OBS_*, etc.
+
+docker compose up -d --build
+```
+
+O compose sobe quatro serviços (todos com a mesma imagem `backbet:latest`):
+
+- `backbet` — a API (porta `3000` publicada, `BACKBET_PORT` para trocar);
+- `withdrawal-worker` — consome `withdrawal_payouts` (Bull/Redis), paga via
+  adaptador Pix e atualiza o MongoDB;
+- `contact-worker` — consome `contact_queue` e envia e-mails (SMTP ou
+  `jsonTransport`);
+- `redis` — cache + filas, **sem porta publicada** (acesso interno apenas).
+
+Smoke test:
+
+```bash
+docker compose ps                       # todos healthy
+docker compose logs -f backbet          # logs: Mongo conectado, servidor up
+curl -sf http://localhost:3000/health
+curl -sf http://localhost:3000/readiness
+curl -sf http://localhost:3000/api/docs.json > /dev/null && echo docs ok
+docker compose logs -f withdrawal-worker
+docker compose logs -f contact-worker
+```
+
+Operações administrativas (migrations/seeds) via containers:
+
+```bash
+docker compose exec backbet node dist/scripts/runMigrations.js
+docker compose exec backbet node dist/scripts/seedHouseTreasury.js
+```
+
+---
+
+## Observabilidade (opcional)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+```
+
+Ajuste no `.env`:
+
+```ini
+OBS_ENABLE_PROMETHEUS=true
+TRACING_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+```
+
+| Serviço | Endereço |
+|---|---|
+| Prometheus | `http://<server01>:9090` |
+| Grafana | `http://<server01>:3001` (admin / `GF_ADMIN_PASSWORD`) |
+| Collector OTLP | interno ao Compose (`otel-collector:4318`) |
+
+---
+
+## Operação comum
+
+| Ação | Comando (no server01) |
+|---|---|
+| Reconstruir e subir | `docker compose up -d --build` |
+| Logs da API | `docker compose logs -f backbet` |
+| Logs de um worker | `docker compose logs -f withdrawal-worker` |
+| Parar (mantém volumes) | `docker compose down` |
+| Deletar tudo (inclui dados) | `docker compose down -v` |
+| Reiniciar um serviço | `docker compose restart backbet` |
+| Subir só a API + Redis | `docker compose up -d redis backbet` |
+
+Dados persistidos: `redis_data`, `backbet_logs`, `backbet_uploads` (server01) e
+`mongodb_data` (server02) — todos como volumes nomeados.
+
+---
+
+## Segurança (mínimo operacional)
+
+- `JWT_SECRET` forte e fora do Git (`.env` é ignorado);
+- Mongo autenticado, usuário da app com `readWrite` apenas no banco `backbet`;
+- 27017 acessível somente para o server01 (firewall) e `MONGO_BIND_IP` restrito
+  quando possível;
+- Redis **interno** ao Compose (sem porta publicada);
+- não use `ALLOW_DEV_BEARER_BYPASS=true` fora de laboratório;
+- `OBS_ENABLE_PROMETHEUS=true` expõe `/metrics` — restrinja via firewall/proxy.
+
+---
+
+## Troubleshooting
+
+| Sintoma | Causa provável / solução |
+|---|---|
+| `MongoNetworkError` na API | `MONGODB_URI` errada; server02 inacessível; firewall fechando 27017 |
+| Transações falham (`Transaction numbers are only allowed on a replica set`) | server02 não está como replica set — cheque `rs.initiate` (`myState: 1`) e `MONGO_RS_HOST` |
+| API sobe, mas `readiness` não passa no Mongo | Mongo ainda inicializando no server02 (`docker compose ps` no server02) |
+| Worker de saque não processa | `REDIS_URL`/filas: use `redis://redis:6379` e `USE_REDIS_QUEUE=true` (já padrão no compose); cheque `docker compose logs -f withdrawal-worker` |
+| Porta 3000 ocupada | defina `BACKBET_PORT` no `.env` |
+| E-mails não saem | sem `MAILER_SMTP_URL` o worker usa `jsonTransport` (grava somente) |
+| `docker compose up` pede `.env` | `cp .env.example .env` e preencha `JWT_SECRET`, `MONGODB_URI` e `MONGODB_APP_PASSWORD` |
+
+---
+
+**Última atualização:** 28 de agosto de 2026

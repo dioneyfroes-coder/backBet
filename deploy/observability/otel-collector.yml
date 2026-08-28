@@ -1,0 +1,33 @@
+# BackBet — configuração do OpenTelemetry Collector (docker-compose.observability.yml)
+#
+# Recebe OTLP da aplicação (TRACING_ENABLED=true) em 4318 (HTTP) / 4317 (gRPC).
+# Métricas são reexportadas como Prometheus em 8888; traces são registrados em
+# console/log e podem ser enviados a um backend de sua escolha (Jaeger, etc.).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: normal
+  prometheus:
+    endpoint: 0.0.0.0:8888
+    namespace: backbet
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

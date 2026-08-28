@@ -58,24 +58,19 @@ Ajuste os principais toggles:
 
 ## 4. Dependências locais (Mongo + Redis)
 
-Suba containers rápidos (pode usar Compose ou comandos simples):
+Subindo apenas para desenvolvimento neste PC (Mongo e Redis juntos):
 
 ```bash
 docker run -d --name backbet-mongo -p 27017:27017 mongo:7
 docker run -d --name backbet-redis -p 6379:6379 redis:7
 ```
 
-Deseja Compose?
-
-```yaml
-services:
-  mongo:
-    image: mongo:7
-    ports: ["27017:27017"]
-  redis:
-    image: redis:7
-    ports: ["6379:6379"]
-```
+> Se o banco/ambiente for o de teste com Docker em servidores locais, use os
+> compose da **Fase 17** (ver `docs/DOCKER.mdx`):
+>
+> - `docker-compose.mongo.yml` — MongoDB no **server02** (replica set `rs0`);
+> - `docker-compose.yml` — aplicação + Redis + workers no **server01**,
+>   consumindo o Mongo do server02 via `MONGODB_URI`.
 
 > Sem Mongo? defina `USE_MONGOOSE_PERSISTENCE=false`. Sem Redis? `CACHE_ENABLED=false`.
 

@@ -1,0 +1,62 @@
+# =============================================================================
+# BackBet — Observabilidade (OPCIONAL, roda junto com o docker-compose.yml)
+#
+# Inicialização conjunta (mesmo projeto Compose):
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d --build
+#
+# Depois de subir, habilite na aplicação (no .env):
+#   OBS_ENABLE_PROMETHEUS=true      # expõe /metrics no backbet
+#   TRACING_ENABLED=true            # envia traces via OTLP ao collector
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+#
+# Acesso:
+#   Prometheus : http://<ip-do-server01>:9090
+#   Grafana    : http://<ip-do-server01>:3001  (login admin / GF_ADMIN_PASSWORD)
+#   Nariz do collector (OTLP HTTP): 4318 (interno ao Compose)
+# =============================================================================
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otel/config.yml:ro
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_PORT:-4318}:4318"
+      - "${OTEL_COLLECTOR_METRICS_PORT:-8888}:8888"
+    depends_on:
+      - backbet
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      - backbet
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GF_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GF_ADMIN_PASSWORD:-admin}"
+    volumes:
+      - ./deploy/observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:

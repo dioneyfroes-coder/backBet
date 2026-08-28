@@ -39,6 +39,7 @@ lerna-debug.log*
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # Build files
 /build

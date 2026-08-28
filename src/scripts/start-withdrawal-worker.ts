@@ -3,6 +3,11 @@ import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPa
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import {
+  connectMongoDB,
+  disconnectMongoDB,
+  getMongoDBConfig,
+} from '@/infrastructure/persistence/mongoose/config';
+import {
   createWalletRepository,
   createWithdrawalRequestRepository,
   createLedgerRepository,
@@ -10,6 +15,10 @@ import {
 
 async function main() {
   try {
+    if (process.env.USE_MONGOOSE_PERSISTENCE === 'true') {
+      await connectMongoDB(getMongoDBConfig());
+    }
+
     const withdrawalRequestRepository = await createWithdrawalRequestRepository();
     const walletRepository = await createWalletRepository();
     const ledgerRepository = await createLedgerRepository();
@@ -28,6 +37,13 @@ async function main() {
         await queue.close();
       } catch (err) {
         // ignore
+      }
+      if (process.env.USE_MONGOOSE_PERSISTENCE === 'true') {
+        try {
+          await disconnectMongoDB();
+        } catch (err) {
+          // ignore
+        }
       }
       process.exit(0);
     });

@@ -1,0 +1,131 @@
+# =============================================================================
+# BackBet — Compose do SERVIDOR DE APLICAÇÃO (server01)
+#
+# Este arquivo sobe NO server01 (host Ubuntu local com Docker):
+#   - backbet                 : API/contêiner principal (querys da aplicação)
+#   - withdrawal-worker       : worker de saque (Bull + Redis)
+#   - contact-worker          : worker de e-mails de contato (Bull + Redis)
+#   - redis                   : cache + filas Bull (interno, sem porta exposta)
+#
+# O MongoDB NÃO entra neste compose: ele roda em outro host local (server02),
+# usando o arquivo docker-compose.mongo.yml. A conexão é feita via MONGODB_URI.
+#
+# Uso:
+#   cp .env.example .env          # e preencha JWT_SECRET + MONGODB_URI
+#   docker compose up -d --build
+#
+# As variáveis do arquivo .env são injetadas nos contêineres via env_file,
+# porém o bloco `environment:` abaixo TEM PRIORIDADE e garante os valores
+# de integração internos (REDIS_URL, NODE_ENV, etc.).
+# =============================================================================
+
+x-backbet-env: &backbet-env
+  NODE_ENV: production
+  BACKBET_RUNTIME_ENV: production
+  PORT: "3000"
+
+  # Infraestrutura
+  USE_MONGOOSE_PERSISTENCE: "true"
+  MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env apontando para o MongoDB do server02 (ex.: mongodb://backbet:SUA_SENHA@192.168.0.20:27017/backbet?authSource=admin&replicaSet=rs0)}"
+  MONGODB_DB_NAME: "${MONGODB_DB_NAME:-backbet}"
+  REDIS_URL: "redis://redis:6379"
+  USE_REDIS_QUEUE: "true"
+
+  # Autenticação / segurança
+  JWT_SECRET: "${JWT_SECRET:?Defina JWT_SECRET no arquivo .env}"
+  JWT_ISSUER: "${JWT_ISSUER:-backbet}"
+  JWT_EXPIRATION: "${JWT_EXPIRATION:-15m}"
+  JWT_REFRESH_EXPIRATION: "${JWT_REFRESH_EXPIRATION:-7d}"
+  ALLOW_DEV_BEARER_BYPASS: "${ALLOW_DEV_BEARER_BYPASS:-false}"
+  CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}"
+  ADMIN_USER_IDS: "${ADMIN_USER_IDS:-}"
+
+  # Comportamento esperado no ambiente de teste (server01)
+  GAME_COINFLIP_ENABLED: "${GAME_COINFLIP_ENABLED:-false}"
+  PIX_PROVIDER: "${PIX_PROVIDER:-mock}"
+  PIX_ENABLE_DEPOSITS: "${PIX_ENABLE_DEPOSITS:-true}"
+  PIX_ENABLE_WITHDRAWALS: "${PIX_ENABLE_WITHDRAWALS:-true}"
+  PIX_DEFAULT_KEY: "${PIX_DEFAULT_KEY:-pix@backbet.mock}"
+
+  # Logs e auditoria
+  LOG_LEVEL: "${LOG_LEVEL:-info}"
+  AUDIT_ENABLED: "true"
+
+  # Observabilidade (opcional — ver docker-compose.observability.yml)
+  OBS_ENABLE_PROMETHEUS: "${OBS_ENABLE_PROMETHEUS:-false}"
+  TRACING_ENABLED: "${TRACING_ENABLED:-false}"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318/v1/traces}"
+  OTEL_SERVICE_NAME: "${OTEL_SERVICE_NAME:-backbet-backend}"
+
+x-worker-env: &worker-env
+  <<: *backbet-env
+  # Workers logam no stdout (docker logs); o arquivo é mantido só na API
+  LOG_FILE_ENABLED: "false"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backbet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: backbet:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment: *backbet-env
+    ports:
+      - "${BACKBET_PORT:-3000}:3000"
+    volumes:
+      - backbet_logs:/usr/src/app/logs
+      - backbet_uploads:/usr/src/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  withdrawal-worker:
+    image: backbet:latest
+    restart: unless-stopped
+    command: ["node", "dist/scripts/start-withdrawal-worker.js"]
+    env_file:
+      - .env
+    environment: *worker-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  contact-worker:
+    image: backbet:latest
+    restart: unless-stopped
+    command: ["node", "dist/scripts/start-contact-worker.js"]
+    env_file:
+      - .env
+    environment: *worker-env
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+volumes:
+  redis_data:
+  backbet_logs:
+  backbet_uploads:
