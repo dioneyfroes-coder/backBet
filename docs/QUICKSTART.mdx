@@ -73,6 +73,10 @@ docker run -d --name backbet-redis -p 6379:6379 redis:7
 >   consumindo o Mongo do server02 via `MONGODB_URI`.
 
 > Sem Mongo? defina `USE_MONGOOSE_PERSISTENCE=false`. Sem Redis? `CACHE_ENABLED=false`.
+>
+> Para rodar a **suíte de integração real** (reproduzível, com replica set `rs0`
+> e Redis), use o compose de **teste** da Fase 18:
+> `npm run test:integration:full` (ver `docs/TESTING-ENV.mdx`).
 
 ## 5. Executar em desenvolvimento
 

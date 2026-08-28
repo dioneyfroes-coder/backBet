@@ -1,0 +1,106 @@
+---
+title: "Ambientes de Teste (Fase 18)"
+description: "Como rodar a suíte de integração real de forma reproduzível, sem depender de MongoDB/Redis pessoais, nos três ambientes: development, test e production."
+slug: "/docs/testing-env"
+sidebar_label: "Ambientes de Teste"
+---
+
+# Ambientes de Teste (Fase 18)
+
+A **Fase 18** organiza o projeto em três ambientes conceituais e garante que a
+suíte de **integração real** (MongoDB + Redis) seja **reproduzível** — ou seja,
+não depende de um MongoDB/Redis pessoal, de dados locais, nem de configuração
+específica da máquina de desenvolvimento.
+
+| Ambiente | Infraestrutura | Como rodar |
+|---|---|---|
+| **development** | Local do PC dev (Mongo + Redis via `docker run` ou Compose), app com `npm run dev` | Ver `docs/QUICKSTART.mdx` |
+| **test** | **Docker Compose versionado** (`docker-compose.test.yml`): MongoDB `mongo:7` como replica set `rs0` de nó único + Redis `redis:7` | `npm run test:integration:full` |
+| **production** | Dois servidores locais: `server02` (MongoDB) + `server01` (app + workers + Redis), ambos via Compose | Ver `docs/DOCKER.mdx` (Fase 17) |
+
+## Por que uma infra de teste em Compose?
+
+- Transações MongoDB (wallet/ledger/bet/treasury) exigem **replica set**; o
+  compose de teste sobe o `rs0` automaticamente (`rs.initiate()` idempotente).
+- Os testes de idempotência/atomicidade usam Redis de verdade.
+- Nada disso precisa existir na máquina do dev — `npm install` + Docker bastam.
+
+## Pré-requisitos
+
+- Docker Engine + **Docker Compose v2** (recomendado **v2.20+** por conta do suporte a `up -d --wait`).
+- Node.js 22+ (`engines` do `package.json`).
+- **Nenhuma** instância local rodando nas portas `127.0.0.1:27017` (Mongo) ou `127.0.0.1:6379` (Redis) enquanto a infra de teste estiver de pé.
+
+## Comandos
+
+```bash
+# 1. Sobe Mongo (replica set rs0) + Redis na máquina (portas só em 127.0.0.1)
+npm run test:infra:up
+
+# 2. Roda a suíte de integração real
+npm run test:integration
+
+# 3. Derruba a infra (os volumes são mantidos para a próxima execução)
+npm run test:infra:down
+```
+
+**Tudo em um comando** (levanta a infra, roda os testes e derruba a infra,
+mesmo que os testes falhem):
+
+```bash
+npm run test:integration:full
+```
+
+Para **começar do zero** (apaga dados do Mongo/Redis de teste e religa tudo):
+
+```bash
+npm run test:infra:reset
+```
+
+## Determinismo (sem .env pessoal)
+
+O orquestrador `scripts/run-integration-tests.cjs`:
+
+- define `RUN_REAL_INTEGRATION_TESTS=true`;
+- roda o Jest com `--runInBand` no spec `src/integration/__tests__/mongo-redis.integration.test.ts`;
+- aponta `MONGODB_URI` e `REDIS_URL` para a infra local do compose (`mongodb://localhost:27017/backbet-test` e `redis://localhost:6379`), **ignorando um `.env` pessoal** da máquina — a infra de teste é sempre a mesma.
+
+Para direcionar a suíte a **outra** infra (ex.: um ambiente de teste remoto),
+exporte as variáveis antes de rodar:
+
+```bash
+export MONGODB_URI="mongodb://host:27017/backbet-test"
+export REDIS_URL="redis://host:6379"
+npm run test:integration
+```
+
+> Detalhe: `connectMongoDB` usa `dbName` de `MONGODB_DB_NAME` (padrão `backbet-dev`).
+> Se quiser isolar o banco dos testes, defina `MONGODB_DB_NAME=backbet-test`.
+
+## Como a infra de teste foi montada
+
+- **`mongodb`** — `mongo:7`, `--replSet rs0 --bind_ip_all`, healthcheck com `mongosh`.
+- **`mongo-rs-init`** — container one-shot que inicia o `rs0` e só termina quando
+  o nó única vira `PRIMARY` (espera até 30s). O membro anuncia `127.0.0.1:27017`
+  porque o **Jest roda no host** e precisa descobrir o primary pela porta publicada.
+- **`redis`** — `redis:7-alpine`, healthcheck com `redis-cli ping`.
+- Portas publicadas **somente em loopback** e Mongo **sem autenticação**: essa
+  infra é efêmera/local e não deve ser exposta na rede. Para produção, use
+  `docker-compose.mongo.yml`.
+
+## CI (GitHub Actions)
+
+O workflow `.github/workflows/ci.yml` tem um job `integration` dedicado que sobe
+a **mesma** infra (`docker compose -f docker-compose.test.yml up -d --wait`),
+roda `npm run test:integration` e derruba a infra (`down`) sempre — provando que
+o ambiente de teste é reproduzível fora da máquina do dev.
+
+## Troubleshooting
+
+| Sintoma | Causa / solução |
+|---|---|
+| `port is already allocated` | Existe Mongo/Redis rodando em 27017/6379 na máquina. Pare-o ou rode a infra de teste em outro host. |
+| `docker: command not found` | Docker não instalado ou fora do PATH. Instale Docker Engine + Compose v2. |
+| `up -d --wait` não funciona | Compose v2 antigo (antes da v2.20). Atualize e rode `docker compose version`. |
+| Testes falham conectando no Mongo | Aguarde o `rs0` ficar PRIMARY (log de `npm run test:infra:up`); rode `npm run test:infra:down -v` (reset) via `npm run test:infra:reset` se persistir. |
+| Quero ver o estado da infra | `docker compose -f docker-compose.test.yml ps` e `docker compose -f docker-compose.test.yml logs mongo-rs-init`. |

@@ -40,6 +40,27 @@ Exemplo de stub Jest:
 jest.spyOn(Model, 'findOne').mockReturnValueOnce({ lean: jest.fn().mockResolvedValue(fakeDoc) } as any);
 ```
 
+## Suíte de integração real (MongoDB + Redis) — Fase 18
+
+A suíte `src/integration/__tests__/mongo-redis.integration.test.ts` só executa com
+`RUN_REAL_INTEGRATION_TESTS=true` e precisa de MongoDB **replica set** + Redis
+reais. Tudo isso é reproduzível com Docker Compose — sem depender de infra
+pessoal:
+
+```bash
+npm run test:integration:full   # sobe a infra (docker-compose.test.yml), roda a suíte e derruba
+```
+
+Para manter a infra de pé e rodar várias vezes:
+
+```bash
+npm run test:infra:up
+npm run test:integration
+npm run test:infra:down
+```
+
+Detalhes e comandos completos: `docs/TESTING-ENV.mdx`.
+
 ## Visualizar docs com Docusaurus (guia rápido)
 
 Este repositório contém os arquivos de documentação em `docs/` compatíveis com Docusaurus v2. Se você ainda não tem um site Docusaurus inicializado, siga:

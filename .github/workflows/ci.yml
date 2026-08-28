@@ -42,3 +42,34 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
           verbose: true
+
+  integration:
+    runs-on: ubuntu-latest
+
+    # Fase 18 — Ambiente de testes reproduzível: a suíte de integração real
+    # (MongoDB replica set + Redis) roda contra a INFRAESTRUTURA VERSIONADA do
+    # docker-compose.test.yml, sem depender de MongoDB/Redis pessoais.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Start test infrastructure (MongoDB replica set + Redis)
+        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
+
+      - name: Run real integration tests
+        run: npm run test:integration
+
+      - name: Teardown test infrastructure
+        run: docker compose -f docker-compose.test.yml down
+        if: always()

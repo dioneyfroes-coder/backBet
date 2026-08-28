@@ -1,0 +1,96 @@
+# =============================================================================
+# BackBet — Compose do ambiente de TESTE (Fase 18)
+#
+# Sobe a INFRAESTRUTURA da suíte de integração real (npm run test:integration)
+# em Docker Compose, para que os testes NÃO dependam de um MongoDB/Redis
+# pessoal nem da configuração da máquina de desenvolvimento.
+#
+#   - mongodb: mongo:7 como replica set de NÓ ÚNICO "rs0". O BackBet usa
+#     transações Mongo (wallet/ledger/bet/treasury), que exigem replica set.
+#     Por isso o mongod sobe com "--replSet rs0" e o serviço "mongo-rs-init"
+#     executa rs.initiate() automaticamente. O membro anuncia "127.0.0.1:27017"
+#     porque o Jest roda no HOST (não em um container) e precisa conseguir
+#     descobrir o PRIMARY pela porta publicada em 127.0.0.1.
+#   - redis: redis:7-alpine, usado pelos testes de idempotência/atomicidade.
+#
+# Uso:
+#   docker compose -f docker-compose.test.yml up -d --wait   # sobe infra
+#   npm run test:integration                                  # roda a suíte real
+#   docker compose -f docker-compose.test.yml down            # derruba (mantém volumes)
+#
+#   Tudo em um comando:   npm run test:integration:full
+#   Volumes zerados:      npm run test:infra:reset
+#
+# Nota de segurança: infra EFÊMERA de testes. As portas são publicadas somente
+# em 127.0.0.1 (loopback) e o Mongo é iniciado SEM autenticação — não exponha
+# este compose fora da máquina. Para produção, use docker-compose.mongo.yml.
+# =============================================================================
+
+name: backbet-test
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: "no"
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_test_data:/data/db
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet --eval "db.adminCommand({ ping: 1 }).ok"
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  mongo-rs-init:
+    image: mongo:7
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        URI="mongodb://mongodb:27017/admin?directConnection=true"
+        state=$(mongosh "$${URI}" --quiet --eval 'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+        if [ "$${state}" = "1" ]; then
+          echo "Replica set rs0 ja iniciado (PRIMARY). Nada a fazer."
+          exit 0
+        fi
+        echo "Iniciando replica set rs0 (membro anunciado em 127.0.0.1:27017)..."
+        mongosh "$${URI}" --quiet --eval \
+          "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] })" >/dev/null 2>&1 || true
+        i=0
+        while [ "$${i}" -lt 30 ]; do
+          state=$(mongosh "$${URI}" --quiet --eval 'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+          if [ "$${state}" = "1" ]; then
+            echo "Replica set rs0 PRONTO (myState=1 PRIMARY)."
+            exit 0
+          fi
+          i=$$((i + 1))
+          sleep 1
+        done
+        echo "ERRO: replica set rs0 nao ficou PRIMARY em 30s." >&2
+        exit 1
+
+  redis:
+    image: redis:7-alpine
+    restart: "no"
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli ping
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 2s
+
+volumes:
+  mongo_test_data:
