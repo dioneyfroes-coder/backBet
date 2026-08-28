@@ -100,6 +100,7 @@ describe('User Entity', () => {
         createdAt: mockData.createdAt,
         updatedAt: mockData.updatedAt,
         pixKey: mockData.pixKey,
+        pixUpdatedAt: null,
         preferences: {
           emailNotifications: true,
           smsNotifications: false,

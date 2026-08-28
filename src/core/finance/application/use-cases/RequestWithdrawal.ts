@@ -2,6 +2,7 @@ import { WithdrawalRequestService } from '@/core/finance/domain/services/Withdra
 import { WithdrawalRequest } from '@/core/finance/domain/entities/WithdrawalRequest';
 import { Currency } from '@/core/finance/domain/value-objects/Currency';
 import { executeWithWalletErrorMapping } from '@/core/finance/application/errors/WalletErrorMapper';
+import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
 import { User } from '@/core/user/domain/entities/User';
 import { UserService } from '@/core/user/domain/services/UserService';
 import { appConfig } from '@/shared/config/appConfig';
@@ -13,6 +14,7 @@ export class RequestWithdrawal {
     private withdrawalRequestService: WithdrawalRequestService,
     private userService: UserService,
     private idempotency?: IdempotencyService,
+    private moneySecurity?: MoneySecurityService,
   ) {}
 
   async execute(
@@ -48,6 +50,11 @@ export class RequestWithdrawal {
     }
 
     const operation = async () => {
+      if (this.moneySecurity) {
+        await executeWithWalletErrorMapping(() =>
+          this.moneySecurity!.assertWithdrawalAllowed(userId, amount, user.pixKey),
+        );
+      }
       const request = await executeWithWalletErrorMapping(() =>
         this.withdrawalRequestService.createRequest(userId, amount, currency, notes),
       );

@@ -1,8 +1,12 @@
 import {
   ILedgerRepository,
   LedgerRepositoryOptions,
+  LedgerSumOptions,
 } from '@/core/finance/domain/repositories/ILedgerRepository';
-import { LedgerEntry } from '@/core/finance/domain/entities/LedgerEntry';
+import {
+  LedgerEntry,
+  LedgerOperationType,
+} from '@/core/finance/domain/entities/LedgerEntry';
 import { AppError } from '@/shared/errors/AppError';
 import { ILedgerEntryDocument, LedgerEntryModel } from '../schemas/LedgerEntrySchema';
 
@@ -55,6 +59,26 @@ export class MongooseLedgerRepository implements ILedgerRepository {
 
   async countByUserId(userId: string): Promise<number> {
     return LedgerEntryModel.countDocuments({ userId });
+  }
+
+  async sumByTypes(
+    userId: string,
+    types: LedgerOperationType[],
+    options: LedgerSumOptions = {},
+  ): Promise<{ amountCents: number; count: number }> {
+    const query: Record<string, unknown> = { userId, type: { $in: types } };
+    if (options.from) {
+      query.createdAt = { $gte: options.from };
+    }
+    if (options.statuses) {
+      query.status = { $in: options.statuses };
+    }
+    const docs = await LedgerEntryModel.find(query).lean<LedgerDoc[]>();
+    let amountCents = 0;
+    for (const doc of docs) {
+      amountCents += doc.amountCents ?? 0;
+    }
+    return { amountCents, count: docs.length };
   }
 
   async exists(

@@ -20,6 +20,7 @@ describe('UserService', () => {
     mockUserRepository = {
       findById: jest.fn(),
       findByEmail: jest.fn(),
+      findByPixKey: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
       findByRecoveryToken: jest.fn(),

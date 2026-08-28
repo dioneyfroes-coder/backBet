@@ -25,6 +25,7 @@ import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRep
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { UserService } from '@/core/user/domain/services/UserService';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
 
 export type FinanceRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -58,11 +59,21 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
 
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
   const userService = new UserService(userRepository);
+  const moneySecurity = new MoneySecurityService(
+    ledgerRepository,
+    userRepository,
+    withdrawalRequestRepository,
+  );
 
   const financeController = new FinanceController(
     new ListCreditPackages(creditPackageService),
     new PurchaseCreditPackage(creditPackageService, walletService, idempotencyService),
-    new RequestWithdrawal(withdrawalRequestService, userService, idempotencyService),
+    new RequestWithdrawal(
+      withdrawalRequestService,
+      userService,
+      idempotencyService,
+      moneySecurity,
+    ),
     new GetWithdrawalRequests(withdrawalRequestService),
     new ProcessWithdrawalRequest(withdrawalRequestService),
   );

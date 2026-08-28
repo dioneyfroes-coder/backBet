@@ -270,6 +270,46 @@ export const appConfig = {
         'Muitas tentativas de cancelamento. Aguarde e tente novamente.',
     },
   },
+  moneySecurity: {
+    limits: {
+      maxPerDeposit: parsePositiveNumber(env.MONEY_SECURITY_MAX_DEPOSIT, 5000),
+      maxPerWithdrawal: parsePositiveNumber(env.MONEY_SECURITY_MAX_WITHDRAWAL, 10000),
+      maxDepositPerDay: parsePositiveNumber(env.MONEY_SECURITY_MAX_DEPOSIT_PER_DAY, 20000),
+      maxWithdrawalPerDay: parsePositiveNumber(env.MONEY_SECURITY_MAX_WITHDRAWAL_PER_DAY, 25000),
+      maxDepositsPerDay: parsePositiveInt(env.MONEY_SECURITY_MAX_DEPOSITS_PER_DAY, 20),
+      maxWithdrawalsPerDay: parsePositiveInt(env.MONEY_SECURITY_MAX_WITHDRAWALS_PER_DAY, 5),
+    },
+    // Múltiplos saques em janela curta (velocidade)
+    velocity: {
+      enabled: parseBoolean(env.MONEY_SECURITY_VELOCITY_ENABLED, true),
+      windowMs: parsePositiveMs(env.MONEY_SECURITY_VELOCITY_WINDOW_MS, 10 * 60 * 1000),
+      maxWithdrawals: parsePositiveInt(env.MONEY_SECURITY_VELOCITY_MAX_WITHDRAWALS, 3),
+    },
+    // Mudança de Pix seguida de saque
+    pixChange: {
+      enabled: parseBoolean(env.MONEY_SECURITY_PIX_CHANGE_ENABLED, true),
+      cooldownMs: parsePositiveMs(env.MONEY_SECURITY_PIX_CHANGE_COOLDOWN_MS, 24 * 60 * 60 * 1000),
+    },
+    // Mesma chave Pix utilizada por múltiplas contas
+    multiAccount: {
+      enabled: parseBoolean(env.MONEY_SECURITY_MULTI_ACCOUNT_ENABLED, true),
+    },
+    // Comportamento anômalo determinístico (ex. saque alto de conta nova)
+    anomaly: {
+      enabled: parseBoolean(env.MONEY_SECURITY_ANOMALY_ENABLED, true),
+      minAccountAgeMs: parsePositiveMs(env.MONEY_SECURITY_MIN_ACCOUNT_AGE_MS, 24 * 60 * 60 * 1000),
+      maxWithdrawalForNewAccount: parsePositiveNumber(
+        env.MONEY_SECURITY_MAX_WITHDRAWAL_NEW_ACCOUNT,
+        200,
+      ),
+    },
+    // Tentativas repetitivas (saques recusados/cancelados/falhos)
+    failedAttempts: {
+      enabled: parseBoolean(env.MONEY_SECURITY_FAILED_ATTEMPTS_ENABLED, true),
+      windowMs: parsePositiveMs(env.MONEY_SECURITY_FAILED_ATTEMPTS_WINDOW_MS, 24 * 60 * 60 * 1000),
+      max: parsePositiveInt(env.MONEY_SECURITY_FAILED_ATTEMPTS_MAX, 5),
+    },
+  },
   games: {
     coinFlip: {
       enabled: parseBoolean(env.GAME_COINFLIP_ENABLED, true),

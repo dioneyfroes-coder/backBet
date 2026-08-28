@@ -21,6 +21,13 @@ export class UserRepository implements IUserRepository {
     return null;
   }
 
+  async findByPixKey(pixKey: string): Promise<User[]> {
+    const normalized = pixKey.trim().toLowerCase();
+    return Array.from(this.users.values()).filter(
+      (user) => user.pixKey && user.pixKey.trim().toLowerCase() === normalized,
+    );
+  }
+
   async findByEmail(email: string): Promise<User | null> {
     const userId = this.emailIndex.get(email.toLowerCase());
     if (!userId) return null;

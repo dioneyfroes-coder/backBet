@@ -15,6 +15,7 @@ export class MongooseUserRepository implements IUserRepository {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
+        pixUpdatedAt: user.pixUpdatedAt ?? null,
         documents: user.documents ?? [],
         preferences: user.preferences ?? {
           emailNotifications: true,
@@ -73,6 +74,19 @@ export class MongooseUserRepository implements IUserRepository {
     }
   }
 
+  async findByPixKey(pixKey: string): Promise<User[]> {
+    try {
+      const docs = await UserModel.find({ pixKey: pixKey.trim() })
+        .lean<IUserDocument[]>();
+      return docs.map((doc) => this.mapToDomain(doc));
+    } catch (error: unknown) {
+      const originalError = error instanceof Error ? error.message : 'unknown';
+      throw new AppError('Erro ao buscar usuários por chave Pix', 'INTERNAL_SERVER_ERROR', 500, {
+        originalError,
+      });
+    }
+  }
+
   async findByRecoveryToken(token: string): Promise<User | null> {
     const doc = await UserModel.findOne({ 'passwordRecovery.token': token });
     return doc ? this.mapToDomain(doc) : null;
@@ -85,6 +99,7 @@ export class MongooseUserRepository implements IUserRepository {
         status: user.status,
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
+        pixUpdatedAt: user.pixUpdatedAt ?? null,
         documents: user.documents ?? [],
         preferences: user.preferences ?? {
           emailNotifications: true,
@@ -126,6 +141,8 @@ export class MongooseUserRepository implements IUserRepository {
         marketingEmails: false,
         requireWithdrawPassword: null,
       },
+      undefined,
+      data.pixUpdatedAt ?? null,
     );
   }
 }

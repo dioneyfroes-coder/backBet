@@ -3,12 +3,14 @@ import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
 
 export class Deposit {
   constructor(
     private walletService: WalletService,
     private pixProvider: PixProviderPort,
     private idempotency?: IdempotencyService,
+    private moneySecurity?: MoneySecurityService,
   ) {}
 
   async execute(
@@ -30,6 +32,12 @@ export class Deposit {
   }
 
   private async executeOnce(userId: string, amount: number, currency: Currency, description?: string) {
+    if (this.moneySecurity) {
+      await executeWithWalletErrorMapping(() =>
+        this.moneySecurity!.assertDepositAllowed(userId, amount),
+      );
+    }
+
     const charge = await this.pixProvider.createCharge({
       userId,
       amount,

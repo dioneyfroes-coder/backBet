@@ -10,6 +10,7 @@ export interface IUserDocument extends Document<string> {
   createdAt: Date;
   updatedAt: Date;
   pixKey?: string | null;
+  pixUpdatedAt?: Date | null;
   documents?: Array<{
     id: string;
     type?: string | null;
@@ -62,6 +63,10 @@ export const userSchema = new Schema<IUserDocument>(
     },
     pixKey: {
       type: String,
+      default: null,
+    },
+    pixUpdatedAt: {
+      type: Date,
       default: null,
     },
     preferences: {

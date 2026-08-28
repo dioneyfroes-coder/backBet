@@ -3,12 +3,14 @@ import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
 
 export class Withdraw {
   constructor(
     private walletService: WalletService,
     private pixProvider: PixProviderPort,
     private idempotency?: IdempotencyService,
+    private moneySecurity?: MoneySecurityService,
   ) {}
 
   async execute(
@@ -37,6 +39,12 @@ export class Withdraw {
     pixKey: string,
     description?: string,
   ) {
+    if (this.moneySecurity) {
+      await executeWithWalletErrorMapping(() =>
+        this.moneySecurity!.assertWithdrawalAllowed(userId, amount, pixKey),
+      );
+    }
+
     const payout = await this.pixProvider.initiatePayout({
       userId,
       amount,

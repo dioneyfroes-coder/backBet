@@ -116,6 +116,13 @@ const treasuryReconciliationMismatchCounter = new Counter({
   registers: [registry],
 });
 
+const moneySecurityBlockedCounter = new Counter({
+  name: 'backbet_money_security_blocked_total',
+  help: 'Total de operações financeiras bloqueadas pelas regras de segurança de dinheiro',
+  labelNames: ['rule'],
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -135,4 +142,5 @@ export {
   idempotencyClaimCounter,
   optimisticLockConflictCounter,
   treasuryReconciliationMismatchCounter,
+  moneySecurityBlockedCounter,
 };

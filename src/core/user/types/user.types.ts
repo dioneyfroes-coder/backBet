@@ -10,6 +10,7 @@ export interface IUserDTO {
   createdAt: Date;
   updatedAt: Date;
   pixKey?: string | null;
+  pixUpdatedAt?: Date | null;
   documents?: IUserDocumentDTO[];
   preferences?: IUserPreferences;
 }

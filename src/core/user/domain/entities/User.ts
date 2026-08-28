@@ -42,6 +42,7 @@ export class User {
       token: string;
       expiresAt: Date;
     },
+    public pixUpdatedAt?: Date | null,
   ) {}
 
   canOperate(): boolean {
@@ -60,6 +61,7 @@ export class User {
 
   updatePixKey(pixKey: string | null): void {
     this.pixKey = pixKey ? pixKey.trim() : null;
+    this.pixUpdatedAt = new Date();
     this.updatedAt = new Date();
   }
 
@@ -87,6 +89,7 @@ export class User {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       pixKey: this.pixKey,
+      pixUpdatedAt: this.pixUpdatedAt ?? null,
       documents: this.documents,
       preferences: this.preferences,
     };

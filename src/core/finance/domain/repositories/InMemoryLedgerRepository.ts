@@ -1,5 +1,9 @@
-import { LedgerEntry } from '../entities/LedgerEntry';
-import { ILedgerRepository, LedgerRepositoryOptions } from './ILedgerRepository';
+import { LedgerEntry, LedgerOperationType } from '../entities/LedgerEntry';
+import {
+  ILedgerRepository,
+  LedgerRepositoryOptions,
+  LedgerSumOptions,
+} from './ILedgerRepository';
 import { TransactionSession } from '@/core/shared/types/Transaction';
 
 export class InMemoryLedgerRepository implements ILedgerRepository {
@@ -26,6 +30,26 @@ export class InMemoryLedgerRepository implements ILedgerRepository {
 
   async countByUserId(userId: string): Promise<number> {
     return this.entries.filter((e) => e.userId === userId).length;
+  }
+
+  async sumByTypes(
+    userId: string,
+    types: LedgerOperationType[],
+    options?: LedgerSumOptions,
+  ): Promise<{ amountCents: number; count: number }> {
+    const typeSet = new Set(types);
+    const statusSet = options?.statuses ? new Set(options.statuses) : null;
+    const from = options?.from ? options.from.getTime() : null;
+    let amountCents = 0;
+    let count = 0;
+    for (const entry of this.entries) {
+      if (entry.userId !== userId || !typeSet.has(entry.type)) continue;
+      if (from !== null && entry.createdAt.getTime() < from) continue;
+      if (statusSet && !statusSet.has(entry.status)) continue;
+      amountCents += entry.amountCents;
+      count += 1;
+    }
+    return { amountCents, count };
   }
 
   async exists(transactionId: string, _options?: LedgerRepositoryOptions): Promise<boolean> {

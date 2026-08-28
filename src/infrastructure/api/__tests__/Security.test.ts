@@ -456,6 +456,60 @@ describe('Security Fase 12 — Authorization (403)', () => {
   });
 });
 
+describe('Security Fase 13 — Segurança específica de dinheiro', () => {
+  beforeEach(async () => {
+    await buildTestApp();
+  });
+
+  it('bloqueia depósito acima do máximo por operação (400)', async () => {
+    const user = await registerAndLogin('msec1');
+    const res = await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 6000, currency: 'BRL' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('MONEY_SECURITY_DEPOSIT_MAX_AMOUNT');
+  });
+
+  it('bloqueia múltiplos saques rápidos via velocidade (429)', async () => {
+    const user = await registerAndLogin('msec2');
+    await fundWallet(user.accessToken, 1500);
+
+    for (let i = 0; i < 3; i += 1) {
+      const ok = await request(app)
+        .post('/api/finance/withdrawal-requests')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ amount: 100, currency: 'BRL', password: PASSWORD });
+      expect(ok.status).toBe(201);
+    }
+
+    const blocked = await request(app)
+      .post('/api/finance/withdrawal-requests')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 100, currency: 'BRL', password: PASSWORD });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error.code).toBe('MONEY_SECURITY_WITHDRAWAL_VELOCITY');
+  });
+
+  it('bloqueia saque logo após mudar a chave Pix (403)', async () => {
+    const user = await registerAndLogin('msec3');
+    await fundWallet(user.accessToken);
+
+    const updated = await request(app)
+      .put('/api/users/me/pix-key')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ pixKey: 'msec3@bank.example' });
+    expect(updated.status).toBe(200);
+
+    const blocked = await request(app)
+      .post('/api/finance/withdrawal-requests')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 100, currency: 'BRL', password: PASSWORD });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('MONEY_SECURITY_PIX_CHANGED_RECENTLY');
+  });
+});
+
 describe('Security Fase 12 — HTTP hardening', () => {
   beforeEach(async () => {
     await buildTestApp();
