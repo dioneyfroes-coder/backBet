@@ -9,6 +9,8 @@ import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { IGameRoundRepository } from '@/core/game/domain/repositories/IGameRoundRepository';
 import { IHouseTreasuryRepository } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
+import { IIdentityVerificationRepository } from '@/core/compliance/domain/repositories/IIdentityVerificationRepository';
+import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
@@ -119,4 +121,30 @@ export async function createHouseTreasuryRepository(): Promise<IHouseTreasuryRep
     '@/core/treasury/domain/repositories/HouseTreasuryRepository'
   );
   return new HouseTreasuryRepository();
+}
+
+export async function createIdentityVerificationRepository(): Promise<IIdentityVerificationRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseIdentityVerificationRepository } = await import(
+      './mongoose/repositories/MongooseIdentityVerificationRepository'
+    );
+    return new MongooseIdentityVerificationRepository();
+  }
+  const { IdentityVerificationRepository } = await import(
+    '@/core/compliance/domain/repositories/IdentityVerificationRepository'
+  );
+  return new IdentityVerificationRepository();
+}
+
+export async function createResponsibleGamblingRepository(): Promise<IResponsibleGamblingRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseResponsibleGamblingProfileRepository } = await import(
+      './mongoose/repositories/MongooseResponsibleGamblingProfileRepository'
+    );
+    return new MongooseResponsibleGamblingProfileRepository();
+  }
+  const { ResponsibleGamblingRepository } = await import(
+    '@/core/responsibleGambling/domain/repositories/ResponsibleGamblingRepository'
+  );
+  return new ResponsibleGamblingRepository();
 }

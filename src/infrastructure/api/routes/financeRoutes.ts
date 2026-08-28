@@ -26,6 +26,13 @@ import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository
 import { UserService } from '@/core/user/domain/services/UserService';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
+import { IIdentityVerificationRepository } from '@/core/compliance/domain/repositories/IIdentityVerificationRepository';
+import { ComplianceService } from '@/core/compliance/domain/services/ComplianceService';
+import {
+  createIdentityVerificationRepository,
+} from '@/infrastructure/persistence/factory';
+import { createComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
+import type { ComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
 
 export type FinanceRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -33,6 +40,8 @@ export type FinanceRoutesDeps = {
   creditPackageRepository?: ICreditPackageRepository;
   withdrawalRequestRepository?: IWithdrawalRequestRepository;
   userRepository?: IUserRepository;
+  identityVerificationRepository?: IIdentityVerificationRepository;
+  complianceProviders?: ComplianceProviders;
 };
 
 export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise<Router> {
@@ -65,6 +74,17 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
     withdrawalRequestRepository,
   );
 
+  const identityVerificationRepository: IIdentityVerificationRepository =
+    deps.identityVerificationRepository ?? (await createIdentityVerificationRepository());
+  const complianceProviders: ComplianceProviders =
+    deps.complianceProviders ?? createComplianceProviders();
+  const compliance = new ComplianceService(
+    identityVerificationRepository,
+    complianceProviders.kyc,
+    complianceProviders.geolocation,
+    complianceProviders.deviceIntegrity,
+  );
+
   const financeController = new FinanceController(
     new ListCreditPackages(creditPackageService),
     new PurchaseCreditPackage(creditPackageService, walletService, idempotencyService),
@@ -73,6 +93,7 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
       userService,
       idempotencyService,
       moneySecurity,
+      compliance,
     ),
     new GetWithdrawalRequests(withdrawalRequestService),
     new ProcessWithdrawalRequest(withdrawalRequestService),

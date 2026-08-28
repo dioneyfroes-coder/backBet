@@ -13,12 +13,29 @@ import { AddUserDocument } from '@core/user/application/use-cases/AddUserDocumen
 import { LocalStorageAdapter } from '@/infrastructure/storage/LocalStorageAdapter';
 import { createUploadMiddleware } from '../middleware/uploadMiddleware';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
+import { IIdentityVerificationRepository } from '@core/compliance/domain/repositories/IIdentityVerificationRepository';
+import { IResponsibleGamblingRepository } from '@core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
+import { ComplianceService } from '@core/compliance/domain/services/ComplianceService';
+import { ComplianceController } from '../controllers/ComplianceController';
+import { VerifyUserIdentity } from '@core/compliance/application/use-cases/VerifyUserIdentity';
+import { GetIdentityVerification } from '@core/compliance/application/use-cases/GetIdentityVerification';
+import { GetResponsibleGamblingProfile } from '@core/responsibleGambling/application/use-cases/GetResponsibleGamblingProfile';
+import { UpdateResponsibleGamblingSettings } from '@core/responsibleGambling/application/use-cases/UpdateResponsibleGamblingSettings';
+import {
+  createIdentityVerificationRepository,
+  createResponsibleGamblingRepository,
+} from '@/infrastructure/persistence/factory';
+import { createComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
+import type { ComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
 
 /**
  * Factory para criar rotas de usuário com injeção de dependências
  */
 export type UserRoutesDeps = {
   userRepository?: IUserRepository;
+  identityVerificationRepository?: IIdentityVerificationRepository;
+  responsibleGamblingRepository?: IResponsibleGamblingRepository;
+  complianceProviders?: ComplianceProviders;
 };
 
 export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Router> {
@@ -26,6 +43,41 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
 
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
   const userService = new UserService(userRepository);
+
+  // Compliance (KYC) + jogo responsável — deps opcionais, compartilhadas com
+  // as rotas financeiras/apostas quando injetadas em testes (mesma instância).
+  const identityVerificationRepository: IIdentityVerificationRepository =
+    deps.identityVerificationRepository ?? (await createIdentityVerificationRepository());
+  const responsibleGamblingRepository: IResponsibleGamblingRepository =
+    deps.responsibleGamblingRepository ?? (await createResponsibleGamblingRepository());
+  const complianceProviders: ComplianceProviders =
+    deps.complianceProviders ?? createComplianceProviders();
+
+  const complianceService = new ComplianceService(
+    identityVerificationRepository,
+    complianceProviders.kyc,
+    complianceProviders.geolocation,
+    complianceProviders.deviceIntegrity,
+  );
+  const responsibleGamblingService = new (
+    await import('@core/responsibleGambling/domain/services/ResponsibleGamblingService')
+  ).ResponsibleGamblingService(responsibleGamblingRepository);
+
+  const getIdentityVerificationUseCase = new GetIdentityVerification(complianceService);
+  const verifyUserIdentityUseCase = new VerifyUserIdentity(complianceService);
+  const getResponsibleGamblingUseCase = new GetResponsibleGamblingProfile(
+    responsibleGamblingService,
+  );
+  const updateResponsibleGamblingUseCase = new UpdateResponsibleGamblingSettings(
+    responsibleGamblingService,
+  );
+
+  const complianceController = new ComplianceController(
+    getIdentityVerificationUseCase,
+    verifyUserIdentityUseCase,
+    getResponsibleGamblingUseCase,
+    updateResponsibleGamblingUseCase,
+  );
 
   // Use-cases
   const getUserProfileUseCase = new GetUserProfile(userService);
@@ -109,6 +161,38 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     protectedRoute,
     asyncHandler((req: AuthenticatedRequest, res: Response) =>
       userController.updatePreferences(req, res),
+    ),
+  );
+
+  router.get(
+    '/me/identity-verification',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      complianceController.getIdentityVerification(req, res),
+    ),
+  );
+
+  router.post(
+    '/me/identity-verification',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      complianceController.verifyIdentity(req, res),
+    ),
+  );
+
+  router.get(
+    '/me/responsible-gambling',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      complianceController.getResponsibleGambling(req, res),
+    ),
+  );
+
+  router.patch(
+    '/me/responsible-gambling',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) =>
+      complianceController.updateResponsibleGambling(req, res),
     ),
   );
 

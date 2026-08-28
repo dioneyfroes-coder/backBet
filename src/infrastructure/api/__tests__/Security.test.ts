@@ -27,6 +27,9 @@ import { Odds } from '@/core/odds/domain/value-objects/Odds';
 import { JwtService } from '@/shared/services/JwtService';
 import { MockPixProvider } from '@/infrastructure/payments/pix/MockPixProvider';
 import { appConfig } from '@/shared/config/appConfig';
+import { IdentityVerificationRepository } from '@/core/compliance/domain/repositories/IdentityVerificationRepository';
+import { ResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/ResponsibleGamblingRepository';
+import { MockKycProvider } from '@/infrastructure/compliance/MockKycProvider';
 
 jest.setTimeout(30000);
 
@@ -44,6 +47,8 @@ let ledgrRepo: InMemoryLedgerRepository;
 let betRepo: BetRepository;
 let eventRepo: EventRepository;
 let withdrawalRepo: WithdrawalRequestRepository;
+let identityVerificationRepo: IdentityVerificationRepository;
+let responsibleGamblingRepo: ResponsibleGamblingRepository;
 
 async function buildTestApp(): Promise<void> {
   appConfig.admin.allowedUserIds = [];
@@ -54,6 +59,8 @@ async function buildTestApp(): Promise<void> {
   betRepo = new BetRepository();
   eventRepo = new EventRepository();
   withdrawalRepo = new WithdrawalRequestRepository();
+  identityVerificationRepo = new IdentityVerificationRepository();
+  responsibleGamblingRepo = new ResponsibleGamblingRepository();
   const creditPackageRepo = new CreditPackageRepository();
   const riskRepo = new InMemoryRiskRepository();
   const jwtService = new JwtService();
@@ -71,7 +78,15 @@ async function buildTestApp(): Promise<void> {
     }),
   );
   router.use('/auth', createPasswordRecoveryRoutes({ userRepository: userRepo }));
-  router.use('/users', await createUserRoutes({ userRepository: userRepo }));
+  router.use(
+    '/users',
+    await createUserRoutes({
+      userRepository: userRepo,
+      identityVerificationRepository: identityVerificationRepo,
+      responsibleGamblingRepository: responsibleGamblingRepo,
+      complianceProviders: { kyc: new MockKycProvider() },
+    }),
+  );
   router.use(
     '/wallets',
     await createWalletRoutes({
@@ -79,6 +94,7 @@ async function buildTestApp(): Promise<void> {
       ledgerRepository: ledgrRepo,
       pixProvider,
       userRepository: userRepo,
+      responsibleGamblingRepository: responsibleGamblingRepo,
     }),
   );
   router.use(
@@ -88,6 +104,7 @@ async function buildTestApp(): Promise<void> {
       eventRepository: eventRepo,
       walletRepository: walletRepo,
       ledgerRepository: ledgrRepo,
+      responsibleGamblingRepository: responsibleGamblingRepo,
     }),
   );
   router.use(
@@ -98,6 +115,8 @@ async function buildTestApp(): Promise<void> {
       creditPackageRepository: creditPackageRepo,
       withdrawalRequestRepository: withdrawalRepo,
       userRepository: userRepo,
+      identityVerificationRepository: identityVerificationRepo,
+      complianceProviders: { kyc: new MockKycProvider() },
     }),
   );
   router.use(
@@ -507,6 +526,95 @@ describe('Security Fase 13 — Segurança específica de dinheiro', () => {
       .send({ amount: 100, currency: 'BRL', password: PASSWORD });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('MONEY_SECURITY_PIX_CHANGED_RECENTLY');
+  });
+});
+
+describe('Security Fase 14 — Compliance (KYC) e jogo responsável', () => {
+  beforeEach(async () => {
+    await buildTestApp();
+  });
+
+  it('exige identidade verificada para saques no/acima do limite (403 -> 201 após verificar)', async () => {
+    const user = await registerAndLogin('comp1');
+    await fundWallet(user.accessToken, 200);
+
+    const blocked = await request(app)
+      .post('/api/finance/withdrawal-requests')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 200, currency: 'BRL', password: PASSWORD });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('COMPLIANCE_IDENTITY_REQUIRED');
+
+    const verified = await request(app)
+      .post('/api/users/me/identity-verification')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ documentNumber: '12345678901', fullName: 'Sec Test' });
+    expect(verified.status).toBe(200);
+    expect(verified.body.data.verification.status).toBe('VERIFIED');
+
+    const ok = await request(app)
+      .post('/api/finance/withdrawal-requests')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 200, currency: 'BRL', password: PASSWORD });
+    expect(ok.status).toBe(201);
+  });
+
+  it('rejeita documento sem formato CPF e mantém saque bloqueado', async () => {
+    const user = await registerAndLogin('comp2');
+    await fundWallet(user.accessToken, 200);
+
+    const rejected = await request(app)
+      .post('/api/users/me/identity-verification')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ documentNumber: '0001' });
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.data.verification.status).toBe('REJECTED');
+
+    const blocked = await request(app)
+      .post('/api/finance/withdrawal-requests')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 200, currency: 'BRL', password: PASSWORD });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('COMPLIANCE_IDENTITY_REQUIRED');
+  });
+
+  it('bloqueia depósito acima do limite diário de jogo responsável (403 -> 201)', async () => {
+    const user = await registerAndLogin('rg1');
+    const setLimit = await request(app)
+      .patch('/api/users/me/responsible-gambling')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ depositLimit: { amountCents: 500, period: 'DAY' } });
+    expect(setLimit.status).toBe(200);
+
+    const over = await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 6, currency: 'BRL' });
+    expect(over.status).toBe(403);
+    expect(over.body.error.code).toBe('RESPONSIBLE_GAMBLING_DEPOSIT_LIMIT_EXCEEDED');
+
+    const within = await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 4, currency: 'BRL' });
+    expect(within.status).toBe(201);
+  });
+
+  it('autoexclusão bloqueia depósito (403)', async () => {
+    const user = await registerAndLogin('rg2');
+    const set = await request(app)
+      .patch('/api/users/me/responsible-gambling')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ selfExclusionUntil: 'indefinite' });
+    expect(set.status).toBe(200);
+    expect(set.body.data.profile.selfExcluded).toBe(true);
+
+    const blocked = await request(app)
+      .post('/api/wallets/deposit')
+      .set('Authorization', `Bearer ${user.accessToken}`)
+      .send({ amount: 5, currency: 'BRL' });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe('RESPONSIBLE_GAMBLING_SELF_EXCLUDED');
   });
 });
 

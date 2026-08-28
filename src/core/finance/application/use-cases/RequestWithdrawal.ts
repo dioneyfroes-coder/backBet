@@ -8,6 +8,7 @@ import { UserService } from '@/core/user/domain/services/UserService';
 import { appConfig } from '@/shared/config/appConfig';
 import { AppError } from '@/shared/errors/AppError';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { ComplianceService } from '@/core/compliance/domain/services/ComplianceService';
 
 export class RequestWithdrawal {
   constructor(
@@ -15,6 +16,7 @@ export class RequestWithdrawal {
     private userService: UserService,
     private idempotency?: IdempotencyService,
     private moneySecurity?: MoneySecurityService,
+    private compliance?: ComplianceService,
   ) {}
 
   async execute(
@@ -50,6 +52,11 @@ export class RequestWithdrawal {
     }
 
     const operation = async () => {
+      if (this.compliance) {
+        await executeWithWalletErrorMapping(() =>
+          this.compliance!.assertIdentityVerifiedForWithdrawal(userId, Math.round(amount * 100)),
+        );
+      }
       if (this.moneySecurity) {
         await executeWithWalletErrorMapping(() =>
           this.moneySecurity!.assertWithdrawalAllowed(userId, amount, user.pixKey),

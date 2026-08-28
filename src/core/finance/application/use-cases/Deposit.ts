@@ -4,6 +4,7 @@ import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
 import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
+import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 
 export class Deposit {
   constructor(
@@ -11,6 +12,7 @@ export class Deposit {
     private pixProvider: PixProviderPort,
     private idempotency?: IdempotencyService,
     private moneySecurity?: MoneySecurityService,
+    private responsibleGambling?: ResponsibleGamblingService,
   ) {}
 
   async execute(
@@ -32,9 +34,16 @@ export class Deposit {
   }
 
   private async executeOnce(userId: string, amount: number, currency: Currency, description?: string) {
+    const amountCents = Math.round(amount * 100);
     if (this.moneySecurity) {
       await executeWithWalletErrorMapping(() =>
         this.moneySecurity!.assertDepositAllowed(userId, amount),
+      );
+    }
+
+    if (this.responsibleGambling) {
+      await executeWithWalletErrorMapping(() =>
+        this.responsibleGambling!.assertCanDeposit(userId, amountCents),
       );
     }
 
@@ -64,6 +73,12 @@ export class Deposit {
         },
       }),
     );
+
+    if (this.responsibleGambling) {
+      await this.responsibleGambling
+        .recordDeposit(userId, amountCents)
+        .catch((err) => console.warn('recordDeposit failed', err));
+    }
 
     return { wallet, pixCharge: charge, pixConfirmation: confirmation };
   }

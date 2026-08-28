@@ -26,6 +26,9 @@ import { UserService } from '@core/user/domain/services/UserService';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
+import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
+import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
+import { createResponsibleGamblingRepository } from '@/infrastructure/persistence/factory';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -35,6 +38,7 @@ export type WalletRoutesDeps = {
   ledgerRepository?: ILedgerRepository;
   pixProvider?: PixProviderPort;
   userRepository?: IUserRepository;
+  responsibleGamblingRepository?: IResponsibleGamblingRepository;
 };
 
 export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<Router> {
@@ -50,9 +54,19 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
   const userService = new UserService(userRepository);
   const moneySecurity = new MoneySecurityService(ledgerRepository, userRepository);
 
+  const responsibleGamblingRepository: IResponsibleGamblingRepository =
+    deps.responsibleGamblingRepository ?? (await createResponsibleGamblingRepository());
+  const responsibleGambling = new ResponsibleGamblingService(responsibleGamblingRepository);
+
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);
-  const depositUseCase = new Deposit(walletService, pixProvider, idempotencyService, moneySecurity);
+  const depositUseCase = new Deposit(
+    walletService,
+    pixProvider,
+    idempotencyService,
+    moneySecurity,
+    responsibleGambling,
+  );
   const withdrawUseCase = new Withdraw(
     walletService,
     pixProvider,

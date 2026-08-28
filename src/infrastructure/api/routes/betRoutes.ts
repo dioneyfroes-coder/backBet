@@ -25,12 +25,16 @@ import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepo
 import { appConfig } from '@/shared/config/appConfig';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
+import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
+import { createResponsibleGamblingRepository } from '@/infrastructure/persistence/factory';
 
 export type BetRoutesDeps = {
   betRepository?: IBetRepository;
   eventRepository?: IEventRepository;
   walletRepository?: IWalletRepository;
   ledgerRepository?: ILedgerRepository;
+  responsibleGamblingRepository?: IResponsibleGamblingRepository;
 };
 
 export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router> {
@@ -59,7 +63,15 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
   );
 
   // use-cases (thin wrappers / orchestration)
-  const placeBetUseCase = new PlaceBetUseCase(betService, idempotencyService);
+  const responsibleGamblingRepository: IResponsibleGamblingRepository =
+    deps.responsibleGamblingRepository ?? (await createResponsibleGamblingRepository());
+  const responsibleGambling = new ResponsibleGamblingService(responsibleGamblingRepository);
+
+  const placeBetUseCase = new PlaceBetUseCase(
+    betService,
+    idempotencyService,
+    responsibleGambling,
+  );
   const cancelBetUseCase = new CancelBetUseCase(betService, idempotencyService);
   const getUserBetsUseCase = new GetUserBetsUseCase(betService);
   const getEventBetsUseCase = new GetEventBetsUseCase(betService);

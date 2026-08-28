@@ -123,6 +123,20 @@ const moneySecurityBlockedCounter = new Counter({
   registers: [registry],
 });
 
+const complianceBlockedCounter = new Counter({
+  name: 'backbet_compliance_blocked_total',
+  help: 'Total de operações bloqueadas pelas regras de compliance (KYC/identidade)',
+  labelNames: ['rule'],
+  registers: [registry],
+});
+
+const responsibleGamblingBlockedCounter = new Counter({
+  name: 'backbet_responsible_gambling_blocked_total',
+  help: 'Total de operações bloqueadas pelas regras de jogo responsável',
+  labelNames: ['rule'],
+  registers: [registry],
+});
+
 export {
   registry as metricsRegistry,
   httpRequestCounter,
@@ -143,4 +157,6 @@ export {
   optimisticLockConflictCounter,
   treasuryReconciliationMismatchCounter,
   moneySecurityBlockedCounter,
+  complianceBlockedCounter,
+  responsibleGamblingBlockedCounter,
 };

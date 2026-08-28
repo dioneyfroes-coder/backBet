@@ -310,6 +310,36 @@ export const appConfig = {
       max: parsePositiveInt(env.MONEY_SECURITY_FAILED_ATTEMPTS_MAX, 5),
     },
   },
+  compliance: {
+    // Verificação de identidade (KYC). Provedor plugável (Fase 14): 'mock' hoje,
+    // provedores reais (CPF/biometria/prova de vida) adicionáveis como adapters.
+    kyc: {
+      enabled: parseBoolean(env.COMPLIANCE_KYC_ENABLED, true),
+      provider: (env.COMPLIANCE_KYC_PROVIDER as 'mock') || 'mock',
+    },
+    // Geolocalização: 'noop' hoje; futuro detector de VPN/proxy/localização física.
+    geolocation: {
+      enabled: parseBoolean(env.COMPLIANCE_GEOLOCATION_ENABLED, false),
+      provider: (env.COMPLIANCE_GEOLOCATION_PROVIDER as 'noop' | 'mock') || 'noop',
+    },
+    // Integridade de dispositivo: 'noop' hoje; futuro tamper/device attestation.
+    deviceIntegrity: {
+      enabled: parseBoolean(env.COMPLIANCE_DEVICE_INTEGRITY_ENABLED, false),
+      provider: (env.COMPLIANCE_DEVICE_INTEGRITY_PROVIDER as 'noop' | 'mock') || 'noop',
+    },
+    withdrawal: {
+      // Acima deste valor (em centavos) o saque exige identidade verificada.
+      requiresVerifiedIdentityAboveCents: parsePositiveInt(
+        env.COMPLIANCE_WITHDRAWAL_REQUIRES_VERIFIED_IDENTITY_ABOVE,
+        20_000,
+      ),
+    },
+  },
+  responsibleGambling: {
+    enabled: parseBoolean(env.RESPONSIBLE_GAMBLING_ENABLED, true),
+    minDepositLimitCents: parsePositiveInt(env.RESPONSIBLE_GAMBLING_MIN_DEPOSIT_LIMIT_CENTS, 100),
+    minBetLimitCents: parsePositiveInt(env.RESPONSIBLE_GAMBLING_MIN_BET_LIMIT_CENTS, 100),
+  },
   games: {
     coinFlip: {
       enabled: parseBoolean(env.GAME_COINFLIP_ENABLED, true),
