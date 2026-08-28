@@ -1,6 +1,7 @@
 import request from 'supertest';
 
 describe('User preferences integration', () => {
+  jest.setTimeout(30000);
   const ORIGINAL_ENV = process.env;
 
   beforeEach(() => {

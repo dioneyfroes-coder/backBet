@@ -125,7 +125,7 @@ export class EventRepository implements IEventRepository {
       }>;
     }> = [
       {
-        id: 'evt-football-001',
+        id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
         name: 'FC Tech vs Dev United',
         startInMinutes: 90,
         status: 'SCHEDULED',
@@ -145,7 +145,7 @@ export class EventRepository implements IEventRepository {
         ],
       },
       {
-        id: 'evt-basket-002',
+        id: 'a1b2c3d4-0000-4111-8222-333344445555',
         name: 'Data Lakers vs AI Warriors',
         startInMinutes: 240,
         status: 'SCHEDULED',
@@ -164,7 +164,7 @@ export class EventRepository implements IEventRepository {
         ],
       },
       {
-        id: 'evt-tennis-003',
+        id: 'f6e5d4c3-0000-4222-8333-444455556666',
         name: 'Open Code Finals',
         startInMinutes: -60,
         status: 'LIVE',

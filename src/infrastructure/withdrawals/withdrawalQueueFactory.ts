@@ -20,6 +20,9 @@ export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
   // Try a lightweight ping to Redis before deciding to use Bull. This avoids throwing
   // when Redis is not available and provides a clear fallback to an in-memory queue.
   const client = new IORedis(REDIS_URL);
+  // listener no-op para evitar "Unhandled error event" do ioredis quando o
+  // Redis não está disponível (fallback in-memory é trivial abaixo)
+  client.on('error', () => undefined);
   try {
     await client.ping();
     await client.quit();

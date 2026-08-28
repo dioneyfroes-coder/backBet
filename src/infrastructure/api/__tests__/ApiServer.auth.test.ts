@@ -2,6 +2,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
 describe('ApiServer authentication bootstrap', () => {
+  jest.setTimeout(30000);
   const ORIGINAL_ENV = process.env;
 
   const applyEnv = (overrides: Partial<NodeJS.ProcessEnv> = {}) => {

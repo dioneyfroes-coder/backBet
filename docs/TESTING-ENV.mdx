@@ -88,6 +88,46 @@ npm run test:integration
   infra é efêmera/local e não deve ser exposta na rede. Para produção, use
   `docker-compose.mongo.yml`.
 
+## Pipeline completo (Fase 19) — gate obrigatório + endpoints reais
+
+Antes de considerar uma entrega terminada, rode o **pipeline completo**:
+
+```bash
+npm ci          # instalação reproduzível a partir do package-lock.json
+npm run check   # GATE OBRIGATÓRIO = lint + test:coverage + build (tudo verde)
+```
+
+Nenhum merge para `main` se qualquer um dos três falhar (lint ❌, testes/coverage ❌,
+build ❌). O CI (`.github/workflows/ci.yml`) aplica o mesmos passos.
+
+**Teste de endpoints REAIS** (sem Docker/Mongo/Redis, persistência in-memory):
+sobe o binário compilado (`dist/index.js`) e exercita via HTTP o fluxo completo:
+
+```bash
+npm run smoke
+```
+
+O smoke valida: `/health`, `/health/cache`, `/api/docs.json` (Swagger), catálogo
+de eventos, `register` → `login` → `me` → `deposit` → `withdraw` (validação de
+mínimo) → **aposta real** → `bets/me` (estaca abatida do saldo) → **cancel**.
+(refund do saldo) → `refresh`. Ao final imprime `SMOKE: N/N checagens OK`.
+
+> Dica (Fase 19): os eventos de exemplo do repositório in-memory agora usam IDs
+> **UUID** (ex.: `3fa85f64-5717-4562-b3fc-2c963f66afa6`), porque o `PlaceBetDTO`
+> exige `z.string().uuid()` — antes os eventos demo não podiam ser apostados
+> pela API real.
+
+**Docker (deploy real)** — `docker compose build` / `docker compose up` exigem
+Docker Engine; no PC de dev não há Docker, então esses passos rodam nos
+servidores locais (**server01/server02**, ver `docs/DOCKER.mdx`) seguindo:
+
+```bash
+# no server01 e/ou server02 (com Docker):
+docker compose -f docker-compose.yml build   # app + workers (server01)
+docker compose -f docker-compose.yml up -d   # (server01)
+docker compose -f docker-compose.mongo.yml up -d  # (server02)
+```
+
 ## CI (GitHub Actions)
 
 O workflow `.github/workflows/ci.yml` tem um job `integration` dedicado que sobe

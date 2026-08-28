@@ -10,6 +10,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "smoke": "npm run build && node scripts/smoke-api.cjs",
     "test:integration": "node scripts/run-integration-tests.cjs",
     "test:integration:full": "node scripts/run-integration-tests.cjs --with-infra",
     "test:infra:up": "docker compose -f docker-compose.test.yml up -d --wait",
@@ -116,3 +117,4 @@
     "@types/nodemailer": "^6.4.7"
   }
 }
+
