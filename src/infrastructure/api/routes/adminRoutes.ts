@@ -37,6 +37,19 @@ import { RebalanceTreasury } from '@/core/treasury/application/use-cases/Rebalan
 import { ReconcileTreasury } from '@/core/treasury/application/use-cases/ReconcileTreasury';
 import { appConfig } from '@/shared/config/appConfig';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { AuditService } from '@/core/audit/domain/services/AuditService';
+import { IAuditEventRepository } from '@/core/audit/domain/repositories/IAuditEventRepository';
+import { createAuditEventRepository } from '@/infrastructure/persistence/factory';
+import { AuditController } from '../controllers/AuditController';
+import { SigapController } from '../controllers/SigapController';
+import { SigapService } from '@/core/sigap/domain/services/SigapService';
+import { TransmitSigapFile } from '@/core/sigap/application/use-cases/TransmitSigapFile';
+import { GetSigapSubmissions } from '@/core/sigap/application/use-cases/GetSigapSubmissions';
+import { GetSigapSubmission } from '@/core/sigap/application/use-cases/GetSigapSubmission';
+import { CheckSigapImpediment } from '@/core/sigap/application/use-cases/CheckSigapImpediment';
+import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
+import { createSigapSubmissionRepository } from '@/infrastructure/persistence/factory';
+import { createSigapProviders } from '@/infrastructure/sigap/sigapFactory';
 
 export type AdminRoutesDeps = {
   betRepository?: IBetRepository;
@@ -45,6 +58,8 @@ export type AdminRoutesDeps = {
   walletRepository?: IWalletRepository;
   ledgerRepository?: ILedgerRepository;
   houseTreasuryRepository?: IHouseTreasuryRepository;
+  auditRepository?: IAuditEventRepository;
+  sigapSubmissionRepository?: ISigapSubmissionRepository;
   dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>;
 };
 
@@ -70,12 +85,61 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     currency: appConfig.treasury.currency,
   });
 
+  const auditRepository: IAuditEventRepository =
+    deps.auditRepository ?? (await createAuditEventRepository());
+  const auditService = new AuditService(auditRepository);
+  const auditController = new AuditController(auditService, appConfig.audit.retentionDays);
+
+  if (appConfig.sigap.enabled) {
+    const sigapSubmissionRepository: ISigapSubmissionRepository =
+      deps.sigapSubmissionRepository ?? (await createSigapSubmissionRepository());
+    const sigapProviders = createSigapProviders();
+    const sigapService = new SigapService({
+      submissionRepository: sigapSubmissionRepository,
+      transmissionProvider: sigapProviders.transmission,
+      impedimentProvider: sigapProviders.impediment,
+    });
+    const sigap = new SigapController(
+      new TransmitSigapFile(sigapService),
+      new GetSigapSubmissions(sigapService),
+      new GetSigapSubmission(sigapService),
+      new CheckSigapImpediment(sigapService),
+      auditService,
+    );
+
+    router.post(
+      '/sigap/transmit',
+      protectedRoute,
+      requireAdminRole,
+      asyncHandler((req: AuthenticatedRequest, res) => sigap.transmit(req, res)),
+    );
+    router.get(
+      '/sigap/submissions',
+      protectedRoute,
+      requireAdminRole,
+      asyncHandler((req: AuthenticatedRequest, res) => sigap.querySubmissions(req, res)),
+    );
+    router.get(
+      '/sigap/submissions/:id',
+      protectedRoute,
+      requireAdminRole,
+      asyncHandler((req: AuthenticatedRequest, res) => sigap.getSubmission(req, res)),
+    );
+    router.post(
+      '/sigap/impediment',
+      protectedRoute,
+      requireAdminRole,
+      asyncHandler((req: AuthenticatedRequest, res) => sigap.checkImpediment(req, res)),
+    );
+  }
+
   const adminController = new AdminController(
     new ResolveBetUseCase(betService, idempotencyService),
     new UpdateEventStatusUseCase(eventCatalogService),
     riskService,
     eventCatalogService,
     deps.dependencyHealthProvider,
+    auditService,
   );
   const treasuryController = new TreasuryController(
     new GetTreasurySummary(treasuryService),
@@ -174,6 +238,27 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     protectedRoute,
     requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.reconcile(req, res)),
+  );
+
+  router.get(
+    '/audit/events',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => auditController.queryEvents(req, res)),
+  );
+
+  router.get(
+    '/audit/events/:eventId',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => auditController.getEvent(req, res)),
+  );
+
+  router.post(
+    '/audit/retention/apply',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => auditController.applyRetention(req, res)),
   );
 
   return router;

@@ -1,0 +1,144 @@
+---
+title: "Auditoria e Retenção de Dados"
+description: "Fase 15 — eventos de auditoria, logs de acesso, política de retenção e imutabilidade de registros financeiros no BackBet."
+slug: "/docs/audit-retention"
+---
+
+# Auditoria e retenção de dados — BackBet
+
+> Essa página documenta a implementação da **Fase 15** do plano de finalização: eventos de auditoria persistidos, logs de acesso, política de retenção e a distinção entre auditoria persistida e log textual.
+
+## Objetivo
+
+Nunca depender somente do log textual da aplicação para auditoria financeira ou administrativa. O BackBet passa a persistir **eventos de auditoria** em coleção própria (`auditevents`), separada de `logs/backbet.log`, com campos que permitem responder:
+
+```text
+quem? quando? o quê? antes? depois? motivo?
+```
+
+E aplicar uma **política de retenção** com prazo configurável (padrão de cinco anos, alinhado ao requisito regulatório brasileiro de retenção mínima).
+
+## Regra geral
+
+- Eventos de auditoria são **append-only**: depois de persistidos, não são editados.
+- O `AuditService` **nunca falha** a operação de negócio que o invoca. Se a persistência falhar, o erro é registrado em log, mas o fluxo principal continua.
+- Registros financeiros imutáveis já vivem no **ledger** (`ledgerentries`) e no **treasury ledger**; a auditoria complementa, não substitui.
+
+## Estrutura de arquivos
+
+| Responsabilidade | Arquivo |
+| --- | --- |
+| Entidade imutável `AuditEvent` + tipos | `src/core/audit/domain/entities/AuditEvent.ts` |
+| Interface (port) do repositório | `src/core/audit/domain/repositories/IAuditEventRepository.ts` |
+| Repositório em memória (testes/dev) | `src/core/audit/domain/repositories/InMemoryAuditEventRepository.ts` |
+| Serviço de domínio (record/query/retention) | `src/core/audit/domain/services/AuditService.ts` |
+| Schema Mongoose (`auditevents`) | `src/infrastructure/persistence/mongoose/schemas/AuditEventSchema.ts` |
+| Repositório Mongoose | `src/infrastructure/persistence/mongoose/repositories/MongooseAuditEventRepository.ts` |
+| Seleção runtime (factory) | `src/infrastructure/persistence/factory.ts` |
+| Job de retenção periódico | `src/infrastructure/jobs/AuditRetentionJob.ts` |
+| Controller das rotas de consulta | `src/infrastructure/api/controllers/AuditController.ts` |
+| DTOs de consulta/retention | `src/infrastructure/api/dtos/AuditDTOs.ts` |
+| Decoração de ações administrativas | `src/infrastructure/api/controllers/AdminController.ts` |
+| Persistência de logs de acesso | `src/infrastructure/api/ApiServer.ts` |
+
+## Modelo do evento
+
+Cada evento contém:
+
+```ts
+{
+  eventId,        // uuid único
+  type,           // ADMIN_ACTION | ACCESS | FINANCIAL | AUTH | SECURITY | SYSTEM | DATA_RETENTION
+  action,         // ex.: 'bet.settle', 'risk.user.reconcile'
+  actorUserId,    // quem
+  actorRole,      // 'admin' | 'user' | 'system' | 'anonymous'
+  resourceType,   // ex.: 'bet', 'user', 'event', 'http'
+  resourceId,     // ex.: bet id
+  before,         // estado anterior (metadata)
+  after,          // estado posterior (metadata)
+  reason,         // motivo
+  ip,             // origem
+  requestId,      // correlação com logs/métricas/traces
+  severity,       // INFO | WARNING | ERROR | CRITICAL
+  metadata,       // payload adicional livre
+  createdAt       // quando
+}
+```
+
+## Como registrar
+
+### Ação administrativa
+
+Ações do backoffice registram automaticamente quem/quando/o quê/antes/depois/motivo. Hoje, `AdminController` registra:
+
+- `bet.settle`
+- `event.status`
+- `risk.user.reconcile`
+
+Exemplo direto via serviço:
+
+```ts
+await auditService.recordAdminAction({
+  actorUserId: 'admin-1',
+  action: 'bet.settle',
+  resourceType: 'bet',
+  resourceId: 'bet-123',
+  before: { status: 'PENDING' },
+  after: { result: 'WON' },
+  reason: 'Settlement administrativo',
+});
+```
+
+### Log de acesso persistido
+
+Quando `AUDIT_ACCESS_LOG_ENABLED=true`, o `ApiServer` persiste um evento do tipo `ACCESS` para cada requisição terminada (`res.finish`), com `method`, `path`, `status`, `durationMs`, `ip`, `userId` e `requestId`. Por padrão fica desligado para evitar volume alto em desenvolvimento.
+
+## Fluxo de retenção
+
+1. `AuditRetentionJob` roda periodicamente (`AUDIT_RETENTION_JOB_INTERVAL_MS`, padrão 24h).
+2. Remove eventos com `createdAt` mais antigo que `AUDIT_RETENTION_DAYS` (padrão 1825 = 5 anos).
+3. Cada execução que remove itens registra um evento `DATA_RETENTION` com a quantidade removida.
+
+Também é possível disparar manualmente via endpoint administrativo (ver abaixo).
+
+## Endpoints administrativos
+
+Todos protegidos por autenticação + `requireAdminRole`.
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `GET` | `/api/admin/audit/events` | Consulta eventos (filtros: `type`, `actorUserId`, `resourceType`, `from`, `to`, `limit`, `offset`) |
+| `GET` | `/api/admin/audit/events/:eventId` | Consulta um evento pelo id |
+| `POST` | `/api/admin/audit/retention/apply` | Aplica retenção (`retentionDays` opcional no corpo) |
+
+Exemplo:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:3000/api/admin/audit/events?type=ADMIN_ACTION&limit=50"
+```
+
+## Configuração
+
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `AUDIT_ENABLED` | `true` | Liga/desliga a auditoria e o job de retenção |
+| `AUDIT_ACCESS_LOG_ENABLED` | `false` | Persiste logs de acesso por requisição |
+| `AUDIT_RETENTION_DAYS` | `1825` | Retenção mínima (5 anos) |
+| `AUDIT_RETENTION_JOB_INTERVAL_MS` | `86400000` | Intervalo do job de retenção |
+| `AUDIT_QUERY_DEFAULT_LIMIT` | `50` | Limite padrão de consulta |
+| `AUDIT_QUERY_MAX_LIMIT` | `200` | Limite máximo de consulta |
+
+## Imutabilidade de registros financeiros
+
+- **Ledger** (`ledgerentries`): append-only, `transactionId` único, `metadata` para carga de auditoria.
+- **Treasury ledger**: embutido em `HouseWallet`, com `balanceAfterCents` por entrada e `reconcile()` que detecta divergências sem corrigir silenciosamente.
+- A auditoria **complementa** esses registros com o contexto de *quem/quando/o quê* — útil para consulta administrativa e para responder a auditorias de conformidade.
+
+## Segurança e privacidade
+
+- Não registrar segredos, tokens ou documentos completos; mascarar quando necessário.
+- Logs de acesso persistem `ip` — considere anonimizar/limitar por política antes de produção.
+- A retenção é obrigatória para evitar acúmulo indefinido de dados pessoais.
+
+**Última atualização:** 28 de agosto de 2026.

@@ -56,6 +56,15 @@ export class ApiServer {
     redis: -1,
     mongo: -1,
   };
+  private auditAccessLogger: ((info: {
+    userId: string | undefined;
+    method: string;
+    path: string;
+    status: number;
+    durationMs: number;
+    ip: string | undefined;
+    requestId: string;
+  }) => void) | undefined;
 
   constructor(port: number = 3000) {
     this.port = port;
@@ -63,6 +72,20 @@ export class ApiServer {
     this.app.disable('x-powered-by');
     this.app.disable('etag');
     this.setupMiddleware();
+  }
+
+  public setAuditAccessLogger(
+    logger: (info: {
+      userId: string | undefined;
+      method: string;
+      path: string;
+      status: number;
+      durationMs: number;
+      ip: string | undefined;
+      requestId: string;
+    }) => void,
+  ): void {
+    this.auditAccessLogger = logger;
   }
 
   private setupMiddleware(): void {
@@ -222,6 +245,27 @@ export class ApiServer {
         contentLength: res.getHeader('content-length'),
         ...baseLog,
       });
+      if (this.auditAccessLogger) {
+        try {
+          this.auditAccessLogger({
+            userId,
+            method: req.method,
+            path: req.originalUrl,
+            status: res.statusCode,
+            durationMs: Number(elapsedMs.toFixed(2)),
+            ip,
+            requestId: requestId ?? '',
+          });
+        } catch (error) {
+          writeStructuredLog(
+            {
+              event: 'audit_access_error',
+              error: error instanceof Error ? error.message : 'unknown',
+            },
+            'error',
+          );
+        }
+      }
     });
 
     next();

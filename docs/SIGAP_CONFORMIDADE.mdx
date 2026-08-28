@@ -1,0 +1,108 @@
+---
+title: "SIGAP e Conformidade Regulatória"
+description: "Fase 16 — módulo modular de integração com o SIGAP (Sistema de Gestão de Apostas) da SPA/Ministério da Fazenda no BackBet."
+slug: "/docs/sigap-conformidade"
+---
+
+# SIGAP e conformidade regulatória — BackBet
+
+> Esta página documenta a implementação da **Fase 16** do plano de finalização: um módulo estrutural para transmissão regulatória ao **SIGAP** (Sistema de Gestão de Apostas), mantido pela **Secretaria de Prêmios e Apostas (SPA)** do Ministério da Fazenda para operadores de apostas de quota fixa no Brasil.
+
+## Objetivo
+
+Preparar o BackBet para, quando direcionado a um operador autorizado, ser capaz de fornecer os dados exigidos pela regulação:
+
+```text
+apostadores
+apostas
+carteiras
+operações
+dados agregados
+```
+
+A integração **real** com o SIGAP exige credenciais, endpoints e certificados fornecidos pela SPA/Serpro (portão de acesso com login gov.br em https://sigap.fazenda.gov.br/) e envolve mTLS/TLS 1.2, assinatura de arquivos com e-CNPJ, token Bearer e compactação de payloads.
+
+Este módulo implementa, **de forma modular e testável já agora**, toda a moldura dessa integração (ports/adapters, registro de remessas, payloads, job diário e endpoints administrativos), deixando o tráfego externo plugável por um adapter real.
+
+## Regra geral do MVP
+
+- O SIGAP está **desabilitado por padrão** (`SIGAP_ENABLED=false`).
+- O adapter atual é o **mock**: transmite e retorna um `ackId` sem trafegar para fora.
+- A troca pelo provedor real é feita **sem alterar o domínio**: implementando `ISigapTransmissionPort`/`ISigapImpedimentPort` e selecionando via `SIGAP_PROVIDER`.
+- Cada remessa é **persistida** em coleção própria (`sigapsubmissions`), permitindo rastreabilidade, auditoria e reenvio idempotente por `(operatorId, fileType, referenceDate)`.
+
+## Estrutura de arquivos
+
+| Responsabilidade | Arquivo |
+| --- | --- |
+| Tipos de domínio (file types, status) | `src/core/sigap/domain/types/sigap.types.ts` |
+| Entidade `SigapSubmission` | `src/core/sigap/domain/entities/SigapSubmission.ts` |
+| Port do repositório de remessas | `src/core/sigap/domain/repositories/ISigapSubmissionRepository.ts` |
+| Repositório em memória (testes/dev) | `src/core/sigap/domain/repositories/InMemorySigapSubmissionRepository.ts` |
+| Port de transmissão (adapter) | `src/core/sigap/domain/ports/ISigapTransmissionPort.ts` |
+| Port de consulta de impedimento | `src/core/sigap/domain/ports/ISigapImpedimentPort.ts` |
+| Construção de payloads (puro) | `src/core/sigap/domain/services/payloads/SigapPayloadBuilder.ts` |
+| Serviço de domínio (orquestração) | `src/core/sigap/domain/services/SigapService.ts` |
+| Mapper de erros do domínio | `src/core/sigap/application/errors/SigapErrorMapper.ts` |
+| Use-cases | `src/core/sigap/application/use-cases/*.ts` |
+| Adapter mock de transmissão | `src/infrastructure/sigap/MockSigapTransmissionProvider.ts` |
+| Adapter mock de impedimento | `src/infrastructure/sigap/MockSigapImpedimentProvider.ts` |
+| Factory de provedores | `src/infrastructure/sigap/sigapFactory.ts` |
+| Schema Mongoose (`sigapsubmissions`) | `src/infrastructure/persistence/mongoose/schemas/SigapSubmissionSchema.ts` |
+| Repositório Mongoose | `src/infrastructure/persistence/mongoose/repositories/MongooseSigapSubmissionRepository.ts` |
+| Seleção runtime (factory) | `src/infrastructure/persistence/factory.ts` |
+| Job diário de transmissão | `src/infrastructure/jobs/SigapTransmissionJob.ts` |
+| Controller das rotas admin | `src/infrastructure/api/controllers/SigapController.ts` |
+| DTOs | `src/infrastructure/api/dtos/SigapDTOs.ts` |
+
+## Tipos de arquivo SIGAP
+
+Os cinco arquivos previstos nas normas técnicas da SPA:
+
+| File type | Conteúdo |
+| --- | --- |
+| `APOSTADOR` | Dados cadastrais de cada apostador |
+| `APOSTAS` | Apostas esportivas detalhadas por apostador/dia |
+| `CARTEIRA` | Movimentações financeiras da carteira por apostador/dia |
+| `OPERADOR_DIARIO` | Agregados diários da operação |
+| `OPERADOR_MENSAL` | Obrigações legais mensais do operador |
+
+## Endpoints administrativos
+
+Todos sob `/api/admin/sigap`, com `protectedRoute` + `requireAdminRole` e registro em auditoria (Fase 15).
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `POST` | `/api/admin/sigap/transmit` | Transmite um arquivo (`fileType`, `referenceDate`, `payload`) |
+| `GET` | `/api/admin/sigap/submissions` | Lista remessas com filtros/paginação |
+| `GET` | `/api/admin/sigap/submissions/:id` | Consulta uma remessa |
+| `POST` | `/api/admin/sigap/impediment` | Consulta se um documento (CPF) está impedido |
+
+## Variáveis de ambiente
+
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `SIGAP_ENABLED` | `false` | Liga/desliga o módulo e o job diário |
+| `SIGAP_PROVIDER` | `mock` | Adapter de transmissão (futuro: real) |
+| `SIGAP_OPERATOR_ID` | `backbet-operator` | Identificador do operador nas remessas |
+| `SIGAP_IMPEDIMENT_ENABLED` | `false` | Habilita o provedor de consulta de impedimento |
+| `SIGAP_IMPEDED_DOCUMENTS` | *(vazio)* | CPFs (apenas dígitos) marcados como impedidos no mock |
+| `SIGAP_TRANSMISSION_JOB_INTERVAL_MS` | `86400000` | Intervalo do job diário (1 dia) |
+| `SIGAP_QUERY_DEFAULT_LIMIT` / `SIGAP_QUERY_MAX_LIMIT` | `50` / `200` | Limites de paginação |
+
+## Configuração (`appConfig.sigap`)
+
+O bloco `sigap` centraliza `enabled`, `provider`, `operatorId`, `impedimentEnabled`, `impededDocuments`, `transmissionJobIntervalMs` e `query`, seguindo o mesmo padrão dos blocos `audit`, `compliance` e `treasury`.
+
+## Testes
+
+- `src/core/sigap/domain/services/__tests__/SigapService.test.ts`
+- `src/core/sigap/domain/services/payloads/__tests__/SigapPayloadBuilder.test.ts`
+- `src/core/sigap/domain/repositories/__tests__/InMemorySigapSubmissionRepository.test.ts`
+- `src/infrastructure/persistence/mongoose/repositories/__tests__/MongooseSigapSubmissionRepository.test.ts`
+- `src/infrastructure/jobs/__tests__/SigapTransmissionJob.test.ts`
+- `src/integration/__tests__/admin.sigap.integration.test.ts`
+
+## Nota sobre integração real
+
+Para um operador brasileiro autorizado, a transmissão real exige acessos e procedimentos de fora do código (credenciais de sistema, certificados digitais e documentação técnica da SPA/Serpro). O módulo acima garante que, uma vez conhecidos esses contratos, a integração se limita a um **novo adapter** que implementa as ports, sem alterar domínio, persistência, job ou endpoints.

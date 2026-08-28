@@ -80,6 +80,20 @@ assignDefault('COMPLIANCE_GEOLOCATION_PROVIDER', 'noop');
 assignDefault('COMPLIANCE_DEVICE_INTEGRITY_ENABLED', 'false');
 assignDefault('COMPLIANCE_DEVICE_INTEGRITY_PROVIDER', 'noop');
 assignDefault('COMPLIANCE_WITHDRAWAL_REQUIRES_VERIFIED_IDENTITY_ABOVE', '20000');
+assignDefault('AUDIT_ENABLED', 'true');
+assignDefault('AUDIT_ACCESS_LOG_ENABLED', 'false');
+assignDefault('AUDIT_RETENTION_DAYS', '1825');
+assignDefault('AUDIT_RETENTION_JOB_INTERVAL_MS', '86400000');
+assignDefault('AUDIT_QUERY_DEFAULT_LIMIT', '50');
+assignDefault('AUDIT_QUERY_MAX_LIMIT', '200');
+assignDefault('SIGAP_ENABLED', 'false');
+assignDefault('SIGAP_PROVIDER', 'mock');
+assignDefault('SIGAP_OPERATOR_ID', 'backbet-operator');
+assignDefault('SIGAP_IMPEDIMENT_ENABLED', 'false');
+assignDefault('SIGAP_IMPEDED_DOCUMENTS', '');
+assignDefault('SIGAP_TRANSMISSION_JOB_INTERVAL_MS', '86400000');
+assignDefault('SIGAP_QUERY_DEFAULT_LIMIT', '50');
+assignDefault('SIGAP_QUERY_MAX_LIMIT', '200');
 
 if (isTestEnv) {
   assignDefault('JWT_SECRET', 'test-secret');
@@ -190,6 +204,20 @@ type AppEnv = NodeJS.ProcessEnv & {
   COMPLIANCE_DEVICE_INTEGRITY_ENABLED?: string;
   COMPLIANCE_DEVICE_INTEGRITY_PROVIDER?: string;
   COMPLIANCE_WITHDRAWAL_REQUIRES_VERIFIED_IDENTITY_ABOVE?: string;
+  AUDIT_ENABLED?: string;
+  AUDIT_ACCESS_LOG_ENABLED?: string;
+  AUDIT_RETENTION_DAYS?: string;
+  AUDIT_RETENTION_JOB_INTERVAL_MS?: string;
+  AUDIT_QUERY_DEFAULT_LIMIT?: string;
+  AUDIT_QUERY_MAX_LIMIT?: string;
+  SIGAP_ENABLED?: string;
+  SIGAP_PROVIDER?: string;
+  SIGAP_OPERATOR_ID?: string;
+  SIGAP_IMPEDIMENT_ENABLED?: string;
+  SIGAP_IMPEDED_DOCUMENTS?: string;
+  SIGAP_TRANSMISSION_JOB_INTERVAL_MS?: string;
+  SIGAP_QUERY_DEFAULT_LIMIT?: string;
+  SIGAP_QUERY_MAX_LIMIT?: string;
 };
 
 export const env = process.env as AppEnv;

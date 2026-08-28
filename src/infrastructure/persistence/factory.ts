@@ -11,6 +11,8 @@ import { IGameRoundRepository } from '@/core/game/domain/repositories/IGameRound
 import { IHouseTreasuryRepository } from '@/core/treasury/domain/repositories/IHouseTreasuryRepository';
 import { IIdentityVerificationRepository } from '@/core/compliance/domain/repositories/IIdentityVerificationRepository';
 import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
+import { IAuditEventRepository } from '@/core/audit/domain/repositories/IAuditEventRepository';
+import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
 
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
 
@@ -147,4 +149,30 @@ export async function createResponsibleGamblingRepository(): Promise<IResponsibl
     '@/core/responsibleGambling/domain/repositories/ResponsibleGamblingRepository'
   );
   return new ResponsibleGamblingRepository();
+}
+
+export async function createAuditEventRepository(): Promise<IAuditEventRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseAuditEventRepository } = await import(
+      './mongoose/repositories/MongooseAuditEventRepository'
+    );
+    return new MongooseAuditEventRepository();
+  }
+  const { InMemoryAuditEventRepository } = await import(
+    '@/core/audit/domain/repositories/InMemoryAuditEventRepository'
+  );
+  return new InMemoryAuditEventRepository();
+}
+
+export async function createSigapSubmissionRepository(): Promise<ISigapSubmissionRepository> {
+  if (USE_MONGOOSE) {
+    const { MongooseSigapSubmissionRepository } = await import(
+      './mongoose/repositories/MongooseSigapSubmissionRepository'
+    );
+    return new MongooseSigapSubmissionRepository();
+  }
+  const { InMemorySigapSubmissionRepository } = await import(
+    '@/core/sigap/domain/repositories/InMemorySigapSubmissionRepository'
+  );
+  return new InMemorySigapSubmissionRepository();
 }

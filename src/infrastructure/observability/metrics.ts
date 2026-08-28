@@ -132,8 +132,22 @@ const complianceBlockedCounter = new Counter({
 
 const responsibleGamblingBlockedCounter = new Counter({
   name: 'backbet_responsible_gambling_blocked_total',
-  help: 'Total de operações bloqueadas pelas regras de jogo responsável',
+  help: 'Total de opera����es bloqueadas pelas regras de jogo responsǭvel',
   labelNames: ['rule'],
+  registers: [registry],
+});
+
+const sigapSubmissionCounter = new Counter({
+  name: 'backbet_sigap_submissions_total',
+  help: 'Total de remessas transmitidas ao SIGAP',
+  labelNames: ['fileType'],
+  registers: [registry],
+});
+
+const sigapSubmissionFailureCounter = new Counter({
+  name: 'backbet_sigap_submission_failures_total',
+  help: 'Total de falhas de transmiss��ǜo ao SIGAP',
+  labelNames: ['fileType'],
   registers: [registry],
 });
 
@@ -159,4 +173,6 @@ export {
   moneySecurityBlockedCounter,
   complianceBlockedCounter,
   responsibleGamblingBlockedCounter,
+  sigapSubmissionCounter,
+  sigapSubmissionFailureCounter,
 };

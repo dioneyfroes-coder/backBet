@@ -335,6 +335,35 @@ export const appConfig = {
       ),
     },
   },
+  audit: {
+    enabled: parseBoolean(env.AUDIT_ENABLED, true),
+    accessLogEnabled: parseBoolean(env.AUDIT_ACCESS_LOG_ENABLED, false),
+    retentionDays: parsePositiveInt(env.AUDIT_RETENTION_DAYS, 1825),
+    retentionJobIntervalMs: parsePositiveInt(env.AUDIT_RETENTION_JOB_INTERVAL_MS, 86400000),
+    query: {
+      defaultLimit: parsePositiveInt(env.AUDIT_QUERY_DEFAULT_LIMIT, 50),
+      maxLimit: parsePositiveInt(env.AUDIT_QUERY_MAX_LIMIT, 200),
+    },
+  },
+  sigap: {
+    // Transmissão regulatória ao SIGAP (SPA/MF). Desabilitada por padrão; o
+    // adapter 'mock' registra as remessas sem tráfego externo. A integração
+    // real (mTLS, e-CNPJ, assinatura e endpoints da SPA/Serpro) é plugável
+    // via provider.
+    enabled: parseBoolean(env.SIGAP_ENABLED, false),
+    provider: (env.SIGAP_PROVIDER as 'mock') || 'mock',
+    operatorId: env.SIGAP_OPERATOR_ID || 'backbet-operator',
+    impedimentEnabled: parseBoolean(env.SIGAP_IMPEDIMENT_ENABLED, false),
+    impededDocuments: parseList(env.SIGAP_IMPEDED_DOCUMENTS, []),
+    transmissionJobIntervalMs: parsePositiveInt(
+      env.SIGAP_TRANSMISSION_JOB_INTERVAL_MS,
+      86400000,
+    ),
+    query: {
+      defaultLimit: parsePositiveInt(env.SIGAP_QUERY_DEFAULT_LIMIT, 50),
+      maxLimit: parsePositiveInt(env.SIGAP_QUERY_MAX_LIMIT, 200),
+    },
+  },
   responsibleGambling: {
     enabled: parseBoolean(env.RESPONSIBLE_GAMBLING_ENABLED, true),
     minDepositLimitCents: parsePositiveInt(env.RESPONSIBLE_GAMBLING_MIN_DEPOSIT_LIMIT_CENTS, 100),

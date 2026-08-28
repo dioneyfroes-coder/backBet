@@ -9,6 +9,8 @@ import { UpdateEventStatusDTO, UpdateEventStatusDTOType } from '../dtos/EventDTO
 import { appConfig } from '@/shared/config/appConfig';
 import { getObservabilityToggles } from '@/shared/observability/featureToggles';
 import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
+import { AuditService } from '@/core/audit/domain/services/AuditService';
+import { getRequestContext } from '@/shared/observability/requestContext';
 
 export class AdminController extends BaseController {
   constructor(
@@ -17,8 +19,42 @@ export class AdminController extends BaseController {
     private readonly riskService: RiskService,
     private readonly eventCatalogService: EventCatalogService,
     private readonly dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>,
+    private readonly auditService?: AuditService,
   ) {
     super();
+  }
+
+  private auditAdminAction(req: Request, input: {
+    action: string;
+    resourceType: string;
+    resourceId?: string;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    reason?: string;
+  }): void {
+    if (!this.auditService) {
+      return;
+    }
+    const ctx = getRequestContext();
+    const ip =
+      req.ip ||
+      (Array.isArray(req.headers['x-forwarded-for'])
+        ? req.headers['x-forwarded-for'][0]
+        : req.headers['x-forwarded-for']?.split(',')[0].trim());
+    void this.auditService
+      .recordAdminAction({
+        actorUserId:
+          (req as Request & { authContext?: { userId?: string } }).authContext?.userId || 'unknown',
+        action: input.action,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        before: input.before,
+        after: input.after,
+        reason: input.reason,
+        ip,
+        requestId: (req as Request & { id?: string }).id || ctx?.requestId,
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -104,6 +140,13 @@ export class AdminController extends BaseController {
   async reconcileRiskForUser(req: Request, res: Response) {
     try {
       const result = await this.riskService.reconcileUserRisk(req.params.userId);
+      this.auditAdminAction(req, {
+        action: 'risk.user.reconcile',
+        resourceType: 'user',
+        resourceId: req.params.userId,
+        after: { result },
+        reason: 'Administrative risk reconciliation',
+      });
       return this.ok(res, result);
     } catch (error) {
       return this.handleError(error, res);
@@ -161,6 +204,13 @@ export class AdminController extends BaseController {
             result: payload.result,
             marketResult: payload.marketResult,
           });
+      this.auditAdminAction(req, {
+        action: 'bet.settle',
+        resourceType: 'bet',
+        resourceId: req.params.betId,
+        after: { result: payload.result, marketResult: payload.marketResult },
+        reason: 'Administrative bet settlement',
+      });
       return this.ok(res, bet.toJSON());
     } catch (error) {
       return this.handleError(error, res);
@@ -206,6 +256,13 @@ export class AdminController extends BaseController {
       await flushEventOddsCache(event.id).catch((error) =>
         console.warn('Failed to flush cache after event status update', error),
       );
+      this.auditAdminAction(req, {
+        action: 'event.status',
+        resourceType: 'event',
+        resourceId: req.params.eventId,
+        after: { action: payload.action },
+        reason: 'Administrative event status update',
+      });
       return this.ok(res, event.toJSON());
     } catch (error) {
       return this.handleError(error, res);

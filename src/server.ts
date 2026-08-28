@@ -9,10 +9,20 @@ import {
   getMongoDBConfig,
 } from './infrastructure/persistence/mongoose/config';
 import '@/infrastructure/observability/cacheMetrics';
-import { createHouseTreasuryRepository } from '@/infrastructure/persistence/factory';
+import {
+  createHouseTreasuryRepository,
+  createAuditEventRepository,
+  createBetRepository,
+  createSigapSubmissionRepository,
+} from '@/infrastructure/persistence/factory';
 import { HouseTreasuryService } from '@/core/treasury/domain/services/HouseTreasuryService';
 import { TreasuryRebalanceJob } from '@/infrastructure/jobs/TreasuryRebalanceJob';
 import { TreasuryReconciliationJob } from '@/infrastructure/jobs/TreasuryReconciliationJob';
+import { AuditRetentionJob } from '@/infrastructure/jobs/AuditRetentionJob';
+import { AuditService } from '@/core/audit/domain/services/AuditService';
+import { SigapService } from '@/core/sigap/domain/services/SigapService';
+import { SigapTransmissionJob } from '@/infrastructure/jobs/SigapTransmissionJob';
+import { createSigapProviders } from '@/infrastructure/sigap/sigapFactory';
 import { startContactWorker } from '@/infrastructure/mailer/ContactWorker';
 import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
 import type { Queue as BullQueue } from 'bull';
@@ -24,6 +34,8 @@ import type { Queue as BullQueue } from 'bull';
 async function main() {
   let treasuryJob: TreasuryRebalanceJob | undefined;
   let treasuryReconciliationJob: TreasuryReconciliationJob | undefined;
+  let auditRetentionJob: AuditRetentionJob | undefined;
+  let sigapTransmissionJob: SigapTransmissionJob | undefined;
   let contactQueue: BullQueue | undefined;
   let withdrawalQueue: BullQueue | undefined;
 
@@ -32,6 +44,10 @@ async function main() {
     treasuryJob = undefined;
     treasuryReconciliationJob?.stop();
     treasuryReconciliationJob = undefined;
+    auditRetentionJob?.stop();
+    auditRetentionJob = undefined;
+    sigapTransmissionJob?.stop();
+    sigapTransmissionJob = undefined;
     if (contactQueue) {
       // close asynchronously but don't block stopJobs
       void contactQueue.close().catch(() => undefined);
@@ -106,6 +122,65 @@ async function main() {
       intervalMs: appConfig.treasury.reconciliationIntervalMs,
     });
     treasuryReconciliationJob.start();
+
+    // Auditoria (Fase 15): persistência de eventos de auditoria,
+    // logs de acesso e política de retenção.
+    if (appConfig.audit.enabled) {
+      const auditRepository = await createAuditEventRepository();
+      const auditService = new AuditService(auditRepository);
+
+      if (appConfig.audit.accessLogEnabled) {
+        apiServer.setAuditAccessLogger((info) => {
+          void auditService
+            .recordAccess({
+              action: 'http.request',
+              actorUserId: info.userId,
+              resourceType: 'http',
+              resourceId: undefined,
+              ip: info.ip,
+              requestId: info.requestId,
+              status: info.status,
+              method: info.method,
+              path: info.path,
+              durationMs: info.durationMs,
+            })
+            .catch(() => undefined);
+        });
+      }
+
+      auditRetentionJob = new AuditRetentionJob(auditService, {
+        intervalMs: appConfig.audit.retentionJobIntervalMs,
+        retentionDays: appConfig.audit.retentionDays,
+      });
+      auditRetentionJob.start();
+    }
+
+    // SIGAP (Fase 16): transmissão regulatória diária. O job transmite o
+    // agregado OPERADOR_DIARIO; os arquivos por apostador são acionados via
+    // endpoint admin.
+    if (appConfig.sigap.enabled) {
+      const sigapSubmissionRepository = await createSigapSubmissionRepository();
+      const sigapProviders = createSigapProviders();
+      const sigapService = new SigapService({
+        submissionRepository: sigapSubmissionRepository,
+        transmissionProvider: sigapProviders.transmission,
+        impedimentProvider: sigapProviders.impediment,
+      });
+      const betRepository = await createBetRepository();
+      sigapTransmissionJob = new SigapTransmissionJob(sigapService, {
+        intervalMs: appConfig.sigap.transmissionJobIntervalMs,
+        collectBets: async (referenceDate: string) => {
+          const from = new Date(`${referenceDate}T00:00:00Z`);
+          const to = new Date(`${referenceDate}T23:59:59.999Z`);
+          const bets = (await betRepository.findByStatus('PENDING')).filter((b) => {
+            const t = b.createdAt.getTime();
+            return t >= from.getTime() && t <= to.getTime();
+          });
+          return bets;
+        },
+      });
+      sigapTransmissionJob.start();
+    }
 
     // TODO: Registrar outras rotas
     // const betRoutes = createBetRoutes();
