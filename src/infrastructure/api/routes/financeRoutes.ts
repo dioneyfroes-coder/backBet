@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { AuthenticatedRequest, protectedRoute } from '../middleware/AuthMiddleware';
+import { AuthenticatedRequest, protectedRoute, requireAdminRole } from '../middleware/AuthMiddleware';
 import { FinanceController } from '../controllers/FinanceController';
 import { CreditPackageService } from '@/core/finance/domain/services/CreditPackageService';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
@@ -94,6 +94,7 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
   router.patch(
     '/withdrawal-requests/:requestId',
     protectedRoute,
+    requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => financeController.processWithdrawal(req, res)),
   );
 

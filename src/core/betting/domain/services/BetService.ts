@@ -13,6 +13,7 @@ import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { TransactionRunner, TransactionSession } from '@/core/shared/types/Transaction';
 import { WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
+import { appConfig } from '@/shared/config/appConfig';
 
 export class BetService {
   constructor(
@@ -111,6 +112,14 @@ export class BetService {
   async cancelBet(input: ICancelBetDTO): Promise<Bet> {
     const operation = async (session?: TransactionSession) => {
       const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
+      const actorIsAdmin = appConfig.admin.allowedUserIds.includes(input.canceledBy);
+      if (input.canceledBy !== bet.userId && !actorIsAdmin) {
+        throw new DomainError({
+          code: 'BET_NOT_OWNER',
+          message: 'Cannot cancel a bet from another user',
+          details: { betId: bet.id, requestedBy: input.canceledBy },
+        });
+      }
       const event = await this.getEventOrThrow(bet.eventId);
       if (event.status !== 'SCHEDULED') {
         throw new DomainError({

@@ -197,7 +197,7 @@ describe('BetService', () => {
       const result = await service.cancelBet({
         betId: bet.id,
         reason: 'user requested',
-        canceledBy: 'admin-1',
+        canceledBy: 'user-1',
       });
 
       expect(result.status).toBe('CANCELED');
@@ -209,19 +209,31 @@ describe('BetService', () => {
       expect(betRepository.update).toHaveBeenCalledWith(result);
     });
 
+    it('throws when caller is not the bet owner and not an admin', async () => {
+      const bet = makeBet();
+      betRepository.findById.mockResolvedValue(bet);
+      eventRepository.findById.mockResolvedValue(makeEvent());
+
+      await expect(
+        service.cancelBet({ betId: bet.id, reason: 'intruder', canceledBy: 'user-2' }),
+      ).rejects.toMatchObject({ code: 'BET_NOT_OWNER' });
+      expect(walletService.deposit).not.toHaveBeenCalled();
+      expect(betRepository.update).not.toHaveBeenCalled();
+    });
+
     it('throws when bet is not pending or event not scheduled', async () => {
       const bet = makeBet();
       bet.resolve('WON');
       betRepository.findById.mockResolvedValue(bet);
       await expect(
-        service.cancelBet({ betId: bet.id, reason: 'too late', canceledBy: 'admin-1' }),
+        service.cancelBet({ betId: bet.id, reason: 'too late', canceledBy: 'user-1' }),
       ).rejects.toThrow('Only pending bets can be canceled.');
 
       const pendingBet = makeBet();
       betRepository.findById.mockResolvedValue(pendingBet);
       eventRepository.findById.mockResolvedValue(makeEvent('LIVE'));
       await expect(
-        service.cancelBet({ betId: pendingBet.id, reason: 'live event', canceledBy: 'admin-1' }),
+        service.cancelBet({ betId: pendingBet.id, reason: 'live event', canceledBy: 'user-1' }),
       ).rejects.toThrow('Cannot cancel bet on ongoing or finished event');
     });
   });
@@ -408,7 +420,7 @@ describe('BetService', () => {
 
       const bet = makeBet();
       betRepository.findById.mockResolvedValue(bet);
-      await service.cancelBet({ betId: bet.id, reason: 'cancel', canceledBy: 'admin-1' });
+      await service.cancelBet({ betId: bet.id, reason: 'cancel', canceledBy: 'user-1' });
 
       // makeBet liability = 100 BRL @ odds 2 = 100 BRL; 140 - 100 = 40
       expect(await riskService.getEventExposure('event-1')).toBe(40);
