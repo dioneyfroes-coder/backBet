@@ -40,6 +40,18 @@ export class InMemoryRiskRepository implements IRiskRepository {
     return existing ? existing.exposure : 0;
   }
 
+  async getTotalExposure(): Promise<{ exposureCents: number; openProfiles: number }> {
+    let exposureCents = 0;
+    let openProfiles = 0;
+    for (const profile of this.store.values()) {
+      if (profile.exposureCents > 0) {
+        exposureCents += profile.exposureCents;
+        openProfiles += 1;
+      }
+    }
+    return { exposureCents, openProfiles };
+  }
+
   async reserveExposure(userId: string, amountCents: number): Promise<boolean> {
     const existing =
       this.store.get(userId) ??

@@ -155,7 +155,8 @@ Carteira: `GET /api/v1/wallets/me`, `POST /api/v1/wallets/deposit`,
 
 Apostas: `POST /api/v1/bets`, `GET /api/v1/bets`, `POST /api/v1/bets/:betId/cancel`.
 
-Backoffice (admin): tudo sob `/api/v1/admin/*` (exige usuário admin).
+Backoffice (admin): tudo sob `/api/v1/admin/*` (exige usuário admin). Relatório financeiro diário:
+`GET /api/v1/admin/reports/daily-financial-summary?date=YYYY-MM-DD&currency=BRL` (depósitos, saques, apostas, GGR, tesouraria, saques pendentes, apostas pendentes e exposição).
 
 ## 8. Links úteis
 

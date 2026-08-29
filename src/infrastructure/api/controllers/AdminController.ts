@@ -17,6 +17,8 @@ import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
 import { AuditService } from '@/core/audit/domain/services/AuditService';
 import { getRequestContext } from '@/shared/observability/requestContext';
 import { AppError } from '@/shared/errors/AppError';
+import { SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
+import { GetDailyFinancialSummary } from '@/core/reports/application/use-cases/GetDailyFinancialSummary';
 
 export class AdminController extends BaseController {
   constructor(
@@ -31,6 +33,7 @@ export class AdminController extends BaseController {
     private readonly betRepository?: IBetRepository,
     private readonly withdrawalRepository?: IWithdrawalRequestRepository,
     private readonly ledgerRepository?: ILedgerRepository,
+    private readonly dailyFinancialSummary?: GetDailyFinancialSummary,
   ) {
     super();
   }
@@ -673,5 +676,60 @@ export class AdminController extends BaseController {
     } catch (error) {
       return this.handleError(error, res);
     }
+  }
+
+  /**
+   * @openapi
+   * /api/v1/admin/reports/daily-financial-summary:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Resumo financeiro diário (depósitos, saques, apostas, GGR, tesouraria e exposição)
+   *     parameters:
+   *       - in: query
+   *         name: date
+   *         schema:
+   *           type: string
+*           pattern: '^\d{4}-\d{2}-\d{2}$'
+     *         description: "Data no formato YYYY-MM-DD (padrão hoje, em UTC)"
+     *       - in: query
+     *         name: currency
+     *         schema:
+     *           type: string
+     *           enum: [BRL, USD, EUR]
+     *         description: "Moeda do relatório (padrão moeda da tesouraria)"
+   *     responses:
+   *       '200':
+   *         description: Resumo financeiro diário
+   *       '400':
+   *         description: Data ou moeda inválida
+   */
+  async getDailyFinancialSummary(req: Request, res: Response) {
+    try {
+      if (!this.dailyFinancialSummary) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Relatório financeiro não configurado', 500);
+      }
+      const rawDate = typeof req.query.date === 'string' ? req.query.date : undefined;
+      const rawCurrency = typeof req.query.currency === 'string' ? req.query.currency : undefined;
+      const summary = await this.dailyFinancialSummary.execute({
+        date: rawDate,
+        currency: this.parseCurrencyFromQuery(rawCurrency),
+      });
+      return this.ok(res, summary.toDTO());
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  private parseCurrencyFromQuery(raw: string | undefined): SupportedCurrency | undefined {
+    if (!raw) {
+      return undefined;
+    }
+    if (raw === 'BRL' || raw === 'USD' || raw === 'EUR') {
+      return raw;
+    }
+    throw new AppError('INVALID_CURRENCY', 'Moeda inválida (use BRL, USD ou EUR)', 400);
   }
 }

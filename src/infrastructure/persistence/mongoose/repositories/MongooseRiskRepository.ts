@@ -125,6 +125,21 @@ export class MongooseRiskRepository implements IRiskRepository {
     }
   }
 
+  async getTotalExposure(): Promise<{ exposureCents: number; openProfiles: number }> {
+    try {
+      const rows = await RiskProfileModel.aggregate<{ total: number; totalCount: number }>([
+        { $match: { exposureCents: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: '$exposureCents' }, totalCount: { $sum: 1 } } },
+      ]);
+      const row = rows[0];
+      return { exposureCents: row?.total ?? 0, openProfiles: row?.totalCount ?? 0 };
+    } catch (error: unknown) {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição total', 500, {
+        originalError: getErrorMessage(error),
+      });
+    }
+  }
+
   async reserveExposure(
     userId: string,
     amountCents: number,

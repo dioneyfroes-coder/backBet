@@ -213,7 +213,7 @@
             }
           },
           "meta": {
-            "timestamp": "2026-08-29T16:39:42.416Z"
+            "timestamp": "2026-08-29T19:52:36.530Z"
           }
         }
       },
@@ -267,7 +267,7 @@
             }
           },
           "meta": {
-            "timestamp": "2026-08-29T16:39:42.418Z"
+            "timestamp": "2026-08-29T19:52:36.533Z"
           }
         }
       },
@@ -1865,6 +1865,51 @@
         "responses": {
           "200": {
             "description": "Usuário desbloqueado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/reports/daily-financial-summary": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Resumo financeiro diário (depósitos, saques, apostas, GGR, tesouraria e exposição)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "description": "Data no formato YYYY-MM-DD (padrão hoje, em UTC)"
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BRL",
+                "USD",
+                "EUR"
+              ]
+            },
+            "description": "Moeda do relatório (padrão moeda da tesouraria)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo financeiro diário"
+          },
+          "400": {
+            "description": "Data ou moeda inválida"
           }
         }
       }

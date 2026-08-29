@@ -52,6 +52,7 @@ import { TransmitSigapFile } from '@/core/sigap/application/use-cases/TransmitSi
 import { GetSigapSubmissions } from '@/core/sigap/application/use-cases/GetSigapSubmissions';
 import { GetSigapSubmission } from '@/core/sigap/application/use-cases/GetSigapSubmission';
 import { CheckSigapImpediment } from '@/core/sigap/application/use-cases/CheckSigapImpediment';
+import { GetDailyFinancialSummary } from '@/core/reports/application/use-cases/GetDailyFinancialSummary';
 import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
 import { createSigapSubmissionRepository } from '@/infrastructure/persistence/factory';
 import { createSigapProviders } from '@/infrastructure/sigap/sigapFactory';
@@ -156,6 +157,14 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     betRepository,
     withdrawalRepository,
     ledgerRepository,
+    new GetDailyFinancialSummary({
+      ledgerRepository,
+      betRepository,
+      riskRepository,
+      treasuryRepository: houseTreasuryRepository,
+      treasuryWalletId: appConfig.treasury.walletId,
+      defaultCurrency: appConfig.treasury.currency,
+    }),
   );
   const treasuryController = new TreasuryController(
     new GetTreasurySummary(treasuryService),
@@ -339,6 +348,15 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     protectedRoute,
     requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => auditController.applyRetention(req, res)),
+  );
+
+  router.get(
+    '/reports/daily-financial-summary',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) =>
+      adminController.getDailyFinancialSummary(req, res),
+    ),
   );
 
   return router;

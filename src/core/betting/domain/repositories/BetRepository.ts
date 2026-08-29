@@ -4,6 +4,7 @@ import { Bet } from '../../domain/entities/Bet';
 import { AppError } from '@/shared/errors/AppError';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@/core/odds/domain/value-objects/Odds';
+import { BetStatus } from '@/core/betting/types/bet.types';
 
 export class BetRepository implements IBetRepository {
   private bets: Bet[] = [];
@@ -48,8 +49,8 @@ export class BetRepository implements IBetRepository {
     return this.bets.length < initialLength;
   }
 
-  async findByStatus(): Promise<Bet[]> {
-    return [];
+  async findByStatus(status: BetStatus): Promise<Bet[]> {
+    return this.bets.filter((b) => b.status === status).map((bet) => this.clone(bet));
   }
 
   private clone(bet: Bet): Bet {

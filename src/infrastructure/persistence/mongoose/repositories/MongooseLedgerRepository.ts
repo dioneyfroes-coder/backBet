@@ -1,5 +1,7 @@
 import {
   ILedgerRepository,
+  LedgerAggregateOptions,
+  LedgerAggregateResult,
   LedgerRepositoryOptions,
   LedgerSumOptions,
 } from '@/core/finance/domain/repositories/ILedgerRepository';
@@ -79,6 +81,31 @@ export class MongooseLedgerRepository implements ILedgerRepository {
       amountCents += doc.amountCents ?? 0;
     }
     return { amountCents, count: docs.length };
+  }
+
+  async aggregateByTypes(
+    types: LedgerOperationType[],
+    options: LedgerAggregateOptions = {},
+  ): Promise<LedgerAggregateResult> {
+    const match: Record<string, unknown> = { type: { $in: types } };
+    const dateRange: Record<string, Date> = {};
+    if (options.from) dateRange.$gte = options.from;
+    if (options.to) dateRange.$lt = options.to;
+    if (Object.keys(dateRange).length > 0) {
+      match.createdAt = dateRange;
+    }
+    if (options.statuses && options.statuses.length > 0) {
+      match.status = { $in: options.statuses };
+    }
+    if (options.currency) {
+      match.currency = options.currency;
+    }
+    const rows = await LedgerEntryModel.aggregate<{ total: number; totalCount: number }>([
+      { $match: match },
+      { $group: { _id: null, total: { $sum: '$amountCents' }, totalCount: { $sum: 1 } } },
+    ]);
+    const row = rows[0];
+    return { amountCents: row?.total ?? 0, count: row?.totalCount ?? 0 };
   }
 
   async exists(

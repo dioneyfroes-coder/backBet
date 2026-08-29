@@ -12,6 +12,13 @@ export interface IRiskRepository {
   decreaseExposure(userId: string, amount: number, options?: RiskRepositoryOptions): Promise<void>;
   getExposure(userId: string, options?: RiskRepositoryOptions): Promise<number>;
   /**
+   * Soma a exposição em aberto de todos os usuários (relatório administrativo),
+   * com a contagem de perfis que possuem exposição > 0.
+   */
+  getTotalExposure(
+    options?: RiskRepositoryOptions,
+  ): Promise<{ exposureCents: number; openProfiles: number }>;
+  /**
    * Atomically reserves additional exposure for a user.
    * Only succeeds if exposure + amount <= maxExposure; otherwise returns false
    * and leaves exposure unchanged. This is the authoritative concurrency-safe

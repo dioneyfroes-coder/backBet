@@ -17,6 +17,10 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@/core/odds/domain/value-objects/Odds';
 import { JwtService } from '@/shared/services/JwtService';
 import { appConfig } from '@/shared/config/appConfig';
+import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
+import { HouseTreasuryRepository } from '@/core/treasury/domain/repositories/HouseTreasuryRepository';
+import { HouseWallet } from '@/core/treasury/domain/entities/HouseWallet';
 
 describe('Admin Operations Routes (Fase 28)', () => {
   const jwtService = new JwtService();
@@ -30,6 +34,8 @@ describe('Admin Operations Routes (Fase 28)', () => {
   let withdrawalRepository: WithdrawalRequestRepository;
   let ledgerRepository: InMemoryLedgerRepository;
   let auditRepository: InMemoryAuditEventRepository;
+  let riskRepository: InMemoryRiskRepository;
+  let houseTreasuryRepository: HouseTreasuryRepository;
   let accessToken: string;
 
   const seedData = async () => {
@@ -98,6 +104,8 @@ describe('Admin Operations Routes (Fase 28)', () => {
     withdrawalRepository = new WithdrawalRequestRepository();
     ledgerRepository = new InMemoryLedgerRepository();
     auditRepository = new InMemoryAuditEventRepository();
+    riskRepository = new InMemoryRiskRepository();
+    houseTreasuryRepository = new HouseTreasuryRepository();
 
     await seedData();
 
@@ -108,6 +116,8 @@ describe('Admin Operations Routes (Fase 28)', () => {
       withdrawalRepository,
       ledgerRepository,
       auditRepository,
+      riskRepository,
+      houseTreasuryRepository,
     });
 
     app = express();
@@ -242,5 +252,66 @@ describe('Admin Operations Routes (Fase 28)', () => {
 
     const user = await userRepository.findById(targetUserId);
     expect(user?.status).toBe('ACTIVE');
+  });
+
+  describe('GET /reports/daily-financial-summary (Fase 33)', () => {
+    const seedReportData = async () => {
+      await riskRepository.upsert(new RiskProfile(targetUserId, 10000, 500000));
+      await houseTreasuryRepository.save(
+        new HouseWallet('house-primary', 'BRL', 50000, 30000),
+      );
+      await ledgerRepository.append(
+        new LedgerEntry(
+          'ledger-wd-1',
+          targetUserId,
+          'WITHDRAWAL_HOLD',
+          5000,
+          'BRL',
+          'ref-wd-1',
+          'test',
+          'COMPLETED',
+          new Date('2024-03-01'),
+          undefined,
+        ),
+      );
+    };
+
+    it('retorna o resumo financeiro da data informada', async () => {
+      await seedReportData();
+      const response = await request(app)
+        .get('/api/admin/reports/daily-financial-summary?date=2024-03-01')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(response.status).toBe(200);
+      const data = response.body.data;
+      expect(data.date).toBe('2024-03-01');
+      expect(data.currency).toBe('BRL');
+      expect(data.deposits).toEqual({ amount: 150, count: 1 });
+      expect(data.pendingBets).toEqual({ amount: 10, count: 1 });
+      expect(data.pendingWithdrawals).toEqual({ amount: 50, count: 1 });
+      expect(data.exposure).toEqual({ amount: 100, openProfiles: 1 });
+      expect(data.house).toEqual({ total: 800, profit: 500, prizeReserve: 300 });
+    });
+
+    it('rejeita data fora do formato YYYY-MM-DD', async () => {
+      const response = await request(app)
+        .get('/api/admin/reports/daily-financial-summary?date=01-03-2024')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(response.status).toBe(400);
+    });
+
+    it('rejeita moeda inválida', async () => {
+      const response = await request(app)
+        .get('/api/admin/reports/daily-financial-summary?date=2024-03-01&currency=GBP')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(response.status).toBe(400);
+    });
+
+    it('exige papel de admin (403 para não-admin)', async () => {
+      const nonAdminToken = jwtService.signAccessToken(targetUserId, 'session-test');
+      const response = await request(app)
+        .get('/api/admin/reports/daily-financial-summary?date=2024-03-01')
+        .set('Authorization', `Bearer ${nonAdminToken}`);
+      expect(response.status).toBe(403);
+    });
   });
 });

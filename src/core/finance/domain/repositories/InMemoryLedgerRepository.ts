@@ -1,6 +1,8 @@
 import { LedgerEntry, LedgerOperationType } from '../entities/LedgerEntry';
 import {
   ILedgerRepository,
+  LedgerAggregateOptions,
+  LedgerAggregateResult,
   LedgerRepositoryOptions,
   LedgerSumOptions,
 } from './ILedgerRepository';
@@ -45,6 +47,28 @@ export class InMemoryLedgerRepository implements ILedgerRepository {
     for (const entry of this.entries) {
       if (entry.userId !== userId || !typeSet.has(entry.type)) continue;
       if (from !== null && entry.createdAt.getTime() < from) continue;
+      if (statusSet && !statusSet.has(entry.status)) continue;
+      amountCents += entry.amountCents;
+      count += 1;
+    }
+    return { amountCents, count };
+  }
+
+  async aggregateByTypes(
+    types: LedgerOperationType[],
+    options?: LedgerAggregateOptions,
+  ): Promise<LedgerAggregateResult> {
+    const typeSet = new Set(types);
+    const statusSet = options?.statuses ? new Set(options.statuses) : null;
+    const from = options?.from ? options.from.getTime() : null;
+    const to = options?.to ? options.to.getTime() : null;
+    let amountCents = 0;
+    let count = 0;
+    for (const entry of this.entries) {
+      if (!typeSet.has(entry.type)) continue;
+      if (options?.currency && entry.currency !== options.currency) continue;
+      if (from !== null && entry.createdAt.getTime() < from) continue;
+      if (to !== null && entry.createdAt.getTime() >= to) continue;
       if (statusSet && !statusSet.has(entry.status)) continue;
       amountCents += entry.amountCents;
       count += 1;

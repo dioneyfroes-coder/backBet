@@ -73,7 +73,25 @@ describe('BetRepository in-memory', () => {
     expect(await repo.findById(bet.id)).toBeNull();
   });
 
-  it('stub findByStatus helper returns empty array', async () => {
-    expect(await repo.findByStatus()).toEqual([]);
+  it('findByStatus returns only bets with the given status', async () => {
+    const won = new Bet(
+      'bet-b',
+      'user-b',
+      'event-a',
+      'market-a',
+      new Money(5, 'BRL'),
+      new Odds(2),
+      'WON',
+      'SINGLE',
+      new Date(),
+      new Date(),
+      '',
+    );
+    await repo.create(bet);
+    await repo.create(won);
+    expect(await repo.findByStatus('PENDING')).toHaveLength(1);
+    expect((await repo.findByStatus('PENDING'))[0].id).toBe('bet-a');
+    expect(await repo.findByStatus('WON')).toHaveLength(1);
+    expect(await repo.findByStatus('LOST')).toEqual([]);
   });
 });

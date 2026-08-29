@@ -73,6 +73,8 @@ const ledgerEntrySchema = new Schema<ILedgerEntryDocument>(
   { timestamps: true, collection: 'ledgerentries' },
 );
 
+ledgerEntrySchema.index({ type: 1, createdAt: 1 });
+
 export const LedgerEntryModel = mongoose.model<ILedgerEntryDocument>(
   'LedgerEntry',
   ledgerEntrySchema,
