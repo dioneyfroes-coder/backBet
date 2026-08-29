@@ -3,6 +3,9 @@
 /node_modules
 /docs_backup_*
 
+# Backup dumps (dados de usuários — nunca commitar)
+/backups
+
 # Logs
 logs
 *.log

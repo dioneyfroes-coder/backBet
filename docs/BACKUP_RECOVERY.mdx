@@ -1,0 +1,104 @@
+---
+title: "Backup e Recuperação"
+description: "Procedimento de backup, restore, rollback e disaster recovery do BackBet (Fase 24) com RPO/RTO, drill testado e runbook."
+slug: "/docs/backup-recovery"
+---
+
+# Backup e Recuperação
+
+> Fase 24 do plano de finalização: não basta configurar backup — o ciclo `backup → destruir ambiente → restore → validar dados` precisa estar **testado e documentado**.
+
+## O que é autoritativo
+
+- **MongoDB** é o banco de dados durável do MVP: usuários, carteiras, extrato/ledger, apostas, treasury, risco, idempotência e auditoria. **É o que precisamos recuperar.**
+- **Redis** é **epêmero** no MVP: cache e apoio a operações. Se sumir, rebate sozinho. Não é coberto pelos backups de dados (a aplicação reconstrói caches).
+
+## Objetivos de recuperação (MVP)
+
+| Métrica | Alvo | Como é garantido |
+| --- | --- | --- |
+| **RPO** | ≤ 24 h | Backup diário automático (ex.: cron às 03:00). |
+| **RTO** | ≤ 60 min | Procedimento documentado abaixo + drill `backup:drill`; o tempo real é medido num maintenance window. |
+| **Integridade** | A cada 7 dias | `npm run backup:validate -- <dir>` (checksums + contagens). |
+| **Retenção** | ≥ 5 anos (operação regulada) / configurável | `--retention` no `backup:create` (default 30 dias; ajustável por env `BACKUP_DIR`/retenção). |
+
+O plano de finalização exige, para operação regulada, dados retidos por no mínimo **5 anos**, atualização a **cada 24 h** e testes de integridade/correspondência a **cada 7 dias** (SPA). Os parâmetros são configuráveis pelas env/flags; o MVP parte de 30 dias local.
+
+## Ferramentas (npm scripts)
+
+| Comando | O que faz |
+| --- | --- |
+| `npm run backup:create` | Dump **lógico** (EJSON) de todas as collections do banco em `BACKUP_DIR/<timestamp>/` + `manifest.json` com contagens e checksums SHA-256. Aceita `--db <nome>` e `--retention <dias>` (purga backups antigos). |
+| `npm run backup:restore -- <dir>` | Restaura um backup. Padrão: **se recusa a sobrescrever** dados existentes. `--target-db <nome>` restaura em outro banco; `--drop` substitui as collections; valida contagens pós-restore. |
+| `npm run backup:validate -- <dir>` | Verifica integridade: manifesto legível, arquivos presentes, checksums conferem, JSON/EJSON válido, contagens batem. `--check-restored <banco>` compara contagens com um banco restaurado. |
+| `npm run backup:drill` | **Drill seguro automatizado**: backup do banco real → restore em `backbet_drill_<ts>` (sem tocar o original) → valida contagens → remove o banco e os arquivos temporários. Prova que o ciclo funciona no ambiente atual. |
+
+> Backups são arquivos `.json` com os dados do usuário — **nunca commitar `/backups/**`** (já consta no `.gitignore`). O script grava em `./backups` (ou `$BACKUP_DIR`).
+
+## O ciclo testado
+
+```text
+backup ↓ .................... npm run backup:create
+destruir ambiente ........... apenas manual (maintenance window), veja runbook
+restore ↓ ................... npm run backup:restore -- <dir> [--drop]
+validar dados ↓ ............. npm run backup:validate -- <dir> --check-restored <banco>
+```
+
+- **Automatizado e seguro**: `npm run backup:drill` exercita backup/restore/validação em loop completo **sem destruir nada**.
+- **Destrutivo**: a etapa "destruir o banco de produção" nunca é automatizada — é um procedimento de manutenção agendado, com comunicação de janela.
+
+## Runbook: "o banco foi destruído às 3h da manhã"
+
+1. **Pare o tráfego de escrita** (opcional; se preferir manter leitura, faça readonly temporário): `npm run pm2:stop` ou pausa nos workers.
+2. **Avalie o dano**: `mongosh --uri "$MONGODB_URI" --eval "db.adminCommand({ ping: 1 })"` e liste databases para o operador descrever o cenário.
+3. **Escolha o backup mais recente com validação OK**:
+   `ls -1t $BACKUP_DIR` e `npm run backup:validate -- ./backups/<timestamp>`.
+4. **Restaure**:
+   ```bash
+   npm run backup:restore -- ./backups/<timestamp>
+   # ou, se o banco ficou parcialmente corrompido:
+   npm run backup:restore -- ./backups/<timestamp> --drop
+   # ou em outro banco para inspecionar antes de assumir:
+   npm run backup:restore -- ./backups/<timestamp> --target-db backbet_restored
+   ```
+5. **Valide os dados**: `npm run backup:validate -- ./backups/<timestamp> --check-restored backbet` e cheque health/readiness da API (`/health` + `npm run health-monitor:start`).
+6. **Retome o tráfego** e monitore os alertas em `deploy/observability/alerting/alerts.yml`.
+
+**Tempo estimado no MVP**: minutos para volumes pequenos (dump lógico). O RTO alvo de ≤ 60 min se mede no drill com os dados reais.
+
+## Rollback de deploy/versão
+
+- Restaure o build anterior (`pm2 reload` / troca da tag do container) e, se o schema mudou, restaure o backup **do timestamp anterior à migração**:
+  ```bash
+  npm run backup:restore -- ./backups/<timestamp-antigo> --drop
+  ```
+- O manifesto registra `createdAt` e `dbName`; checar se o backup é posterior/anterior à mudança pelo timestamp do diretório.
+
+## Disaster recovery (perdeu a máquina inteira)
+
+1. Suba um MongoDB novo (ou reaponte `MONGODB_URI` para o backup/S3, se for gerenciado).
+2. Garanta Redis disponível (efêmero).
+3. Restaure o backup **mais recente validado** em `backbet` e valide (caminho do runbook).
+4. Para o MVP, uma cópia **fora da máquina** (bucket S3/Blob privado, `mongodump` ou upload dos `.json`) garante que o backup sobreviva à perda do host. Sem isso, backup é só "meia solução".
+
+## Agendamento automático
+
+Exemplo de crontab no host de produção:
+
+```cron
+# Backup diário + retenção de 90 dias; log para auditoria
+0 3 * * *  cd /opt/backbet && BACKUP_DIR=/var/backups/backbet npm run backup:create -- --retention 90 >> /var/log/backbet-backup.log 2>&1
+```
+
+E um teste semanal de integridade (cron separado ou mesmo job após o backup):
+
+```cron
+# Nem todas as crons têm o mesmo shell; ajuste o export para a sua distribuição
+0 4 * * 0  cd /opt/backbet && LATEST=$(ls -1t /var/backups/backbet | head -1) && npm run backup:validate -- /var/backups/backbet/$LATEST >> /var/log/backbet-backup.log 2>&1
+```
+
+## Limitações e próximos passos
+
+- O dump lógico carrega cada collection em memória — suficiente para o volume do MVP. Para bases grandes, trocar por `mongodump`/`mongorestore` ou snapshots do provedor (Atlas Continuous Backup + PITR).
+- Próximo passo de produção: `backup:create` já preparado para sofrer upload; integrar com pipeline S3 + retenção de 5 anos (regulatório) e testar o restore em ambiente de staging periodicamente.
+- Alertas de negócio já existentes (`deploy/observability/alerting/alerts.yml`) cobrem indisponibilidade de Mongo/Redis — falhas de infra disparam antes do horário do backup.

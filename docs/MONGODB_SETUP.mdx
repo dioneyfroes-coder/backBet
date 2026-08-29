@@ -102,6 +102,8 @@ async function smoke() {
 
 ## Backup & restore rápidos
 
+> O projeto possui ferramenta própria testada em `docs/BACKUP_RECOVERY.mdx` (`npm run backup:create` / `backup:restore` / `backup:validate` / `backup:drill`). O `mongodump` abaixo é a alternativa manual para ambientes com a binária instalada.
+
 ```bash
 # Dump local
 mongodump --uri "$MONGODB_URI" --out ./backups/$(date +%Y%m%d)
@@ -135,7 +137,7 @@ mongorestore --uri "mongodb://localhost:27017/backbet-restored" ./backups/202511
 
 1. Automatizar um script `npm run mongo:status` que testa `connectMongoDB()` isoladamente.
 2. Adicionar fixtures/migrations iniciais para ambientes de staging (usuário seed, carteira com saldo).
-3. Integrar backups com o pipeline (ex.: upload diário para S3 + retenção).
+3. Integrar backups com o pipeline (ex.: upload diário para S3 + retenção) — ver `docs/BACKUP_RECOVERY.mdx`.
 
 ## Referências úteis
 
