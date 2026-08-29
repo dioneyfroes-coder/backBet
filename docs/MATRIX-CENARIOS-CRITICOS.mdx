@@ -36,7 +36,7 @@ Legenda de status:
 | B4 | Evento encerrado bloqueia aposta | Coberto | `BetService.ts:258-266` + `BetService.test.ts` |
 | B5 | Mercado fechado bloqueia aposta | Coberto | `BetService.ts:268-276` + `BetService.test.ts` |
 | B6 | Odd inexistente | Coberto | `BetService.ts:232-242` (`ODD_NOT_FOUND`) + `BetService.test.ts` |
-| B7 | Risco excedido (limite de exposição) | Parcial | `RiskService.test.ts` (reserva) e caminho `RISK_LIMIT_EXCEEDED` em `BetService.ts:95-101`; integração via admin reconcile coberta em `AdminController.test`/`Security.test` — teste direto da rejeição por limite na aposta vive em `BetService.critical.test.ts` (cenário de rollback usa essa recusa para disparar o abort) |
+| B7 | Risco excedido (limite de exposição) | Coberto | **Novo (Fase 20.1)**: `src/infrastructure/api/__tests__/RiskLimit.integration.test.ts` — limite 90, aposta de 50 aprova (liability 45), a de 60 é rejeitada via HTTP (`RISK_REJECTED` 400) sem debitar a carteira, e uma terceira (30) volta a passar; também blacklist → `RISK_REJECTED` sem débito. Guarda atômica `RISK_LIMIT_EXCEEDED` segue provada em `BetService.critical.test.ts` (concorrência) |
 | B8 | Rollback da transação da aposta | Novo (Fase 20) | `BetService.critical.test.ts` (ver W1) — simulação in-memory; **pendente**: teste de rollback REAL com transação Mongo (`withTransaction` + replicaset) |
 
 ## Settlement
@@ -100,6 +100,6 @@ Legenda de status:
    ledger), mas o rollback efetivo com `withTransaction` do MongoDB exige a
    suíte de integração contra o replica set (`npm run test:integration:full`)
    — adicionar caso lá é o próximo passo natural.
-3. **Limite de exposição na aposta via HTTP** — a rejeição por `RISK_LIMIT_EXCEEDED`
-   tem cobertura unitária; um teste HTTP com risco estourado fecharia o ciclo
-   admin → aposta.
+3. ~~**Limite de exposição na aposta via HTTP**~~ — **fechada na Fase 20.1** com
+   `RiskLimit.integration.test.ts` (rejeição `RISK_REJECTED` por teto de
+   exposição e por blacklist, via `POST /api/bets`, sem débito da carteira).

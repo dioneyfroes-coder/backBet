@@ -148,6 +148,7 @@ Testes adicionados na Fase 20 (rodam no `npm run check` normal, sem infra):
 | `src/core/betting/domain/services/__tests__/BetService.critical.test.ts` | saldo insuficiente; **rollback de transação** (falha pós-débito restaura saldo, não persiste aposta/ledger); **aposta simultânea** sem dupla cobrança (`balance >= 0`, débitos do ledger casam) |
 | `src/infrastructure/api/__tests__/Settlement.integration.test.ts` | **settlement via HTTP** — WON credita retorno, LOST não credita, replay com `Idempotency-Key` não paga duas vezes, `result` inválido → 400, não-admin → 403 |
 | `src/infrastructure/withdrawals/__tests__/WithdrawalPayoutWorker.safety.test.ts` | **worker**: entrega duplicada (sequencial e concorrente) paga 1x; timeout do provedor não debita e retry conclui; resposta duplicada do provedor não debita 2x (guarda do ledger) |
+| `src/infrastructure/api/__tests__/RiskLimit.integration.test.ts` | **Fase 20.1** — limita a exposição via `RISK_CONFIG` e prova via HTTP: aposta que estoura o teto → `400 RISK_REJECTED` sem debitar a carteira (e aposta menor continua passando); blacklist → `RISK_REJECTED` sem débito; fecha a lacuna B7 da matriz |
 
 **Risco registrado**: os cenários de **webhook Pix** (P1-P7) da matriz estão
 marcados como *funcionalidade não existe* — o sistema confirma pagamento de
