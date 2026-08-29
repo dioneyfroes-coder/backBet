@@ -5,7 +5,7 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { AppError } from '@/shared/errors/AppError';
 import { WalletModel, IWalletDocument } from '../schemas/WalletSchema';
 import { WalletRecord, WalletTransactionRecord } from '@/types/persistence';
-import { transactionFailuresCounter } from '@/infrastructure/observability/metrics';
+import { optimisticLockConflictCounter, transactionFailuresCounter } from '@/infrastructure/observability/metrics';
 import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
 
 type WalletRecordRaw = Omit<WalletRecord, '_id'> & {
@@ -148,6 +148,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         if (!existing) {
           throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
         }
+        optimisticLockConflictCounter.inc({ resource: 'wallet' });
         throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar carteira', 409, {
           userId: wallet.userId,
           expectedVersion: wallet.version - 1,
