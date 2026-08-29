@@ -100,14 +100,14 @@ Considere ler `docs/risk-integration.mdx` para detalhes de configuração, toggl
 
 ## API HTTP
 
-Endpoints definidos em `BetController` e registrados por `betRoutes` sob `/api/bets`.
+Endpoints definidos em `BetController` e registrados por `betRoutes` sob `/api/v1/bets`.
 
 | Método | Caminho | Autenticação | Rate limit | Observações |
 |--------|---------|--------------|------------|-------------|
-| `GET` | `/api/bets/event/:eventId` | pública | n/a | Usa `cacheEventOddsMiddleware` + Redis e retorna `BetListResponseDTO` por evento.
-| `POST` | `/api/bets` | Bearer (provedor de identidade ou token dev) | `BET_PLACE_RATE_LIMIT_*` | Valida `PlaceBetDTO`, debita carteira e invalida cache do evento.
-| `POST` | `/api/bets/:betId/cancel` | Bearer obrigatório | `BET_CANCEL_RATE_LIMIT_*` | `CancelBetDTO` aceita `reason`; devolve fundos se o evento ainda está `SCHEDULED`.
-| `GET` | `/api/bets/me` | Bearer obrigatório | n/a | Lista apostas do usuário autenticado usando `BetListResponseDTO`.
+| `GET` | `/api/v1/bets/event/:eventId` | pública | n/a | Usa `cacheEventOddsMiddleware` + Redis e retorna `BetListResponseDTO` por evento.
+| `POST` | `/api/v1/bets` | Bearer (provedor de identidade ou token dev) | `BET_PLACE_RATE_LIMIT_*` | Valida `PlaceBetDTO`, debita carteira e invalida cache do evento.
+| `POST` | `/api/v1/bets/:betId/cancel` | Bearer obrigatório | `BET_CANCEL_RATE_LIMIT_*` | `CancelBetDTO` aceita `reason`; devolve fundos se o evento ainda está `SCHEDULED`.
+| `GET` | `/api/v1/bets/me` | Bearer obrigatório | n/a | Lista apostas do usuário autenticado usando `BetListResponseDTO`.
 
 ### DTOs expostos (Zod)
 
@@ -153,7 +153,7 @@ Os schemas alimentam o `swaggerSpec` servido em `/api/docs` e o JSON em `/api/do
 
 - `src/core/betting/application/use-cases/__tests__/BetUseCases.test.ts`: garante delegação correta e mapeamento de erros.
 - `src/core/betting/domain/repositories/__tests__/EventRepository.test.ts`: cobre operações do repositório em memória.
-- Para e2e use `supertest` ou `curl` com os endpoints de `/api/bets`; scripts como `src/scripts/seedInitialData.ts` ajudam a gerar usuários/carteiras antes das chamadas.
+- Para e2e use `supertest` ou `curl` com os endpoints de `/api/v1/bets`; scripts como `src/scripts/seedInitialData.ts` ajudam a gerar usuários/carteiras antes das chamadas.
 - Rode `npm test -- --testPathPattern=betting` para focar somente no módulo.
 
 ## Próximos passos sugeridos

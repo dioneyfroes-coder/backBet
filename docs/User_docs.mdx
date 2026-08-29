@@ -40,12 +40,12 @@ shared/services/{JwtService,AuthService}.ts
 
 ## Fluxo de cadastro end-to-end
 
-1. `POST /api/auth/register` valida payload (`RegisterDTO`) e delega para `RegisterUser`.
+1. `POST /api/v1/auth/register` valida payload (`RegisterDTO`) e delega para `RegisterUser`.
 2. O use-case chama `UserService.registerUser` (garante email único, aplica `bcrypt` com fator 12, exige `minPasswordLength` de `userConfig`).
 3. Em seguida `WalletService.createWallet` é acionado via `executeWithWalletErrorMapping`, gerando carteira com a moeda solicitada ou `BRL` (default).
 4. Quando um provedor externo de identidade está habilitado, `AuthController` pode sincronizar o usuário com o provedor (preservando `externalId` quando aplicável).
 5. A resposta inclui `status`, `isActive`, `sessionId`, `accessToken`/`refreshToken` (quando a conta já nasce ativa) e snapshots completos de usuário + carteira.
-6. Se o status permanecer `PENDING_VERIFICATION`, os tokens retornam `null` e o frontend pode acompanhar a liberação via `GET /api/auth/register/status/:userId`.
+6. Se o status permanecer `PENDING_VERIFICATION`, os tokens retornam `null` e o frontend pode acompanhar a liberação via `GET /api/v1/auth/register/status/:userId`.
 
 ## Modelo de domínio
 
@@ -74,7 +74,7 @@ shared/services/{JwtService,AuthService}.ts
 
 ### Use cases
 - `RegisterUser`: cadastro + criação de carteira.
-- `GetUserProfile`: provê dados para `/api/users/me` e `/api/auth/me`.
+- `GetUserProfile`: provê dados para `/api/v1/users/me` e `/api/v1/auth/me`.
 - `UpdateProfile`: encapsula regras de mutação de perfil.
 - `ChangeEmail`: executa fluxo de troca de email.
 - `UpdatePixKey`: salva/limpa a chave Pix padrão reutilizada em fluxos de saque.
@@ -102,24 +102,24 @@ shared/services/{JwtService,AuthService}.ts
 
 | Método | Caminho | Autenticação | Cache | Observações |
 |--------|---------|--------------|-------|-------------|
-| `GET` | `/api/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; campo `username` é o nome público do usuário.
-| `PATCH` | `/api/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
-| `PATCH` | `/api/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
-| `GET` | `/api/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
-| `PUT` | `/api/users/me/pix-key` | `protectedRoute` | — | Valida `UpdatePixKeyDTO`; permite cadastrar/remover a chave que será utilizada como fallback em `/api/wallets/withdraw`.
-| `GET` | `/api/users/me/preferences` | `protectedRoute` | — | Retorna as preferências do usuário (`emailNotifications`, `smsNotifications`, `marketingEmails`, `requireWithdrawPassword`).
-| `PUT` | `/api/users/me/preferences` | `protectedRoute` | — | Atualiza preferências do usuário; aceita payload parcial com qualquer um dos campos acima.
+| `GET` | `/api/v1/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; campo `username` é o nome público do usuário.
+| `PATCH` | `/api/v1/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
+| `PATCH` | `/api/v1/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
+| `GET` | `/api/v1/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
+| `PUT` | `/api/v1/users/me/pix-key` | `protectedRoute` | — | Valida `UpdatePixKeyDTO`; permite cadastrar/remover a chave que será utilizada como fallback em `/api/v1/wallets/withdraw`.
+| `GET` | `/api/v1/users/me/preferences` | `protectedRoute` | — | Retorna as preferências do usuário (`emailNotifications`, `smsNotifications`, `marketingEmails`, `requireWithdrawPassword`).
+| `PUT` | `/api/v1/users/me/preferences` | `protectedRoute` | — | Atualiza preferências do usuário; aceita payload parcial com qualquer um dos campos acima.
 
 ### Rotas de autenticação (`src/infrastructure/api/routes/authRoutes.ts`)
 
 | Método | Caminho | Rate limit | Observações |
 |--------|---------|-----------|-------------|
-| `POST` | `/api/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com o provedor de identidade quando disponível.
-| `GET` | `/api/auth/register/status/:userId` | — | Retorna `{ status, isActive }` e permite polling até liberar o usuário.
-| `POST` | `/api/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
-| `POST` | `/api/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
-| `GET` | `/api/auth/me` | `protectedRoute` | Expõe perfil combinando User + dados do provedor de identidade quando configurado.
-| `POST` | `/api/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client ou no provedor de identidade quando aplicável.
+| `POST` | `/api/v1/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com o provedor de identidade quando disponível.
+| `GET` | `/api/v1/auth/register/status/:userId` | — | Retorna `{ status, isActive }` e permite polling até liberar o usuário.
+| `POST` | `/api/v1/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
+| `POST` | `/api/v1/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
+| `GET` | `/api/v1/auth/me` | `protectedRoute` | Expõe perfil combinando User + dados do provedor de identidade quando configurado.
+| `POST` | `/api/v1/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client ou no provedor de identidade quando aplicável.
 
 > Ajuste limites via `AUTH_{REGISTER|LOGIN|REFRESH}_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e configure o rate limit global (`RATE_LIMIT_*`) conforme o ambiente.
 
@@ -157,7 +157,7 @@ shared/services/{JwtService,AuthService}.ts
 - `UserRepository` fornece helpers (`getAllUsers`, `clear`) para cenários de teste.
 - Teste endpoints manualmente:
   ```bash
-  curl -X POST http://localhost:3000/api/auth/register     -H 'Content-Type: application/json'     -d '{"email":"dev@example.com","username":"dev.user","password":"Secret123!"}'
+  curl -X POST http://localhost:3000/api/v1/auth/register     -H 'Content-Type: application/json'     -d '{"email":"dev@example.com","username":"dev.user","password":"Secret123!"}'
   ```
 - Rode `npm test -- User` para focar na suíte do módulo.
 - Problemas comuns:

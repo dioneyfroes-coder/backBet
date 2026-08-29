@@ -50,7 +50,7 @@ Cada log é uma linha JSON, enviada para `stdout`/`stderr`.
   "timestamp": "2025-11-23T13:37:10.123Z",
   "requestId": "req-1732369030123-abc123",
   "method": "POST",
-  "path": "/api/auth/register",
+  "path": "/api/v1/auth/register",
   "status": 201,
   "durationMs": 128.42,
   "userId": "user_2YQk",
@@ -122,7 +122,7 @@ tail -f logs/backbet.log | jq .
 
 1. O contêiner escreve logs JSON em `stdout`/`stderr`.
 2. O runtime (Docker, Kubernetes) envia para o agente (Fluent Bit, Vector ou Promtail).
-3. Os agentes transmitem para o Loki / Elasticsearch definido internamente (os arquivos antigos em `reports/phase4/alerts.yaml` ficaram apenas como referência histórica).
+3. Os agentes transmitem para o Loki / Elasticsearch definido internamente (os alertas legados de Grafana/Prometheus ficaram apenas como referência histórica no git).
 
 Comandos úteis:
 
@@ -161,7 +161,7 @@ kubectl logs deploy/backbet-api -n backbet --since=30m
 - [ ] Adicionou log estrutural ao criar fluxo crítico? (depósitos, saques, apostas)
 - [ ] Reutilizou `requestId`/`userId` via `getRequestContext()`?
 - [ ] Sanitizou payloads antes de logar (`password`, `token`)?
-- [ ] Documentou novos campos nesta página e, se necessário, no plano `docs/PM2-WEBUI-MIGRATION.mdx`?
+- [ ] Documentou novos campos nesta página e, se necessário, na página de observabilidade (`docs/OBSERVABILITY.mdx`)?
 
 ## Próximos passos sugeridos
 

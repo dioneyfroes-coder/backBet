@@ -102,17 +102,17 @@ Factories `create<User|Wallet|Bet|Event>Repository()` leem `USE_MONGOOSE_PERSIST
 
 ### Registro de Usuário + Carteira
 ```
-POST /api/auth/register
+POST /api/v1/auth/register
 → AuthController valida DTO (Zod) e chama RegisterUser use case
 → UserService cria User (Email VO) e persiste via IUserRepository
 → WalletService cria Wallet padrão (BRL) e persiste via IWalletRepository
 → Cache invalida perfil/carteira e a resposta inclui `status`, `isActive`, snapshot da carteira e (quando o usuário já está ativo) `accessToken`/`refreshToken` + `sessionId`
-→ Caso o status permaneça `PENDING_VERIFICATION`, o frontend faz polling usando `GET /api/auth/register/status/:userId` até `isActive=true`
+→ Caso o status permaneça `PENDING_VERIFICATION`, o frontend faz polling usando `GET /api/v1/auth/register/status/:userId` até `isActive=true`
 ```
 
 ### Depósito / Saque
 ```
-POST /api/wallets/deposit | withdraw
+POST /api/v1/wallets/deposit | withdraw
 → WalletController verifica rate limit específico e autenticação
 → IdempotencyService reserva Idempotency-Key quando fornecida
 → WalletService.deposit/withdraw usa Value Objects Money/Currency
@@ -129,7 +129,7 @@ POST /api/wallets/deposit | withdraw
 
 ### Colocar/Cancelar Aposta
 ```
-POST /api/bets
+POST /api/v1/bets
 → BetController chama PlaceBet use case
 → BetService valida usuário ativo, mercado aberto e odds
 → WalletService.withdraw bloqueia fundos

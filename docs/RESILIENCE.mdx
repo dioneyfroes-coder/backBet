@@ -46,7 +46,7 @@ Provedores como Nginx/ALB podem usar `/health/cache` e `/readiness` para retirar
 ## 4. Observabilidade e alertas
 
 - Logs estruturados incluem `requestId`, `userId` e `durationMs` (documentado em `docs/LOGS.mdx`).
-- Spans OTEL permanecem disponíveis e, junto com `dependencyHealthSnapshot`, indicam degradações. Os painéis antigos (Grafana/Prometheus) foram arquivados; seguimos `docs/PM2-WEBUI-MIGRATION.mdx`.
+- Spans OTEL permanecem disponíveis e, junto com `dependencyHealthSnapshot`, indicam degradações. Os painéis antigos (Grafana/Prometheus) foram arquivados; seguimos `docs/OBSERVABILITY.mdx`.
 - **PM2** mantém reloads sem downtime via `pm2 start ecosystem.config.cjs` (detalhes em `docs/PM2.mdx`).
 - Health checks públicos (`/health`, `/health/cache`, `/readiness`) podem alimentar Uptime Robots; proteja por reverse proxy em produção conforme `docs/OBSERVABILITY.mdx`.
 - `/metrics` responde `410 Gone` enquanto `OBS_ENABLE_PROMETHEUS=false`; o monitoramento migra para PM2 WebUI + alertas por e-mail.

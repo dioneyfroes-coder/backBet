@@ -69,14 +69,14 @@ Os cinco arquivos previstos nas normas técnicas da SPA:
 
 ## Endpoints administrativos
 
-Todos sob `/api/admin/sigap`, com `protectedRoute` + `requireAdminRole` e registro em auditoria (Fase 15).
+Todos sob `/api/v1/admin/sigap`, com `protectedRoute` + `requireAdminRole` e registro em auditoria (Fase 15).
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| `POST` | `/api/admin/sigap/transmit` | Transmite um arquivo (`fileType`, `referenceDate`, `payload`) |
-| `GET` | `/api/admin/sigap/submissions` | Lista remessas com filtros/paginação |
-| `GET` | `/api/admin/sigap/submissions/:id` | Consulta uma remessa |
-| `POST` | `/api/admin/sigap/impediment` | Consulta se um documento (CPF) está impedido |
+| `POST` | `/api/v1/admin/sigap/transmit` | Transmite um arquivo (`fileType`, `referenceDate`, `payload`) |
+| `GET` | `/api/v1/admin/sigap/submissions` | Lista remessas com filtros/paginação |
+| `GET` | `/api/v1/admin/sigap/submissions/:id` | Consulta uma remessa |
+| `POST` | `/api/v1/admin/sigap/impediment` | Consulta se um documento (CPF) está impedido |
 
 ## Variáveis de ambiente
 

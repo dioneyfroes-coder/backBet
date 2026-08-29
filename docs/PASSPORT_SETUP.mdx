@@ -14,7 +14,7 @@ O BackBet agora utiliza **Passport** com a estratégia **passport-jwt** como mec
 |----------|--------------|---------------|
 | **Produção** | `JWT_SECRET` live, `ALLOW_DEV_BEARER_BYPASS=false`. | Toda requisição protegida passa pelo `passport.authenticate('jwt')`. O boot falha se `JWT_SECRET` não estiver definido. |
 | **Staging** | Mesmo segredo do ambiente ou um dedicado, mantendo `ALLOW_DEV_BEARER_BYPASS=false`. | Replica o comportamento de produção para validar integrações ponta a ponta. |
-| **Desenvolvimento/Teste** | `JWT_SECRET` pode ser `test-secret`. Opcionalmente `ALLOW_DEV_BEARER_BYPASS=true`. | Aceitamos `Authorization: Bearer <token JWT>` ou `Authorization: Bearer <userId>` quando o bypass estiver ligado. `JwtService` continua emitindo tokens para `/api/auth/login`. |
+| **Desenvolvimento/Teste** | `JWT_SECRET` pode ser `test-secret`. Opcionalmente `ALLOW_DEV_BEARER_BYPASS=true`. | Aceitamos `Authorization: Bearer <token JWT>` ou `Authorization: Bearer <userId>` quando o bypass estiver ligado. `JwtService` continua emitindo tokens para `/api/v1/auth/login`. |
 
 > Se `appConfig.runtime.env === 'production'` e `JWT_SECRET` estiver ausente, o servidor encerra o boot com erro explícito.
 
@@ -37,7 +37,7 @@ JWT_SECRET=super-strong-secret
 JWT_ISSUER=backbet
 JWT_AUDIENCE=backbet-clients          # opcional
 JWT_EXPIRATION=15m                    # formato ms ou zeit/ms
-JWT_REFRESH_EXPIRATION=7d             # usado em /api/auth/refresh
+JWT_REFRESH_EXPIRATION=7d             # usado em /api/v1/auth/refresh
 
 # Bypass (somente dev/test)
 ALLOW_DEV_BEARER_BYPASS=false         # true aceita Authorization: Bearer <userId>
@@ -79,10 +79,10 @@ return passport.authenticate('jwt', { session: false })(req, res, next);
 
 ### Login/registro
 
-1. O frontend chama `/api/auth/register` ou `/api/auth/login` com as credenciais do BackBet.
+1. O frontend chama `/api/v1/auth/register` ou `/api/v1/auth/login` com as credenciais do BackBet.
 2. O controlador valida os dados, cria/consulta o usuário interno e emite `accessToken` + `refreshToken` via `JwtService`.
 3. O cliente envia `Authorization: Bearer <accessToken>` em todas as requisições seguintes.
-4. O Passport valida o token e popula `authContext`. Caso o token expire, o cliente usa `/api/auth/refresh` para obter um novo par.
+4. O Passport valida o token e popula `authContext`. Caso o token expire, o cliente usa `/api/v1/auth/refresh` para obter um novo par.
 
 ### Rotas protegidas
 
@@ -98,7 +98,7 @@ Controller + Use cases + caches
 
 ### Logout
 
-- `POST /api/auth/logout` apenas invalida o refresh no lado do cliente (não há blacklist server-side ainda).
+- `POST /api/v1/auth/logout` apenas invalida o refresh no lado do cliente (não há blacklist server-side ainda).
 - Em aplicações SPA, remova o token do storage local após receber `204` ou `200` da rota.
 
 ## 6. Integração Frontend (Next.js exemplo)
@@ -131,7 +131,7 @@ Durante o desenvolvimento você pode usar o bypass enviando `Authorization: Bear
 |----------|--------|
 | `Missing required environment variables: JWT_SECRET` | Defina `JWT_SECRET` antes de iniciar o servidor (inclusive em pipelines de CI). |
 | `Unauthorized` em ambientes dev | Confirme se o token não expirou. Se estiver usando bypass, lembre-se de enviar uma string sem dots (não deve se parecer com JWT). |
-| `Forbidden` ao acessar `/api/admin/**` | Garanta que o `userId` esteja listado em `ADMIN_USER_IDS` e que o token realmente pertence a esse usuário. |
+| `Forbidden` ao acessar `/api/v1/admin/**` | Garanta que o `userId` esteja listado em `ADMIN_USER_IDS` e que o token realmente pertence a esse usuário. |
 | Token emitido mas Passport rejeita | Verifique `JWT_ISSUER`/`JWT_AUDIENCE`. Um mismatch faz a estratégia falhar mesmo com a assinatura correta. |
 
 ## 9. Próximos passos

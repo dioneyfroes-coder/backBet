@@ -16,7 +16,7 @@ src/infrastructure/api/ApiServer.ts               (middlewares, endpoints /healt
 src/infrastructure/observability/{cacheMetrics,resilienceMetrics,tracing}.ts
 src/infrastructure/cache/{RedisClient,cacheHooks}.ts (contadores de cache e erros)
 src/infrastructure/api/__tests__/observabilityEndpoints.test.ts
-docs/PM2-WEBUI-MIGRATION.md                      (plano da nova stack de observabilidade)
+docs/OBSERVABILITY.mdx                           (referência da stack atual de observabilidade)
 ```
 
 ## Pipeline no ApiServer
@@ -47,7 +47,7 @@ Detalhes do readiness (`ApiServer.readinessHandler`):
 
 ## Snapshots durante a transição para PM2 WebUI
 
-O backend mantém pequenas estruturas em memória para expor o estado atual de cache, resiliência e dependências. Durante a Fase 1 de migração (documentada em `docs/PM2-WEBUI-MIGRATION.md`), esses snapshots substituem completamente os gauges do Prometheus:
+O backend mantém pequenas estruturas em memória para expor o estado atual de cache, resiliência e dependências. Durante a migração para a PM2 WebUI (descrita neste documento), esses snapshots substituem completamente os gauges do Prometheus:
 
 - `cacheMetricsSnapshot` (exportado por `src/infrastructure/observability/cacheMetrics.ts`) agrega hits, misses, writes, errors e latência média reportada pelo `RedisClient`.
 - `resilienceMetricsSnapshot` (`src/infrastructure/observability/resilienceMetrics.ts`) acumula tentativas de retry, circuitos abertos e falhas de operação.
@@ -138,14 +138,14 @@ Gere tráfego e confira os spans no backend (Grafana Tempo, Jaeger, etc.).
 ## Variáveis e flags relevantes
 
 - `CACHE_ENABLED`, `REDIS_URL`, `CACHE_*_TTL_SECONDS`: controlam Redis, TTLs e, por consequência, o conteúdo de `cacheMetricsSnapshot` e `/health/cache`.
-- `USE_MONGOOSE_PERSISTENCE`, `MONGO_URL`: determinam se o readiness pingará Mongo (e qual instância) para atualizar `dependencyHealthSnapshot`.
+- `USE_MONGOOSE_PERSISTENCE`, `MONGODB_URI`: determinam se o readiness pingará Mongo (e qual instância) para atualizar `dependencyHealthSnapshot`.
 - `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*`, `BET_*`: alteram o comportamento das rotas e tendem a impactar histogramas de HTTP; monitore após ajustar limites.
 - `APP_NAME`: nome do produto exibido nos dashboards e logs.
 - `SERVICE_NAME`: identidade técnica do serviço; OpenTelemetry usa esse nome quando `OTEL_SERVICE_NAME` não é definido.
 
 ## Dashboards e alertas
 
-Os artefatos antigos de Grafana/Prometheus foram arquivados em `reports/phase4/` apenas para consulta histórica. A nova stack opera em três camadas já habilitadas:
+Os artefatos antigos de Grafana/Prometheus foram arquivados no git apenas para consulta histórica. A nova stack opera em três camadas já habilitadas:
 
 1. **PM2 WebUI** — suba com `npm run pm2:webui:start`, audite CPU/memória, restarts e uptime e encerre com `pm2:webui:stop`. Acesse somente via túnel SSH/VPN.
 2. **Alertas por e-mail** — `scripts/health-monitor.cjs` roda via `npm run pm2:health:start`, consome `/health` e `/readiness` e envia Gmail SMTP quando qualquer dependência fica `down` ou ultrapassa `HEALTH_MONITOR_MAX_LATENCY_MS`. Use `HEALTH_MONITOR_DRY_RUN=true` em testes.

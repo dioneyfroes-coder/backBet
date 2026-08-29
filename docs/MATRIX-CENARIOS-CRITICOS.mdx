@@ -43,7 +43,7 @@ Legenda de status:
 
 | # | Cenário | Status | Onde é validado |
 |---|---------|--------|-----------------|
-| S1 | Liquidação WIN credita retorno | Novo (Fase 20) | `src/infrastructure/api/__tests__/Settlement.integration.test.ts` — POST `/api/admin/bets/:id/settle` via HTTP credita 190 de 400+retorno sobre aposta de 100 @1.9 |
+| S1 | Liquidação WIN credita retorno | Novo (Fase 20) | `src/infrastructure/api/__tests__/Settlement.integration.test.ts` — POST `/api/v1/admin/bets/:id/settle` via HTTP credita 190 de 400+retorno sobre aposta de 100 @1.9 |
 | S2 | Liquidação LOST não credita | Novo (Fase 20) | `Settlement.integration.test.ts` — saldo permanece após débito da estaca |
 | S3 | CANCEL com reembolso | Coberto | `BetService.ts:112-161` (`BET_REFUND`) + `BetService.test.ts` (cancel) |
 | S4 | Liquidação duplicada (Idempotency-Key) não paga duas vezes | Novo (Fase 20) | `Settlement.integration.test.ts` — replay retorna o resultado armazenado e o saldo continua igual (guard `IdempotencyService.ts:124-142`, `ResolveBetUseCase.ts:14-25`, `restoreBet.ts`) |
@@ -82,7 +82,7 @@ Legenda de status:
 > quando o port de pagamento responde sucesso. O único webhook recebido pelo
 > sistema é o de jogo (outgoing gate, `WebhookGameIntegrationAdapter.ts`).
 > Os 7 cenários de webhook Pix do plano **não podem ser testados** até que a
-> funcionalidade seja construída (rota `POST /api/webhooks/pix`, identificação
+> funcionalidade seja construída (rota `POST /api/v1/webhooks/pix`, identificação
 > da charge por reference, validação de valor/status e idempotência por evento
 > externo). Isso é **dívida/risco registrado da Fase 20** e deve entrar no
 > backlog da integração Pix real (mock PSP síncrono atual não cobre).
@@ -102,4 +102,4 @@ Legenda de status:
    — adicionar caso lá é o próximo passo natural.
 3. ~~**Limite de exposição na aposta via HTTP**~~ — **fechada na Fase 20.1** com
    `RiskLimit.integration.test.ts` (rejeição `RISK_REJECTED` por teto de
-   exposição e por blacklist, via `POST /api/bets`, sem débito da carteira).
+   exposição e por blacklist, via `POST /api/v1/bets`, sem débito da carteira).

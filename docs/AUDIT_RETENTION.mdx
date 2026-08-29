@@ -107,15 +107,15 @@ Todos protegidos por autenticação + `requireAdminRole`.
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| `GET` | `/api/admin/audit/events` | Consulta eventos (filtros: `type`, `actorUserId`, `resourceType`, `from`, `to`, `limit`, `offset`) |
-| `GET` | `/api/admin/audit/events/:eventId` | Consulta um evento pelo id |
-| `POST` | `/api/admin/audit/retention/apply` | Aplica retenção (`retentionDays` opcional no corpo) |
+| `GET` | `/api/v1/admin/audit/events` | Consulta eventos (filtros: `type`, `actorUserId`, `resourceType`, `from`, `to`, `limit`, `offset`) |
+| `GET` | `/api/v1/admin/audit/events/:eventId` | Consulta um evento pelo id |
+| `POST` | `/api/v1/admin/audit/retention/apply` | Aplica retenção (`retentionDays` opcional no corpo) |
 
 Exemplo:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:3000/api/admin/audit/events?type=ADMIN_ACTION&limit=50"
+  "http://localhost:3000/api/v1/admin/audit/events?type=ADMIN_ACTION&limit=50"
 ```
 
 ## Configuração

@@ -71,7 +71,7 @@ src/scripts/seedCreditPackages.ts (popular pacotes padrão)
 
 ## Boas práticas para consumir o sistema monetário no frontend
 
-1. **Use os dados oficiais da resposta ao invés de recalcular o saldo.** A API retorna `{ data: { balance, lockedBalance, currency } }` para `/api/wallets/me` (valores em reais, não centavos). Confie nesses valores e apenas formate com a `currency` enviada.
+1. **Use os dados oficiais da resposta ao invés de recalcular o saldo.** A API retorna `{ data: { balance, lockedBalance, currency } }` para `/api/v1/wallets/me` (valores em reais, não centavos). Confie nesses valores e apenas formate com a `currency` enviada.
 2. **Formate com `Intl.NumberFormat('pt-BR', { style: 'currency', currency })`.** Isso garante corretas casas decimais e separador de milhares. Nunca multiplique ou divida os valores exibidos para obter um novo saldo — o backend já faz isso com o `Money` value object e registra transações.
 3. **Envie valores como números decimais com duas casas (ex.: `10.00`).** O backend valida `amount > 0` e aplica `Money` antes de qualquer alteração. Strings ou formatos com vírgula serão rejeitados pelo Zod/`CreateWithdrawalRequestDTO`, portanto use sempre o ponto (`.`) como separador decimal nas requisições. Internamente o valor é convertido para centavos (ex.: `10.00` → `amountCents: 1000`) antes de persistir.
 4. **Considere o campo `lockedBalance` ao mostrar disponibilidade.** O saldo livre é `balance - lockedBalance`. Atividades como `coin-flip` primeiro chamam `wallet.withdraw(userId, wager)` e só depois registram o resultado; nenhum outro campo precisa ser atualizado manualmente.
@@ -117,7 +117,7 @@ formatter.format(wallet.balance); // wallet.balance retorna reais (não centavos
 Para enviar um saque/deposito, mantenha um objeto simples em JSON e use o ponto como separador decimal:
 
 ```ts
-await fetch('/api/wallets/withdraw', {
+await fetch('/api/v1/wallets/withdraw', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -163,17 +163,17 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 2. Em caso de erro (`WALLET_ALREADY_EXISTS`), o mapper devolve 409 e o fluxo de cadastro é interrompido.
 
 ### Compra de pacote de créditos
-1. `POST /api/finance/packages/:packageId/purchase` valida params (`CreditPackagePurchaseDTO`).
+1. `POST /api/v1/finance/packages/:packageId/purchase` valida params (`CreditPackagePurchaseDTO`).
 2. `PurchaseCreditPackage` busca o pacote, soma `base + bonus` e chama `WalletService.deposit`.
 3. `flushWalletCache(userId)` limpa `wallet:balance` e `wallet:history` para refletir o novo saldo imediatamente.
 
 ### Solicitação e aprovação de saque
-1. `POST /api/finance/withdrawal-requests` valida `CreateWithdrawalRequestDTO`, chama `RequestWithdrawal` que bloqueia o valor (`wallet.lock`).
-2. Admins usam `PATCH /api/finance/withdrawal-requests/:id` para aprovar (`withdrawLocked`) ou rejeitar (`unlock`).
+1. `POST /api/v1/finance/withdrawal-requests` valida `CreateWithdrawalRequestDTO`, chama `RequestWithdrawal` que bloqueia o valor (`wallet.lock`).
+2. Admins usam `PATCH /api/v1/finance/withdrawal-requests/:id` para aprovar (`withdrawLocked`) ou rejeitar (`unlock`).
 3. Cada decisão gera `ApprovalLog` e dispara `flushWalletCache`.
 
 ### Integração Pix (mock)
-1. Rotas `/api/wallets/deposit|withdraw` chamam `PixProviderPort` antes de persistir a transação.
+1. Rotas `/api/v1/wallets/deposit|withdraw` chamam `PixProviderPort` antes de persistir a transação.
 2. O adapter atual (`MockPixProvider`) gera QR Codes/payouts determinísticos e confirma o pagamento imediatamente, propagando os campos para `wallet.recordTransaction(...metadata)`.
 3. Os responses expõem `pix.*` para que o front exiba referência, status e provider. Em produção basta criar outro adapter e mudar `PIX_PROVIDER` sem modificar controllers/use cases.
 4. `PIX_ENABLE_DEPOSITS` / `PIX_ENABLE_WITHDRAWALS` podem ser usados como kill switches: quando `false`, os controllers retornam `503 SERVICE_UNAVAILABLE` antes de chamar o Pix ou tocar na carteira.
@@ -184,9 +184,9 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 
 ### Coin-flip e limites de aposta
 - O jogo de coin-flip é configurado em `appConfig.games.coinFlip` com variáveis de ambiente (`GAME_COINFLIP_*`). Por padrão ele está **habilitado**, aceita apostas entre `minBet=1` e `maxBet=500` (BRL) e aplica um `payoutMultiplier=1`, isto é, o prêmio pago ao vencedor é `wager × payoutMultiplier`. A qualquer momento esses valores podem ser ajustados sem deploy via `.env`/secret manager.
-- A variação do valor apostado depende exatamente desses limites (`GAME_COINFLIP_MIN_BET` e `GAME_COINFLIP_MAX_BET`), então o frontend deve permitir apenas números dentro do intervalo informado pelo backend (o próprio `GameController` expõe esses campos no `/api/games/coin-flip/config`).
+- A variação do valor apostado depende exatamente desses limites (`GAME_COINFLIP_MIN_BET` e `GAME_COINFLIP_MAX_BET`), então o frontend deve permitir apenas números dentro do intervalo informado pelo backend (o próprio `GameController` expõe esses campos no `/api/v1/games/coin-flip/config`).
 - Existe também `GAME_COINFLIP_FIXED_WIN`: quando definido e positivo, o jogo ignora `wager × multiplier` e paga sempre esse valor fixo, mantendo o `metadata.source` marcado como `fixed-win` nos logs. Isso costuma ser usado para campanhas promocionais sem alterar o multiplicador base.
-- Os detalhes do multiplicador e do intervalo aparecem na resposta de `/api/games/coin-flip/config` e são utilizados pelo `CoinFlipGameService` (arquivo `src/core/game/domain/services/CoinFlipGameService.ts`) para calcular `payoutAmount = Number((wager × payoutMultiplier).toFixed(2))` antes de registrar a transação e afetar o `Wallet` do usuário.
+- Os detalhes do multiplicador e do intervalo aparecem na resposta de `/api/v1/games/coin-flip/config` e são utilizados pelo `CoinFlipGameService` (arquivo `src/core/game/domain/services/CoinFlipGameService.ts`) para calcular `payoutAmount = Number((wager × payoutMultiplier).toFixed(2))` antes de registrar a transação e afetar o `Wallet` do usuário.
 
 ## HTTP API
 
@@ -194,20 +194,20 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 
 | Método | Caminho | Proteção | Cache/Rate limit | Observações |
 |--------|---------|----------|------------------|-------------|
-| `GET` | `/api/wallets/me` | `protectedRoute` | `cacheWalletBalanceMiddleware` (Redis) | Retorna `wallet.toDTO()` sempre com `Cache-Control: no-store` (sem ETag) e 404 se carteira não existir.
-| `POST` | `/api/wallets/deposit` | `protectedRoute` | `createRouteRateLimiter` usando `WALLET_DEPOSIT_RATE_LIMIT_*` | Payload `DepositDTO`; dispara `flushWalletCache`.
-| `POST` | `/api/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aceita `pixKey` opcional e cai para a chave padrão do usuário antes de rejeitar o saque.
-| `GET` | `/api/wallets/history` | `protectedRoute` | `cacheWalletHistoryMiddleware` (cache por `limit/offset`) | Responde `{ transactions, pagination }`.
+| `GET` | `/api/v1/wallets/me` | `protectedRoute` | `cacheWalletBalanceMiddleware` (Redis) | Retorna `wallet.toDTO()` sempre com `Cache-Control: no-store` (sem ETag) e 404 se carteira não existir.
+| `POST` | `/api/v1/wallets/deposit` | `protectedRoute` | `createRouteRateLimiter` usando `WALLET_DEPOSIT_RATE_LIMIT_*` | Payload `DepositDTO`; dispara `flushWalletCache`.
+| `POST` | `/api/v1/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aceita `pixKey` opcional e cai para a chave padrão do usuário antes de rejeitar o saque.
+| `GET` | `/api/v1/wallets/history` | `protectedRoute` | `cacheWalletHistoryMiddleware` (cache por `limit/offset`) | Responde `{ transactions, pagination }`.
 
 ### Rotas financeiras (`src/infrastructure/api/routes/financeRoutes.ts`)
 
 | Método | Caminho | Proteção | Observações |
 |--------|---------|----------|-------------|
-| `GET` | `/api/finance/packages` | `protectedRoute` | Lista pacotes ativos com datas em ISO 8601.
-| `POST` | `/api/finance/packages/:packageId/purchase` | `protectedRoute` | Realiza depósito `base+bonus`, retorna carteira atualizada e pacote.
-| `POST` | `/api/finance/withdrawal-requests` | `protectedRoute` | Cria solicitação de saque e bloqueia saldo.
-| `GET` | `/api/finance/withdrawal-requests` | `protectedRoute` | Lista solicitações do usuário autenticado.
-| `PATCH` | `/api/finance/withdrawal-requests/:requestId` | `protectedRoute` | Processa aprovação/rejeição. (Para uso administrativo; autenticação delegada a `AuthMiddleware`.)
+| `GET` | `/api/v1/finance/packages` | `protectedRoute` | Lista pacotes ativos com datas em ISO 8601.
+| `POST` | `/api/v1/finance/packages/:packageId/purchase` | `protectedRoute` | Realiza depósito `base+bonus`, retorna carteira atualizada e pacote.
+| `POST` | `/api/v1/finance/withdrawal-requests` | `protectedRoute` | Cria solicitação de saque e bloqueia saldo.
+| `GET` | `/api/v1/finance/withdrawal-requests` | `protectedRoute` | Lista solicitações do usuário autenticado.
+| `PATCH` | `/api/v1/finance/withdrawal-requests/:requestId` | `protectedRoute` | Processa aprovação/rejeição. (Para uso administrativo; autenticação delegada a `AuthMiddleware`.)
 
 ## DTOs e validação
 
@@ -312,8 +312,8 @@ export const ApiErrorSchema = z.object({
 - **HouseWallet:** o módulo da carteiras da casa vive em `src/core/treasury/domain/entities/HouseWallet.ts`. Ele mantém dois `Money` separados (`profit` e `prizeReserve`) e persiste como `profitBalanceCents` e `prizeReserveBalanceCents` (inteiros em centavos) no Mongoose schema. O `HouseTreasuryService` registra lucratividade, transfer entre reservas e rebalanceamento do alvo de prêmio (`targetPrizeRatio`). Cada movimentação gera um `TreasuryLedgerEntry` (apenas 50 entradas retidas) com `type`, `amountCents`, `currency`, `description` e `metadata` (ex.: `source`, `referenceId`, `actorId`).
 - **Fluxo de apostas:** quando o `BetService` é executado, o stake sai da carteira do usuário via `WalletService.withdraw` e só depois o retorno (quando houver) é depositado de volta. O spread entre o valor pago e o valor devolvido entra como lucro (`RecordTreasuryProfit`) na carteira da casa antes de ser empurrado para `prizeReserve` se o buffer estiver alto demais. Isso garante que o percentual da casa fique separado do saldo do usuário e do dinheiro destinado a prêmios.
 - **Valores iniciais:** usamos o script `npm run seed:treasury -- 5000 "Seed inicial"` para registrar um lucro teórico de R$5.000 na carteira da casa e garantir que a parada comece com `profitBalanceCents`=500000, `prizeReserveBalanceCents`=0 (ou em reais: `profitBalance`=5000, `prizeReserveBalance`=0). O walletId padrão é `house-primary` e sempre opera em `BRL` a menos que você sobrescreva `appConfig.treasury.currency`.
-- **Monitoramento e investigação:** o admin pode chamar `/api/admin/treasury/summary` (GET) para ver `profitBalance`/`profitBalanceCents`, `prizeReserveBalance`/`prizeReserveBalanceCents`, `totalBalance`/`totalBalanceCents` e o objeto `config` (`targetPrizeRatio`, `minProfitBuffer`, `maxTransferPerRun`). Há também `/api/admin/treasury/ledger?limit=25` para listar as entradas (`type`, `amount`, `description`, `createdAt`, `metadata`). Rebalanceamentos manuais (`POST /api/admin/treasury/rebalance`) ou movimentações manuais (`POST /api/admin/treasury/profit`, `/profit-to-prize`, `/prize-to-profit`) passam pelo mesmo service e aparecem no ledger com `source`/`context` no metadata. Todas essas rotas exigem `protectedRoute` + `requireAdminRole`, de modo que só painéis administrativos/autenticados com escopo elevam estado.
-- **Como checar o saldo atual:** mesmo que você tenha semeado 5k, o valor exato muda conforme operadores registram lucros e rebalanceamentos. Use o summary acima (`GET /api/admin/treasury/summary`, o controller responde `{ summary, config }`) para ver o valor atualizado; o campo `totalBalance` corresponde ao que chamamos de "saldo da casa" atualmente disponível. O mesmo endpoint também informa se o `targetPrizeRatio` (geralmente 0.6) está sendo respeitado.
+- **Monitoramento e investigação:** o admin pode chamar `/api/v1/admin/treasury/summary` (GET) para ver `profitBalance`/`profitBalanceCents`, `prizeReserveBalance`/`prizeReserveBalanceCents`, `totalBalance`/`totalBalanceCents` e o objeto `config` (`targetPrizeRatio`, `minProfitBuffer`, `maxTransferPerRun`). Há também `/api/v1/admin/treasury/ledger?limit=25` para listar as entradas (`type`, `amount`, `description`, `createdAt`, `metadata`). Rebalanceamentos manuais (`POST /api/v1/admin/treasury/rebalance`) ou movimentações manuais (`POST /api/v1/admin/treasury/profit`, `/profit-to-prize`, `/prize-to-profit`) passam pelo mesmo service e aparecem no ledger com `source`/`context` no metadata. Todas essas rotas exigem `protectedRoute` + `requireAdminRole`, de modo que só painéis administrativos/autenticados com escopo elevam estado.
+- **Como checar o saldo atual:** mesmo que você tenha semeado 5k, o valor exato muda conforme operadores registram lucros e rebalanceamentos. Use o summary acima (`GET /api/v1/admin/treasury/summary`, o controller responde `{ summary, config }`) para ver o valor atualizado; o campo `totalBalance` corresponde ao que chamamos de "saldo da casa" atualmente disponível. O mesmo endpoint também informa se o `targetPrizeRatio` (geralmente 0.6) está sendo respeitado.
 - **Finance:** `AUTH_*` e `RATE_LIMIT_*` globais ainda protegem rotas pois herdam o middleware padrão definido em `app.ts`.
 
 ## Seeds e dados iniciais
@@ -345,7 +345,7 @@ export const ApiErrorSchema = z.object({
 - Execute `npm test -- finance` (ou `npm test -- PurchaseCreditPackage`) para focar nas specs.
 - Teste manualmente:
   ```bash
-  curl -X POST http://localhost:3000/api/wallets/deposit     -H 'Authorization: Bearer <token>'     -H 'Content-Type: application/json'     -d '{"amount":100,"currency":"BRL"}'
+  curl -X POST http://localhost:3000/api/v1/wallets/deposit     -H 'Authorization: Bearer <token>'     -H 'Content-Type: application/json'     -d '{"amount":100,"currency":"BRL"}'
   ```
 - Habilite Redis antes de rodar testes end-to-end para observar `cacheWalletHistory` funcionando (`docker run -p 6379:6379 redis`).
 

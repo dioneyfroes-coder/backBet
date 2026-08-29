@@ -6,29 +6,29 @@ slug: "/docs/games-auth"
 
 # Guia de Integração com Games
 
-Este guia explica como autenticar clientes e orquestrar chamadas ao módulo de mini games (inicialmente **Cara ou Coroa**) exposto pelo `ApiServer`. Ele complementa o `docs/API_DOCS.mdx` com um fluxo passo a passo e exemplos testáveis via `curl`.
+Este guia explica como autenticar clientes e orquestrar chamadas ao módulo de mini games (inicialmente **Cara ou Coroa**) exposto pelo `ApiServer`. Ele complementa o `docs/API_CONTRACT.mdx` com um fluxo passo a passo e exemplos testáveis via `curl`.
 
 ## 1. Endpoints e ambientes
 
 | Ambiente | Base URL | Observações |
 |----------|----------|-------------|
-| Desenvolvimento local | `https://backbet.onrender.com/api` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
-| Homologação/Produção | `https://backbet.onrender.com/api` | Requer JWT válido emitido pelo provedor de identidade configurado ou pelo fluxo `/api/auth/login`. |
+| Desenvolvimento local | `http://localhost:3000` | Rode `npm run dev` e deixe `ALLOW_DEV_BEARER_BYPASS=true` para facilitar logins fake. |
+| Homologação/Produção | `https://api.backbet.com` | Requer JWT válido emitido pelo provedor de identidade configurado ou pelo fluxo `/api/v1/auth/login`. |
 
-Os recursos de games ficam em `/api/games/**`:
+Os recursos de games ficam em `/api/v1/games/**`:
 
-- `GET /games` — lista jogos e limites.
-- `GET /games/coin-flip` — configuração atual.
-- `GET /games/coin-flip/feed` — feed público (sem auth).
-- `GET /games/coin-flip/history` — histórico pessoal (auth obrigatória).
-- `POST /games/coin-flip/play` — executa rodada (auth obrigatória).
+- `GET /api/v1/games` — lista jogos e limites.
+- `GET /api/v1/games/coin-flip` — configuração atual.
+- `GET /api/v1/games/coin-flip/feed` — feed público (sem auth).
+- `GET /api/v1/games/coin-flip/history` — histórico pessoal (auth obrigatória).
+- `POST /api/v1/games/coin-flip/play` — executa rodada (auth obrigatória).
 
 ## 2. Autenticação correta
 
 1. **Produção/Staging (provedor de identidade + JWT)**
   - O frontend autentica via provedor de identidade configurado (OAuth, OTP etc.).
   - Requisções ao backend enviam `Authorization: Bearer <jwt>` com `userId` e `sessionId` emitidos pelos nossos serviços (`JwtService` valida o token).
-  - Tokens expirados devem ser renovados com `/api/auth/refresh` ou pelo provedor de identidade quando aplicável.
+  - Tokens expirados devem ser renovados com `/api/v1/auth/refresh` ou pelo provedor de identidade quando aplicável.
 
 2. **Ambiente local com bypass**
   - Defina `ALLOW_DEV_BEARER_BYPASS=true` no `.env` (já sugerido no Quickstart).
@@ -43,7 +43,7 @@ Os recursos de games ficam em `/api/games/**`:
 ### Exemplo: obtendo um JWT via endpoint interno
 
 ```bash
-curl -X POST https://backbet.onrender.com/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@backbet.com","password":"Passw0rd!"}'
 ```
@@ -67,7 +67,7 @@ Para que o frontend converse corretamente com o módulo de Coin Flip, garanta os
 
 ```ts
 const api = axios.create({
-  baseURL: `${process.env.NEXT_PUBLIC_API_URL}/games`,
+  baseURL: `${process.env.NEXT_PUBLIC_API_URL}/api/v1/games`,
   headers: { 'Content-Type': 'application/json' }
 })
 
@@ -79,21 +79,21 @@ api.interceptors.request.use((config) => {
 
 ### 3.2 Estados que o frontend precisa manter
 
-- `accessToken` vigente + forma de renovação (`/api/auth/refresh` ou SDK do provedor de identidade / fluxo local de JWT).
+- `accessToken` vigente + forma de renovação (`/api/v1/auth/refresh` ou SDK do provedor de identidade / fluxo local de JWT).
 - `userId` do jogador para correlacionar carteira, histórico e feed.
-- Saldo atual via `/api/wallets/me` para validar `wager` antes do POST.
+- Saldo atual via `/api/v1/wallets/me` para validar `wager` antes do POST.
 - Configuração do jogo (`minBet`, `maxBet`, `payoutMultiplier`, `fixedWinAmount`, `enabled`). Atualize quando o usuário abrir o modal ou ao receber erro 503.
 - Histórico de rounds (opcional) para exibir últimas apostas do próprio usuário.
 
 ### 3.3 Sequência mínima de chamadas
 
-1. **Autenticar**: obter JWT pelo provedor de identidade configurado (ou via `/api/auth/login` quando usando o fluxo local de JWT) — use bypass apenas em dev.
-2. **Sincronizar carteira**: `GET /wallets/me` para mostrar saldo e moeda.
-3. **Carregar config**: `GET /games/coin-flip` e cache local até expirar (ex.: 60s) ou até receber `GAME_DISABLED`.
-4. **Mostrar histórico**: `GET /games/coin-flip/history?limit=20` para preencher a tabela inicial.
-5. **Executar rodada**: `POST /games/coin-flip/play` enviando `{ choice: 'HEADS' | 'TAILS', wager: number }`.
+1. **Autenticar**: obter JWT pelo provedor de identidade configurado (ou via `/api/v1/auth/login` quando usando o fluxo local de JWT) — use bypass apenas em dev.
+2. **Sincronizar carteira**: `GET /api/v1/wallets/me` para mostrar saldo e moeda.
+3. **Carregar config**: `GET /api/v1/games/coin-flip` e cache local até expirar (ex.: 60s) ou até receber `GAME_DISABLED`.
+4. **Mostrar histórico**: `GET /api/v1/games/coin-flip/history?limit=20` para preencher a tabela inicial.
+5. **Executar rodada**: `POST /api/v1/games/coin-flip/play` enviando `{ choice: 'HEADS' | 'TAILS', wager: number }`.
 6. **Atualizar UI**: ao receber resposta do `play`, atualize saldo, histórico e destaque a rodada recém-criada.
-7. **Feed opcional**: `GET /games/coin-flip/feed` a cada 5-10s (ou via SSE/WebSocket quando disponível) para mostrar rounds públicos.
+7. **Feed opcional**: `GET /api/v1/games/coin-flip/feed` a cada 5-10s (ou via SSE/WebSocket quando disponível) para mostrar rounds públicos.
 
 ### 3.4 Tratamento de respostas obrigatórias
 
@@ -116,7 +116,7 @@ api.interceptors.request.use((config) => {
 ### Passo 1 — Descobrir os jogos
 
 ```bash
-curl https://backbet.onrender.com/api/games | jq
+curl http://localhost:3000/api/v1/games | jq
 ```
 
 Resposta (resumida):
@@ -142,7 +142,7 @@ Resposta (resumida):
 ### Passo 2 — Ler a configuração do jogo
 
 ```bash
-curl https://backbet.onrender.com/api/games/coin-flip | jq
+curl http://localhost:3000/api/v1/games/coin-flip | jq
 ```
 
 Use esse payload para montar sliders de aposta e informar se o modo de pagamento é **fixo** (`fixedWinAmount`) ou multiplicador (`payoutMultiplier`).
@@ -150,7 +150,7 @@ Use esse payload para montar sliders de aposta e informar se o modo de pagamento
 ### Passo 3 — Validar autenticação e histórico
 
 ```bash
-curl https://backbet.onrender.com/api/games/coin-flip/history?limit=20 \
+curl http://localhost:3000/api/v1/games/coin-flip/history?limit=20 \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
@@ -164,7 +164,7 @@ Principais erros:
 ### Passo 4 — Executar uma rodada
 
 ```bash
-curl -X POST https://backbet.onrender.com/api/games/coin-flip/play \
+curl -X POST http://localhost:3000/api/v1/games/coin-flip/play \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -d '{"choice":"HEADS","wager":25}' | jq
@@ -177,7 +177,7 @@ curl -X POST https://backbet.onrender.com/api/games/coin-flip/play \
 ### Passo 5 — Consumir o feed público
 
 ```bash
-curl https://backbet.onrender.com/api/games/coin-flip/feed | jq '.data.rounds[0]'
+curl http://localhost:3000/api/v1/games/coin-flip/feed | jq '.data.rounds[0]'
 ```
 
 Use para painéis em tempo real; não há dados pessoais além do `userId` (você pode ofuscar no frontend se necessário).
@@ -191,7 +191,7 @@ Use para painéis em tempo real; não há dados pessoais além do `userId` (voc�
 | `GAME_COINFLIP_PAYOUT_MULTIPLIER` | `.env` | `2` (padrão). |
 | `GAME_INTEGRATION_WEBHOOK_ENABLED/URL` | `.env` | Habilite quando quiser disparar webhooks após cada rodada. |
 | `ALLOW_DEV_BEARER_BYPASS` | `.env` | `true` apenas em dev; **false** em prod. |
-| `ADMIN_USER_IDS` | `.env` | IDs autorizados a usar `/api/admin/**`. |
+| `ADMIN_USER_IDS` | `.env` | IDs autorizados a usar `/api/v1/admin/**`. |
 
 ## 6. Troubleshooting rápido
 
@@ -199,11 +199,54 @@ Use para painéis em tempo real; não há dados pessoais além do `userId` (voc�
 |---------|---------|
 | `401` mesmo com token | Verifique se o token parece um JWT (`AAA.BBB.CCC`). No bypass, use apenas o `userId`. |
 | `503 GAME_DISABLED` | Confirmar `GAME_COINFLIP_ENABLED` e logs do `GameController`. |
-| Débito não aparece na carteira | Certifique-se de usar o mesmo usuário para carteira e game. Confira `/api/wallets/me`. |
+| Débito não aparece na carteira | Certifique-se de usar o mesmo usuário para carteira e game. Confira `/api/v1/wallets/me`. |
 | Feed vazio | Sem partidas recentes. Rode `play` ou aumente o limite (`ListRecentRoundsUseCase` usa 20 itens). |
 
-## 7. Próximos passos
+## 7. Aposta múltipla (`POST /api/v1/games/coin-flip/play-batch`)
 
-1. Automatize smoke tests chamando `/api/games` e `/api/games/coin-flip/play` com um usuário seed.
+Permite enviar várias escolhas (cara ou coroa) em um único request. O backend executa cada rodada **sequencialmente**, registra todas as jogadas e retorna o resultado de cada rodada e o saldo final (soma de perdas e ganhos).
+
+```json
+POST /api/v1/games/coin-flip/play-batch
+{
+  "choices": ["HEADS", "TAILS", "HEADS"]
+}
+```
+
+```json
+{
+  "rounds": [
+    { "result": "WIN", ... },
+    { "result": "LOSE", ... },
+    { "result": "WIN", ... }
+  ],
+  "totalPrize": 6.0
+}
+```
+
+- `totalPrize` já considera o valor apostado e o prêmio de cada rodada.
+- O valor de aposta é sempre o valor fixo configurado no backend.
+- O saldo do usuário é verificado antes de cada rodada; todas as rodadas entram no histórico.
+- O endpoint é protegido por autenticação.
+
+## 8. Aposta e prêmio fixos (`GAME_COINFLIP_FIXED_WIN`)
+
+Para fixar o valor apostado (ex.: R$ 1,00) e o prêmio por vitória (ex.: R$ 3,50), defina no `.env`:
+
+```
+GAME_COINFLIP_MIN_BET=1
+GAME_COINFLIP_MAX_BET=1
+GAME_COINFLIP_PAYOUT_MULTIPLIER=1
+GAME_COINFLIP_FIXED_WIN=3.5
+```
+
+- `GAME_COINFLIP_MIN_BET`/`GAME_COINFLIP_MAX_BET` iguais restringem a aposta a exatamente esse valor.
+- `GAME_COINFLIP_FIXED_WIN` define o prêmio fixo por vitória.
+- `GAME_COINFLIP_PAYOUT_MULTIPLIER` é **ignorado** quando `GAME_COINFLIP_FIXED_WIN` está definido (o jogo paga o valor fixo e marca `metadata.source=fixed-win` nos logs).
+- Não requer mudança de código; os testes de `CoinFlipGameService.spec.ts` cobrem aposta/prêmio fixo.
+
+## 9. Próximos passos
+
+1. Automatize smoke tests chamando `/api/v1/games` e `/api/v1/games/coin-flip/play` com um usuário seed.
 2. Quando habilitar webhooks (`GAME_INTEGRATION_WEBHOOK_ENABLED=true`), documente o endpoint externo e trate retries idempotentes.
 3. Atualize o frontend para exibir mensagens claras para `401`, `422` (validação) e `503`.
