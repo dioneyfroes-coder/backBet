@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BackBet — Console de Demonstração</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- ======= Autenticação ======= -->
+    <section id="auth-view" class="view">
+      <div class="auth-card">
+        <h1>BackBet</h1>
+        <p class="subtitle">Console de demonstração da API</p>
+
+        <form id="login-form" class="auth-form">
+          <h2>Entrar</h2>
+          <label>
+            Email
+            <input type="email" name="email" required autocomplete="email" />
+          </label>
+          <label>
+            Senha
+            <input type="password" name="password" required autocomplete="current-password" />
+          </label>
+          <button type="submit" class="primary">Entrar</button>
+        </form>
+
+        <div class="divider">ou</div>
+
+        <form id="register-form" class="auth-form">
+          <h2>Criar conta</h2>
+          <div class="row">
+            <label>
+              Nome
+              <input type="text" name="firstName" required minlength="2" />
+            </label>
+            <label>
+              Sobrenome
+              <input type="text" name="lastName" required minlength="2" />
+            </label>
+          </div>
+          <label>
+            Username
+            <input type="text" name="username" required minlength="3" pattern="[a-zA-Z0-9_]+" />
+          </label>
+          <label>
+            Email
+            <input type="email" name="email" required autocomplete="email" />
+          </label>
+          <label>
+            Senha (mínimo 8 caracteres)
+            <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+          </label>
+          <button type="submit" class="primary">Criar conta</button>
+        </form>
+
+        <p id="auth-message" class="message" role="status"></p>
+      </div>
+    </section>
+
+    <!-- ======= Aplicação (autenticado) ======= -->
+    <section id="app-view" class="view hidden">
+      <header class="topbar">
+        <div class="brand">BackBet</div>
+        <div class="balance-chip">
+          <span class="balance-label">Saldo</span>
+          <span id="balance-value" class="balance-value">—</span>
+        </div>
+        <div class="user-box">
+          <span id="user-name" class="user-name">—</span>
+          <button id="logout-btn" class="ghost">Sair</button>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button data-tab="saldo" class="tab active">Saldo</button>
+        <button data-tab="deposito" class="tab">Depósito</button>
+        <button data-tab="saque" class="tab">Saque</button>
+        <button data-tab="eventos" class="tab">Eventos</button>
+        <button data-tab="historico" class="tab">Histórico</button>
+        <button data-tab="perfil" class="tab">Perfil</button>
+      </nav>
+
+      <main>
+        <p id="app-message" class="message" role="status"></p>
+
+        <!-- Saldo -->
+        <section id="tab-saldo" class="tab-panel">
+          <h2>Saldo da carteira</h2>
+          <div id="wallet-overview" class="card">Carregando…</div>
+        </section>
+
+        <!-- Depósito -->
+        <section id="tab-deposito" class="tab-panel hidden">
+          <h2>Depósito via Pix</h2>
+          <form id="deposit-form" class="card">
+            <label>
+              Valor (BRL)
+              <input type="number" name="amount" step="0.01" min="1" required />
+            </label>
+            <button type="submit" class="primary">Depositar</button>
+          </form>
+          <div id="deposit-result" class="card hidden"></div>
+        </section>
+
+        <!-- Saque -->
+        <section id="tab-saque" class="tab-panel hidden">
+          <h2>Saque via Pix</h2>
+          <form id="withdraw-form" class="card">
+            <label>
+              Valor (BRL — mínimo R$ 100,00)
+              <input type="number" name="amount" step="0.01" min="100" required />
+            </label>
+            <label>
+              Chave Pix
+              <input type="text" name="pixKey" minlength="5" placeholder="email, telefone ou CPF" />
+            </label>
+            <button type="submit" class="primary">Sacar</button>
+          </form>
+          <div id="withdraw-result" class="card hidden"></div>
+        </section>
+
+        <!-- Eventos / Apostas -->
+        <section id="tab-eventos" class="tab-panel hidden">
+          <h2>Eventos disponíveis</h2>
+          <div id="events-list" class="events">Carregando…</div>
+        </section>
+
+        <!-- Histórico -->
+        <section id="tab-historico" class="tab-panel hidden">
+          <h2>Minhas apostas</h2>
+          <div id="bets-list" class="card">Carregando…</div>
+          <h2>Extrato da carteira</h2>
+          <div id="ledger-list" class="card">Carregando…</div>
+        </section>
+
+        <!-- Perfil -->
+        <section id="tab-perfil" class="tab-panel hidden">
+          <h2>Meu perfil</h2>
+          <div id="profile-box" class="card">Carregando…</div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

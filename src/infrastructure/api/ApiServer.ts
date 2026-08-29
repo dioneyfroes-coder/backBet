@@ -1,5 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import path from 'path';
+import { existsSync } from 'fs';
 import passport from 'passport';
 import cors, { CorsOptions } from 'cors';
 import helmet, { HelmetOptions } from 'helmet';
@@ -162,6 +163,12 @@ export class ApiServer {
       this.app.use('/uploads', express.static(uploadsPath));
     } catch (err) {
       console.warn('Failed to mount uploads static route', err);
+    }
+
+    // Interface mínima de demonstração (HTML+JS vanilla) em /console
+    const webDir = this.resolveWebClientDirectory();
+    if (webDir) {
+      this.app.use('/console', express.static(webDir, { index: 'index.html' }));
     }
 
     configurePassportJwt();
@@ -335,10 +342,19 @@ export class ApiServer {
     return this.app;
   }
 
+  private resolveWebClientDirectory(): string | undefined {
+    const candidates = [
+      path.join(process.cwd(), 'dist', 'infrastructure', 'web'),
+      path.join(process.cwd(), 'src', 'infrastructure', 'web'),
+    ];
+    return candidates.find((candidate) => existsSync(path.join(candidate, 'index.html')));
+  }
+
   public start(): void {
     this.app.listen(this.port, () => {
       console.log(`🚀 BackBet API rodando em http://localhost:${this.port}`);
       console.log(`📚 Swagger: http://localhost:${this.port}/api/docs`);
+      console.log(`🖥️  Console de demonstração: http://localhost:${this.port}/console`);
     });
   }
 

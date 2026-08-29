@@ -37,6 +37,7 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
         events: '/api/events',
         games: '/api/games',
         admin: '/api/admin',
+        console: '/console',
       },
     });
   });
@@ -85,6 +86,7 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
         { rel: 'bets', href: '/api/bets', description: 'Gestão de apostas' },
         { rel: 'wallet', href: '/api/wallets', description: 'Saldos e transações' },
         { rel: 'admin', href: '/api/admin', description: 'Backoffice seguro' },
+        { rel: 'console', href: '/console', description: 'Interface mínima de demonstração' },
       ],
     });
   });
