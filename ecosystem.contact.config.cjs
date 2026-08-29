@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'backbet-contact-worker',
-      script: 'dist/src/scripts/start-contact-worker.js',
+      script: './dist/scripts/start-contact-worker.js',
       // use environment suitable for worker
       env: {
         NODE_ENV: 'production',

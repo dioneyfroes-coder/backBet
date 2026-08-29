@@ -32,10 +32,10 @@ todo.txt
 
 # Configurações de execução fora do container (worker direto via node,
 # sem PM2, ecosystem nem scripts auxiliares)
-ecosystem.*.config.cjs
+ecosystem*.config.cjs
 scripts
 jest.config.js
-eslint.config.js
+eslint.config.mjs
 .prettierrc
 tsconfig.dev.json
 tsconfig.test.json

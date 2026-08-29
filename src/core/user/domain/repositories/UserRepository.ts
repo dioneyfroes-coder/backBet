@@ -2,8 +2,9 @@ import { User } from '../entities/User';
 import { IUserRepository } from './IUserRepository';
 
 /**
- * Implementação em memória do repositório de usuários
- * TODO: Substituir por implementação com banco de dados (PostgreSQL/TypeORM)
+ * Implementação em memória do repositório de usuários.
+ * Usada em testes e quando USE_MONGOOSE_PERSISTENCE=false; em produção a
+ * factory resolve MongooseUserRepository (src/infrastructure/persistence/factory.ts).
  */
 export class UserRepository implements IUserRepository {
   private users: Map<string, User> = new Map();

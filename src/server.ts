@@ -182,10 +182,6 @@ async function main() {
       sigapTransmissionJob.start();
     }
 
-    // TODO: Registrar outras rotas
-    // const betRoutes = createBetRoutes();
-    // apiServer.registerRoutes(betRoutes); // monta em /api/v1
-
     // Registrar handlers globais
     apiServer.get404Handler();
     apiServer.registerErrorHandler();
