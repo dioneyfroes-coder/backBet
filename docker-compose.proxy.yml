@@ -1,0 +1,39 @@
+# =============================================================================
+# BackBet — Overlay do REVERSE PROXY (Fase 25 — Deploy)
+#
+# Este arquivo é um OVERLAY: NÃO sobe sozinho. Combine-o com o
+# docker-compose.yml (API + Redis + workers) do server01:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
+#
+# O Caddy assume as portas 80/443 e se torna o ÚNICO ponto público de entrada:
+#
+#   Cloudflare  →  Caddy (TLS automático)  →  backbet:3000 (rede interna)
+#
+# Com o proxy ativo, deixe a API fora da Internet definindo no .env:
+#   BACKBET_PORT=127.0.0.1:3000     # expõe a API apenas em loopback
+#
+# MongoDB (server02) e Redis (interno ao Compose) continuam SEM porta pública.
+# =============================================================================
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: "${PUBLIC_DOMAIN:?Defina PUBLIC_DOMAIN no .env (ex.: api.backbet.example.com)}"
+    volumes:
+      - ./deploy/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backbet:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

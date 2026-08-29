@@ -1,0 +1,131 @@
+---
+title: "Deploy — Fase 25"
+description: "Arquitetura inicial de deploy do BackBet: Cloudflare, reverse proxy Caddy com TLS, separação de processos (API/saque/contatos/e-mail) e Mongo/Redis sem acesso público."
+slug: "/docs/deploy"
+---
+
+# Deploy — Fase 25
+
+> Esta fase adiciona a camada faltante da Fase 17 (`docs/DOCKER.mdx`): o
+> **reverse proxy** com TLS (Caddy) na frente da API e o fluxo completo
+> **Cloudflare → proxy → API/workers**. Processos de saque, contatos e
+> e-mail já são separados desde a Fase 17.
+
+## Arquitetura inicial suficiente
+
+```text
+Internet
+   ↓
+Cloudflare (DNS proxied + TLS/edge, opcional Tunnel = 0 portas públicas)
+   ↓
+Caddy — reverse proxy / load balancer / TLS automático (server01)
+   ↓
+BackBet API (backbet:3000, rede interna do Compose)
+   ├── MongoDB   (server02, privado — NUNCA público)
+   ├── Redis     (server01, interno ao Compose — sem porta publicada)
+   └── Workers   (processos separados, mesma imagem)
+        ├── saque      (start-withdrawal-worker.js — Bull: withdrawal_payouts)
+        └── contatos   (start-contact-worker.js — Bull: contact_queue + e-mail)
+```
+
+Decisões do MVP:
+
+- **Um único ponto público**: o Caddy publica só `80/443` e conversa com a API
+  na rede interna do Compose. Com o overlay ativo, a API não precisa de porta
+  pública (`BACKBET_PORT=127.0.0.1:3000`).
+- **TLS automático** pelo Caddy (Let's Encrypt). Com Cloudflare na frente em
+  modo proxied, use **Full** (ou Full (strict)).
+- **Workers separados da API**: consumem as mesmas filas Bull; escalar a API
+  com `--scale backbet=N` não duplica o processamento das filas (semântica
+  Bull), e múltiplos workers também são seguros (a fila distribui).
+- **E-mail**: hoje é processado pelo `contact-worker` (mesmo script usado pelo
+  app `backbet-mailer` do PM2). Para volume, rode um segundo worker via saída
+  do compose `contact-worker` em outra instância — sem mudança de código.
+
+## Arquivos desta fase
+
+| Arquivo | Onde roda | Função |
+|---|---|---|
+| `docker-compose.proxy.yml` | server01 (overlay) | Adiciona o serviço `caddy` + volumes `caddy_data`/`caddy_config` |
+| `deploy/proxy/Caddyfile` | montado em `/etc/caddy/Caddyfile` | Reverse proxy, TLS, gzip, headers de segurança |
+| `docs/DEPLOY.mdx` | — | Este guia |
+
+## Passo a passo
+
+### 1. Cloudflare (DNS)
+
+1. Aponte o domínio para o DNS da Cloudflare (nameservers).
+2. Crie um registro **A proxied** do `PUBLIC_DOMAIN` (ex.: `api.backbet.example.com`)
+   para o IP público do server01.
+3. SSL/TLS → modo **Full** (certificado da origem: o Caddy emite o dele).
+
+### 2. Reverse proxy (Caddy) no server01
+
+```bash
+cp .env.example .env
+# edite o .env e adicione:
+#   PUBLIC_DOMAIN=api.backbet.example.com
+#   BACKBET_PORT=127.0.0.1:3000     # API só em loopback (proxy é o ponto público)
+
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
+```
+
+O Caddy valida o domínio, emite o certificado e roteia para `backbet:3000`.
+Para balancear a API (opcional):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --scale backbet=2
+```
+
+### 3. Validação
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.proxy.yml ps
+curl -sf https://$PUBLIC_DOMAIN/health
+curl -sf https://$PUBLIC_DOMAIN/readiness
+curl -sfI https://$PUBLIC_DOMAIN/ | grep -i 'strict-transport-security|server'
+```
+
+Checagem de superfície exposta (deve haver **só** 80/443 no server01):
+
+```bash
+ss -tlnp | grep -E ':80|:443|:3000'
+# esperado: 80/443 = caddy; 3000 = 127.0.0.1 (loopback) se BACKBET_PORT=127.0.0.1:3000
+```
+
+### 4. Nada de Mongo/Redis público
+
+- **Redis**: no `docker-compose.yml` o serviço `redis` **não publica porta**
+  (acesso interno ao Compose apenas) — conferido por design.
+- **MongoDB**: mora no server02 (`docker-compose.mongo.yml`). Reforce:
+  - `MONGO_BIND_IP` apontando para o IP da LAN (em vez de `0.0.0.0`);
+  - firewall liberando `27017` **somente** para o IP do server01:
+    `sudo ufw allow from <ip-do-server01> to any port 27017 proto tcp`.
+  - Usuário da aplicação `readWrite` apenas no banco `backbet`
+    (`deploy/mongo/init-app-user.sh`).
+- **Variant Zero-port**: com **Cloudflare Tunnel** (`cloudflared` no server01)
+  o Caddy nem precisa expor `80/443`; o túnel conecta o host à edge da
+  Cloudflare. Ótimo quando o server01 só tem acesso de saída.
+
+## Separação de processos (API × saque × contatos × e-mail)
+
+| Processo | Script | Fila / papel |
+|---|---|---|
+| API | `dist/index.js` | HTTP + admin + cron (contagem de dependências) |
+| Worker de saque | `dist/scripts/start-withdrawal-worker.js` | `withdrawal_payouts` → adaptador Pix → atualiza Mongo |
+| Worker de contatos | `dist/scripts/start-contact-worker.js` | `contact_queue` → envia e-mail (SMTP/`jsonTransport`) |
+| E-mail (volume) | mesma imagem/script | segundo worker da fila de contato, se necessário |
+
+No PM2 a separação equivalente já existe: `ecosystem.config.cjs` (API),
+`ecosystem.withdrawal.config.cjs`, `ecosystem.contact.config.cjs` e
+`ecosystem.mailer.config.cjs`.
+
+## Checklist pré-lançamento (rampa para as fases 26–27)
+
+- [ ] `.env` fora do Git; `JWT_SECRET` forte (`openssl rand -hex 32`);
+- [ ] `MONGODB_URI`/`REDIS_URL` apontando para hosts privados;
+- [ ] Firewall: só 80/443 públicos; `27017` restrito ao server01;
+  `/metrics` do Prometheus restrito ou sem exposição pública;
+- [ ] `PUBLIC_DOMAIN` com registro **proxied** na Cloudflare e TLS Full;
+- [ ] `npm run backup:create` agendado e `docs/BACKUP_RECOVERY.mdx` seguido;
+- [ ] Alertas de `deploy/observability` ativos (ver `docs/OBSERVABILITY.mdx`).

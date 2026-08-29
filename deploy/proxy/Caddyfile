@@ -1,0 +1,30 @@
+# =====================================================================
+# BackBet — Configuração do Caddy (reverse proxy / TLS / balanceamento)
+# Fase 25 — Deploy. Usado pelo overlay docker-compose.proxy.yml.
+#
+# O domínio público vem de ${DOMAIN} (env PUBLIC_DOMAIN no .env do
+# server01). O upstream é o serviço compose "backbet" na rede interna.
+# =====================================================================
+
+{$DOMAIN:https://localhost} {
+	# Compressão e headers de segurança mínimos
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+
+	# Ponto público único para a API. Com mais de um upstream (ex.:
+	# docker compose up --scale backbet=2) o "random" balanceia por cliente.
+	reverse_proxy backbet:3000 {
+		lb_policy random
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
