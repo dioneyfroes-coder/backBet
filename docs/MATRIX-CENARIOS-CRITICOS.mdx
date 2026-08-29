@@ -1,0 +1,105 @@
+# Matriz de Cenários Críticos (Fase 20)
+
+Matriz que cobre os cenários **críticos para o dinheiro** do MVP: Carteira,
+Aposta, Settlement, Withdrawal e Pix. Cada cenário indica **onde** ele é
+validado (arquivo:linha) ou se é uma **lacuna** — incluindo lacunas de
+**funcionalidade** (não é só teste faltando, é código que não existe).
+
+Legenda de status:
+
+- **Coberto** — existe teste automático que valida o cenário.
+- **Novo (Fase 20)** — teste adicionado nesta fase.
+- **Parcial** — o caminho principal está coberto, mas um detalhe não.
+- **Funcionalidade não existe** — não há teste possível sem antes implementar a
+  funcionalidade (registrado como dívida/risco, ver seção Pix).
+
+---
+
+## Carteira
+
+| # | Cenário | Status | Onde é validado |
+|---|---------|--------|-----------------|
+| W1 | Rollback de transação (falha após débito deixa carteira/aposta/ledger consistentes) | Novo (Fase 20) | `src/core/betting/domain/services/__tests__/BetService.critical.test.ts` — falha de risco pós-débito restaura saldo, não persiste aposta nem ledger (simulação in-memory do abort da transação) |
+| W2 | Depósito concorrente não duplica crédito | Coberto | `src/core/finance/domain/services/__tests__/WalletService.test.ts`, `WalletConcurrency.test.ts:104-149`, guarda de idempotência via ledger em `WalletService.ts:127-138` |
+| W3 | Saque concorrente não duplica débito | Coberto | `WalletConcurrency.test.ts:104-149`, versão/otimistic locking em `WalletRepository.ts:21-36` |
+| W4 | Conflito de versão (update obsoleto) | Coberto | `WalletRepository.ts:21-36` (CONFLICT 409) + `WalletConcurrency.test.ts` |
+| W5 | Saldo nunca fica negativo | Novo (Fase 20) | `BetService.critical.test.ts` (aplicação simultânea: `balance >= 0`, débitos do ledger casam com apostas) |
+| W6 | Saque com saldo insuficiente não debita | Coberto | `Wallet.ts:62-66` `WALLET_INSUFFICIENT_FUNDS` + `WalletService.test.ts`, `WithdrawalRequestService.test.ts:36-38` |
+
+## Aposta
+
+| # | Cenário | Status | Onde é validado |
+|---|---------|--------|-----------------|
+| B1 | Saldo insuficiente ao apostar | Novo (Fase 20) | `BetService.critical.test.ts` — `WALLET_INSUFFICIENT_FUNDS`, nenhuma aposta criada, saldo intacto |
+| B2 | Aposta normal (débito + registro + risco) | Coberto | `BetService.test.ts:96-116`, `BetController.test.ts:95-128`, `Security.test.ts:364-394` |
+| B3 | Aposta simultânea sem dupla cobrança | Novo (Fase 20) | `BetService.critical.test.ts` (+ parcial existente em `RiskService.test.ts:50-60`, `WalletConcurrency.test.ts:104-149`) |
+| B4 | Evento encerrado bloqueia aposta | Coberto | `BetService.ts:258-266` + `BetService.test.ts` |
+| B5 | Mercado fechado bloqueia aposta | Coberto | `BetService.ts:268-276` + `BetService.test.ts` |
+| B6 | Odd inexistente | Coberto | `BetService.ts:232-242` (`ODD_NOT_FOUND`) + `BetService.test.ts` |
+| B7 | Risco excedido (limite de exposição) | Parcial | `RiskService.test.ts` (reserva) e caminho `RISK_LIMIT_EXCEEDED` em `BetService.ts:95-101`; integração via admin reconcile coberta em `AdminController.test`/`Security.test` — teste direto da rejeição por limite na aposta vive em `BetService.critical.test.ts` (cenário de rollback usa essa recusa para disparar o abort) |
+| B8 | Rollback da transação da aposta | Novo (Fase 20) | `BetService.critical.test.ts` (ver W1) — simulação in-memory; **pendente**: teste de rollback REAL com transação Mongo (`withTransaction` + replicaset) |
+
+## Settlement
+
+| # | Cenário | Status | Onde é validado |
+|---|---------|--------|-----------------|
+| S1 | Liquidação WIN credita retorno | Novo (Fase 20) | `src/infrastructure/api/__tests__/Settlement.integration.test.ts` — POST `/api/admin/bets/:id/settle` via HTTP credita 190 de 400+retorno sobre aposta de 100 @1.9 |
+| S2 | Liquidação LOST não credita | Novo (Fase 20) | `Settlement.integration.test.ts` — saldo permanece após débito da estaca |
+| S3 | CANCEL com reembolso | Coberto | `BetService.ts:112-161` (`BET_REFUND`) + `BetService.test.ts` (cancel) |
+| S4 | Liquidação duplicada (Idempotency-Key) não paga duas vezes | Novo (Fase 20) | `Settlement.integration.test.ts` — replay retorna o resultado armazenado e o saldo continua igual (guard `IdempotencyService.ts:124-142`, `ResolveBetUseCase.ts:14-25`, `restoreBet.ts`) |
+| S5 | Resultado inválido rejeitado | Novo (Fase 20) | `Settlement.integration.test.ts` — `result: 'WIN'` → 400 pelo `SettleBetDTO` (`AdminDTOs.ts:3-6`) |
+| S6 | Não-admin bloqueado | Novo (Fase 20) | `Settlement.integration.test.ts` — 403 `FORBIDDEN` (`AuthMiddleware.ts:119-137`) |
+
+## Withdrawal
+
+| # | Cenário | Status | Onde é validado |
+|---|---------|--------|-----------------|
+| WD1 | Request REQUESTED cria trava (lock) | Coberto | `WithdrawalRequestService.test.ts:29-46`, `WithdrawalRequest.test.ts:7-10` |
+| WD2 | Request VALIDATING e APPROVED (estado) | Coberto | `WithdrawalRequestService.test.ts:48-57` e `:59-70`, `WithdrawalRequest.test.ts` |
+| WD3 | Processamento PROCESSING → COMPLETED + débito do locked | Parcial | `WithdrawalPayoutWorker.state.test.ts:19-28`, `WithdrawalRequestService.test.ts:108-122` (completePayout/failPayout); débito do locked em `WalletService.withdrawLocked` |
+| WD4 | Falha: FAILED e reversão do lock | Coberto | `state.test.ts`, `WithdrawalRequestService.test.ts` (`failPayout`), `Wallet.ts:91-104` |
+| WD5 | Retry até o provedor aceitar | Coberto | `WithdrawalPayoutWorker.e2e.test.ts` (2 falhas → sucesso), `TestPaymentAdapter` |
+| WD6 | Entrega duplicada do worker (mesmo payload) paga uma única vez | Novo (Fase 20) | `WithdrawalPayoutWorker.safety.test.ts` — sequencial (2ª call → CONFLICT, adapter chamado 1x) e concorrente (1 fulfilled / 1 CONFLICT, débito único) via `IdempotencyService` (`withdrawal-payout:<requestId>`) |
+| WD7 | Timeout do provedor não debita; retry conclui | Novo (Fase 20) | `WithdrawalPayoutWorker.safety.test.ts` — `ETIMEDOUT` → saldo intacto e pedido PROCESSING; retry → COMPLETED, débito único |
+| WD8 | Resposta duplicada do provedor pós-completePayout não debita duas vezes | Novo (Fase 20) | `WithdrawalPayoutWorker.safety.test.ts` — `completePayout` repetido → CONFLICT (transição de estado) + guard de idempotência no ledger (`WITHDRAWAL_COMPLETED:<requestId>`) |
+
+## Pix (webhook)
+
+| # | Cenário | Status | Onde é validado |
+|---|---------|--------|-----------------|
+| P1 | Webhook Pix duplicado não credita duas vezes | **Funcionalidade não existe** | — |
+| P2 | Webhook com payload/assinatura inválidos é rejeitado | **Funcionalidade não existe** | — |
+| P3 | Pagamento atrasado confirmado após expiração | **Funcionalidade não existe** | — |
+| P4 | Confirmação de pagamento credita o depósito | **Funcionalidade não existe** (equivalente síncrono coberto) | `Deposit.execute` chama `createCharge` + `confirmPayment` síncronos (`src/core/finance/application/use-cases/Deposit.ts`), coberto pelos testes de `WalletController`/`WalletService` |
+| P5 | Cancelamento/estorno de pagamento | **Funcionalidade não existe** | — |
+| P6 | Valor divergente entre charge e webhook | **Funcionalidade não existe** | — |
+| P7 | Reference divergente (webhook não casa com depósito) | **Funcionalidade não existe** | — |
+
+> **Por que os cenários P1-P7 estão marcados como "funcionalidade não existe":**
+> o código atual **não implementa recebimento de webhook Pix**. O pagamento é
+> confirmado de forma **síncrona** no depósito via `MockPixProvider`
+> (`payWithdrawal`/`confirmPayment`), e o saque assume `COMPLETED` imediatamente
+> quando o port de pagamento responde sucesso. O único webhook recebido pelo
+> sistema é o de jogo (outgoing gate, `WebhookGameIntegrationAdapter.ts`).
+> Os 7 cenários de webhook Pix do plano **não podem ser testados** até que a
+> funcionalidade seja construída (rota `POST /api/webhooks/pix`, identificação
+> da charge por reference, validação de valor/status e idempotência por evento
+> externo). Isso é **dívida/risco registrado da Fase 20** e deve entrar no
+> backlog da integração Pix real (mock PSP síncrono atual não cobre).
+
+---
+
+## Lacunas registradas que exigem decisão
+
+1. **Webhook Pix** (P1-P7) — precisa de funcionalidade nova antes de qualquer
+   teste. Recomendado: implementar rota de webhook com idempotência por
+   `chargeId`, validação de `reference`/`amount`/`status` e guarda contra
+   duplicidade, seguida dos 7 testes acima.
+2. **Rollback real com transação Mongo** (W1/B8) — a simulação in-memory prova a
+   orquestração do `BetService` (saldo restaurado, sem aposta, sem movimento de
+   ledger), mas o rollback efetivo com `withTransaction` do MongoDB exige a
+   suíte de integração contra o replica set (`npm run test:integration:full`)
+   — adicionar caso lá é o próximo passo natural.
+3. **Limite de exposição na aposta via HTTP** — a rejeição por `RISK_LIMIT_EXCEEDED`
+   tem cobertura unitária; um teste HTTP com risco estourado fecharia o ciclo
+   admin → aposta.

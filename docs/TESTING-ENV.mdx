@@ -135,6 +135,26 @@ a **mesma** infra (`docker compose -f docker-compose.test.yml up -d --wait`),
 roda `npm run test:integration` e derruba a infra (`down`) sempre — provando que
 o ambiente de teste é reproduzível fora da máquina do dev.
 
+## Cenários críticos (Fase 20) — matriz de dinheiro
+
+A **matriz de cenários críticos** (Carteira/Aposta/Settlement/Withdrawal/Pix)
+vive em [`MATRIX-CENARIOS-CRITICOS.mdx`](./MATRIX-CENARIOS-CRITICOS.mdx) e
+aponta, cenário a cenário, o arquivo:linha que o valida.
+
+Testes adicionados na Fase 20 (rodam no `npm run check` normal, sem infra):
+
+| Teste | O que garante |
+|---|---|
+| `src/core/betting/domain/services/__tests__/BetService.critical.test.ts` | saldo insuficiente; **rollback de transação** (falha pós-débito restaura saldo, não persiste aposta/ledger); **aposta simultânea** sem dupla cobrança (`balance >= 0`, débitos do ledger casam) |
+| `src/infrastructure/api/__tests__/Settlement.integration.test.ts` | **settlement via HTTP** — WON credita retorno, LOST não credita, replay com `Idempotency-Key` não paga duas vezes, `result` inválido → 400, não-admin → 403 |
+| `src/infrastructure/withdrawals/__tests__/WithdrawalPayoutWorker.safety.test.ts` | **worker**: entrega duplicada (sequencial e concorrente) paga 1x; timeout do provedor não debita e retry conclui; resposta duplicada do provedor não debita 2x (guarda do ledger) |
+
+**Risco registrado**: os cenários de **webhook Pix** (P1-P7) da matriz estão
+marcados como *funcionalidade não existe* — o sistema confirma pagamento de
+forma **síncrona** (depósito/`confirmPayment`), sem rota de webhook. Não são
+testáveis antes de implementar a funcionalidade; entra no backlog da integração
+Pix real.
+
 ## Troubleshooting
 
 | Sintoma | Causa / solução |
