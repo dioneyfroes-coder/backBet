@@ -1,0 +1,89 @@
+---
+title: "Segurança Operacional — Fase 27"
+description: "Checklist de endurecimento pré-deploy do BackBet: HTTPS, firewall, SSH por chave, updates automáticos, Mongo/Redis privados, logs sem segredos, backups, monitoramento e scan de dependências."
+slug: "/docs/security-ops"
+---
+
+# Segurança Operacional — Fase 27
+
+> Tudo que precisa estar verificado **antes do primeiro deploy**. Itens já
+> tratados em fases anteriores aparecem com o vínculo da fase/arquivo.
+
+## Checklist pré-deploy
+
+| Item | Situação | Onde/passo |
+|---|---|---|
+| **HTTPS** | ✅ Fase 25 | Caddy + Cloudflare (`docs/DEPLOY.mdx`); cert. automático |
+| **Firewall** | ✅ Fase 27 | `deploy/harden-server.sh` (UFW: 22/80/443; deny default) |
+| **SSH por chave** | ✅ Fase 27 | mesmo script; exige chave antes de desabilitar senha |
+| **SSH root desabilitado** | ✅ Fase 27 | `PermitRootLogin no` no script |
+| **Updates automáticos de segurança** | ✅ Fase 27 | `unattended-upgrades` no script (server01) |
+| **Mongo privado** | ✅ Fase 17/25 | server02 separado + UFW `27017` só do server01 (`HOST_ROLE=db`) |
+| **Redis privado** | ✅ Fase 17 | serviço interno do Compose, **sem porta publicada** |
+| **Logs sem segredos** | ✅ Fase 26/27 | `docs/LOGS.mdx`; boot loga só `hasJwtSecret`; guard `check:secrets` |
+| **Backups** | ✅ Fase 24 | `npm run backup:*` + `docs/BACKUP_RECOVERY.mdx` |
+| **Monitoramento** | ✅ Fase 23 | `deploy/observability` + alertas (12 regras) |
+| **Scan de dependências** | ✅ Fase 27 | `npm run audit*` + gate crítico no CI |
+
+## Endurecimento do servidor
+
+Nos dois hosts Ubuntu, **antes** de subir a aplicação:
+
+```bash
+# server01 (API + proxy + workers)
+sudo bash deploy/harden-server.sh                      # HOST_ROLE=web
+
+# server02 (MongoDB) — libera 27017 apenas para o server01
+sudo HOST_ROLE=db SERVER01_IP=192.168.0.10 bash deploy/harden-server.sh
+```
+
+O script é idempotente e **se recusa a desabilitar senha SSH** enquanto não
+existir chave pública instalada (evita travar o acesso). Recomendações extras:
+
+- usuário administrativo com `sudo`, nunca `root` direto;
+- `ufw status verbose` e `ssh -i <chave> usuario@<ip>` testados em nova sessão
+  antes de fechar a atual;
+- `fail2ban` opcional para o SSH (o script avisa se ausente).
+
+## Scan de dependências
+
+| Comando | Escopo | Uso |
+|---|---|---|
+| `npm run audit` | todas as dependências | relatório completo local |
+| `npm run audit:prod` | só produção (`--omit=dev`) | prioridade de deploy |
+| `npm run audit:prod:critical` | só produção, severidade crítica | gate do CI |
+
+**Situação atual (após `npm audit fix`):**
+
+- Produção: ~~65~~ → **47** vulnerabilidades, **0 críticas**;
+- O CI (`npm run audit:prod:critical`) falha o build se alguma crítica aparecer.
+
+**Dívidas conhecidas (monitoradas, exigem major bump):**
+
+| Pacote | Severidade | Causa raiz / plano |
+|---|---|---|
+| `@opentelemetry/*` (auto-instrumentation) | alta | cadeia de tracing (usada só com `TRACING_ENABLED`); major `sdk-node@0.221` |
+| `nodemailer` | alta | fix em `nodemailer@9` (major); revisar API de transporte |
+| `js-yaml` | alta | fix via `pm2@7` (major); afeta só o PM2 |
+| `bull` (uuid transitivo) | moderada | `bull` está deprecated; migrar para BullMQ = refatoração pós-MVP |
+
+Sem `--force` para não quebrar o MVP; rotina de `npm audit fix` (não-forçado)
+executada nas fases de manutenção.
+
+## Logs sem segredos
+
+- `src/shared/config/env.ts` loga somente `hasJwtSecret: boolean`, nunca o valor;
+- nenhum `console.*` deve emitir `process.env.<SEGREDO>`; adicione uma entrada
+  no revisão de PR se aparecer;
+- política completa em `docs/LOGS.mdx`.
+
+## Verificação operacional (pós-deploy)
+
+```bash
+npm run check:secrets                          # sem segredos no Git
+npm run audit:prod:critical                    # 0 críticas em produção
+curl -sf https://$PUBLIC_DOMAIN/health         # HTTPS + Caddy ok
+curl -sfI https://$PUBLIC_DOMAIN/ | grep -i strict-transport-security
+ufw status verbose                             # só 22, 80, 443 (+ 27017 s/ server01)
+npm run backup:drill                           # ciclo de recuperação ok
+```
