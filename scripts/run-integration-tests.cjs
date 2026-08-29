@@ -28,12 +28,22 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const composeFile = path.join(root, 'docker-compose.test.yml');
 const jestBin = path.join('node_modules', 'jest', 'bin', 'jest.js');
-const defaultSpec = 'src/integration/__tests__/mongo-redis.integration.test.ts';
+const defaultSpecs = [
+  'src/integration/__tests__/mongo-redis.integration.test.ts',
+  'src/integration/__tests__/load.concurrency.integration.test.ts',
+  'src/integration/__tests__/failure.integration.test.ts',
+];
 
 const withInfra = process.argv.includes('--with-infra');
-const forward = process.argv
+const rawForward = process.argv
   .slice(2)
   .filter((arg) => arg !== '--with-infra' && arg !== '--with-infra=true');
+
+// Aritmentos posicionais (ex. caminho de um spec) substituem a suíte padrão;
+// flags (ex. --runInBand) são encaminhadas ao Jest intactas.
+const positionalSpecs = rawForward.filter((arg) => !arg.startsWith('-'));
+const extraArgs = rawForward.filter((arg) => arg.startsWith('-') && arg !== '--');
+const specArgs = positionalSpecs.length > 0 ? positionalSpecs : defaultSpecs;
 
 const shift = (value, fallback) => {
   if (value === undefined || value === '') return fallback;
@@ -49,7 +59,7 @@ function runDocker(args, opts) {
 }
 
 function runJest() {
-  const args = [jestBin, '--runInBand', defaultSpec, ...forward];
+  const args = [jestBin, '--runInBand', ...specArgs, ...extraArgs];
 
   const env = { ...process.env };
   env.RUN_REAL_INTEGRATION_TESTS = 'true';

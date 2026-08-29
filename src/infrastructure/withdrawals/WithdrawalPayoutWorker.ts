@@ -31,7 +31,7 @@ async function markProcessingBestEffort(
   }
 }
 
-async function processWithdrawalPayloadOnce(
+export async function processWithdrawalPayloadOnce(
   payload: WithdrawalPayoutPayload,
   paymentAdapter?: IPaymentPort,
   service?: WithdrawalRequestService,
