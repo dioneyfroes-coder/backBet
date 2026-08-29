@@ -10,7 +10,7 @@ export class ContactController extends BaseController {
 
   /**
    * @openapi
-   * /contact:
+   * /api/v1/contact:
    *   post:
    *     tags:
    *       - Contact

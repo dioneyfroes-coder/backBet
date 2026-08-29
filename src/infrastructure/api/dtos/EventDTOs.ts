@@ -22,7 +22,20 @@ const positiveInt = z
     return Number.isNaN(parsed) ? NaN : parsed;
   })
   .refine((value) => Number.isFinite(value) && value > 0, {
-    message: 'limit deve ser um inteiro positivo',
+    message: 'deve ser um inteiro positivo',
+  });
+
+const nonNegativeInt = z
+  .union([z.string(), z.number()])
+  .transform((value) => {
+    if (typeof value === 'number') {
+      return value;
+    }
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? NaN : parsed;
+  })
+  .refine((value) => Number.isFinite(value) && value >= 0, {
+    message: 'offset deve ser um inteiro não negativo',
   });
 
 export const ListEventsQueryDTO = z.object({
@@ -40,6 +53,7 @@ export const ListEventsQueryDTO = z.object({
   dateFrom: dateTransform,
   dateTo: dateTransform,
   limit: positiveInt.optional(),
+  offset: nonNegativeInt.optional(),
   search: z
     .union([z.string(), z.array(z.string())])
     .optional()

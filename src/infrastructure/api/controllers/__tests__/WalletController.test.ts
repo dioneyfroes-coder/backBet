@@ -14,6 +14,7 @@ type MockResponse = Response & {
   body?: any;
   status: jest.MockedFunction<(code: number) => Response>;
   json: jest.MockedFunction<(payload: any) => Response>;
+  set: jest.MockedFunction<(name: string, value: string) => Response>;
 };
 
 const createResponse = (): MockResponse => {
@@ -26,6 +27,7 @@ const createResponse = (): MockResponse => {
     res.body = payload;
     return res as MockResponse;
   });
+  res.set = jest.fn().mockReturnValue(res as MockResponse);
   return res as MockResponse;
 };
 
@@ -203,7 +205,7 @@ describe('WalletController', () => {
         res,
       );
 
-      expect(depositUseCase.execute).toHaveBeenCalledWith('user-1', 100, 'BRL', 'Test deposit');
+      expect(depositUseCase.execute).toHaveBeenCalledWith('user-1', 100, 'BRL', 'Test deposit', undefined);
       expect(flushWalletCacheMock).toHaveBeenCalledWith('user-1');
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.body?.data?.wallet.balance).toBe(200);
@@ -216,6 +218,53 @@ describe('WalletController', () => {
         expiresAt: pixCharge.expiresAt,
         confirmedAt: pixConfirmation.confirmedAt,
       });
+    });
+
+    it('advertises Idempotency-Replayed header when a deposit key is replayed', async () => {
+      const controller = buildController();
+      depositUseCase.execute.mockResolvedValueOnce({
+        wallet: {
+          userId: 'user-1',
+          balance: 200,
+          lockedBalance: 0,
+          currency: 'BRL',
+        },
+        pixCharge: {
+          chargeId: 'charge-1',
+          reference: 'ref-1',
+          status: 'PAID',
+          provider: 'mock',
+          qrCode: 'qr-code',
+          expiresAt: new Date(),
+        },
+        pixConfirmation: {
+          chargeId: 'charge-1',
+          reference: 'ref-1',
+          status: 'PAID',
+          provider: 'mock',
+          confirmedAt: new Date(),
+        },
+        replayed: true,
+      });
+      const res = createResponse();
+
+      await controller.deposit(
+        createAuthRequest({
+          headers: { 'idempotency-key': 'dep-req-1' } as any,
+          body: { amount: 100, currency: 'BRL' },
+        }),
+        res,
+      );
+
+      expect(depositUseCase.execute).toHaveBeenCalledWith(
+        'user-1',
+        100,
+        'BRL',
+        undefined,
+        'dep-req-1',
+      );
+      expect(res.set).toHaveBeenCalledWith('Idempotency-Replayed', 'true');
+      expect(res.status).toHaveBeenCalledWith(201);
     });
 
     it('logs a warning when cache flush fails but still returns success', async () => {
@@ -381,6 +430,7 @@ describe('WalletController', () => {
         'BRL',
         'stored@pix',
         undefined,
+        undefined,
       );
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.body?.data?.wallet.balance).toBe(70);
@@ -424,6 +474,7 @@ describe('WalletController', () => {
         'BRL',
         'user@pix',
         'Manual cashout',
+        undefined,
       );
       expect(userService.findById).not.toHaveBeenCalled();
       expect(flushWalletCacheMock).toHaveBeenCalledWith('user-1');

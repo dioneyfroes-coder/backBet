@@ -14,11 +14,11 @@
   },
   "servers": [
     {
-      "url": "http://localhost:3000/api",
+      "url": "http://localhost:3000",
       "description": "Desenvolvimento"
     },
     {
-      "url": "https://api.backbet.com/api",
+      "url": "https://api.backbet.com",
       "description": "Produção"
     }
   ],
@@ -31,7 +31,44 @@
         "description": "JWT Bearer token ou User ID em desenvolvimento"
       }
     },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Chave de idempotência fornecida pelo cliente. Replays retornam o mesmo resultado com o header Idempotency-Replayed: true.",
+        "schema": {
+          "type": "string",
+          "example": "req-8f6c2b1a"
+        }
+      }
+    },
     "schemas": {
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "example": 50,
+            "description": "Quantidade retornada nesta página"
+          },
+          "offset": {
+            "type": "integer",
+            "example": 0,
+            "description": "Quantidade de itens pulada"
+          },
+          "total": {
+            "type": "integer",
+            "example": 142,
+            "description": "Total de itens disponíveis"
+          }
+        },
+        "example": {
+          "limit": 50,
+          "offset": 0,
+          "total": 142
+        }
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -48,14 +85,6 @@
           "username": {
             "type": "string",
             "example": "joaosilva"
-          },
-          "firstName": {
-            "type": "string",
-            "example": "João"
-          },
-          "lastName": {
-            "type": "string",
-            "example": "Silva"
           },
           "status": {
             "type": "string",
@@ -124,16 +153,6 @@
             "minLength": 8,
             "example": "SecurePass@123"
           },
-          "firstName": {
-            "type": "string",
-            "minLength": 2,
-            "example": "João"
-          },
-          "lastName": {
-            "type": "string",
-            "minLength": 2,
-            "example": "Silva"
-          },
           "username": {
             "type": "string",
             "minLength": 3,
@@ -144,8 +163,6 @@
         "required": [
           "email",
           "password",
-          "firstName",
-          "lastName",
           "username"
         ]
       },
@@ -191,14 +208,12 @@
               "id": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
               "email": "user@example.com",
               "username": "joaosilva",
-              "firstName": "João",
-              "lastName": "Silva",
               "status": "PENDING_VERIFICATION",
               "createdAt": "2025-11-14T23:20:42.778Z"
             }
           },
           "meta": {
-            "timestamp": "2025-12-11T21:19:28.219Z"
+            "timestamp": "2026-08-29T16:39:42.416Z"
           }
         }
       },
@@ -252,7 +267,7 @@
             }
           },
           "meta": {
-            "timestamp": "2025-12-11T21:19:28.220Z"
+            "timestamp": "2026-08-29T16:39:42.418Z"
           }
         }
       },
@@ -405,8 +420,6 @@
             "id": "cadaeb28-c7f7-425b-91f7-73a27141ae49",
             "email": "user@example.com",
             "username": "joaosilva",
-            "firstName": "João",
-            "lastName": "Silva",
             "status": "ACTIVE",
             "createdAt": "2025-11-14T23:20:42.778Z"
           },
@@ -872,6 +885,9 @@
             "items": {
               "$ref": "#/components/schemas/BetResponse"
             }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         }
       },
@@ -969,6 +985,9 @@
             "items": {
               "$ref": "#/components/schemas/Event"
             }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         }
       },
@@ -1208,7 +1227,7 @@
     }
   ],
   "paths": {
-    "/contact": {
+    "/api/v1/contact": {
       "post": {
         "tags": [
           "Contact"
@@ -1248,7 +1267,7 @@
         }
       }
     },
-    "/users/me/documents": {
+    "/api/v1/users/me/documents": {
       "post": {
         "tags": [
           "Users"
@@ -1303,7 +1322,7 @@
         }
       }
     },
-    "/api": {
+    "/api/v1": {
       "get": {
         "tags": [
           "Health"
@@ -1316,7 +1335,7 @@
         }
       }
     },
-    "/api/status": {
+    "/api/v1/status": {
       "get": {
         "tags": [
           "Health"
@@ -1329,7 +1348,7 @@
         }
       }
     },
-    "/api/links": {
+    "/api/v1/links": {
       "get": {
         "tags": [
           "Health"
@@ -1342,7 +1361,7 @@
         }
       }
     },
-    "/api/admin/overview": {
+    "/api/v1/admin/overview": {
       "get": {
         "tags": [
           "Admin"
@@ -1360,7 +1379,7 @@
         }
       }
     },
-    "/api/admin/risk/users/{userId}": {
+    "/api/v1/admin/risk/users/{userId}": {
       "get": {
         "tags": [
           "Admin"
@@ -1388,7 +1407,35 @@
         }
       }
     },
-    "/api/admin/bets/{betId}/settle": {
+    "/api/v1/admin/risk/users/{userId}/reconcile": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Reconcilia a exposição de risco de um usuário (estado operacional vs histórico de apostas)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado da reconciliação"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/bets/{betId}/settle": {
       "post": {
         "tags": [
           "Admin"
@@ -1438,7 +1485,7 @@
         }
       }
     },
-    "/api/admin/events/{eventId}/status": {
+    "/api/v1/admin/events/{eventId}/status": {
       "patch": {
         "tags": [
           "Admin"
@@ -1486,7 +1533,469 @@
         }
       }
     },
-    "/api/auth/register": {
+    "/api/v1/admin/users/{userId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta um usuário (visão administrativa, sem hash de senha)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados do usuário"
+          },
+          "404": {
+            "description": "Usuário não encontrado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/wallet": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta a carteira de um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Carteira do usuário"
+          },
+          "404": {
+            "description": "Carteira não encontrada"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/bets": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Lista as apostas de um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apostas do usuário"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/bets/{betId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta uma aposta específica",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "betId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aposta"
+          },
+          "404": {
+            "description": "Aposta não encontrada"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/withdrawals": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Lista os saques (retiradas) de um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saques do usuário"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/withdrawals/{requestId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta um saque (retirada) específico",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saque"
+          },
+          "404": {
+            "description": "Saque não encontrado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/ledger": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta o ledger financeiro de um usuário (inclui depósitos, apostas, prêmios, saques)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Movimentações financeiras do usuário"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/block": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bloqueia (suspende) um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuário bloqueado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/unblock": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Desbloqueia (reativa) um usuário",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuário desbloqueado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/events": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta eventos de auditoria",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actorUserId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de eventos de auditoria"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/events/{eventId}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta um evento de auditoria pelo id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eventId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Evento de auditoria"
+          },
+          "404": {
+            "description": "Evento não encontrado"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/retention/apply": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Aplica a política de retenção removendo eventos antigos",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "retentionDays": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quantidade de eventos removidos"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
       "post": {
         "tags": [
           "Auth"
@@ -1536,7 +2045,7 @@
         }
       }
     },
-    "/api/auth/login": {
+    "/api/v1/auth/login": {
       "post": {
         "tags": [
           "Auth"
@@ -1582,7 +2091,7 @@
         }
       }
     },
-    "/api/auth/refresh": {
+    "/api/v1/auth/refresh": {
       "post": {
         "tags": [
           "Auth"
@@ -1622,7 +2131,7 @@
         }
       }
     },
-    "/api/auth/me": {
+    "/api/v1/auth/me": {
       "get": {
         "tags": [
           "Auth"
@@ -1667,7 +2176,7 @@
         }
       }
     },
-    "/api/auth/logout": {
+    "/api/v1/auth/logout": {
       "post": {
         "tags": [
           "Auth"
@@ -1702,7 +2211,7 @@
         }
       }
     },
-    "/api/bets/event/{eventId}": {
+    "/api/v1/bets/event/{eventId}": {
       "get": {
         "tags": [
           "Bets"
@@ -1733,7 +2242,7 @@
         }
       }
     },
-    "/api/bets": {
+    "/api/v1/bets": {
       "post": {
         "tags": [
           "Bets"
@@ -1771,7 +2280,7 @@
         }
       }
     },
-    "/api/bets/{betId}/cancel": {
+    "/api/v1/bets/{betId}/cancel": {
       "post": {
         "tags": [
           "Bets"
@@ -1820,7 +2329,7 @@
         }
       }
     },
-    "/api/bets/me": {
+    "/api/v1/bets/me": {
       "get": {
         "tags": [
           "Bets"
@@ -1845,7 +2354,7 @@
         }
       }
     },
-    "/api/events": {
+    "/api/v1/events": {
       "get": {
         "tags": [
           "Events"
@@ -1894,7 +2403,17 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 100
+              "maximum": 200,
+              "default": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
             }
           },
           {
@@ -1907,12 +2426,19 @@
         ],
         "responses": {
           "200": {
-            "description": "Catálogo de eventos"
+            "description": "Catálogo de eventos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventListResponse"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/api/events/upcoming": {
+    "/api/v1/events/upcoming": {
       "get": {
         "tags": [
           "Events"
@@ -1936,7 +2462,7 @@
         }
       }
     },
-    "/api/events/{eventId}": {
+    "/api/v1/events/{eventId}": {
       "get": {
         "tags": [
           "Events"
@@ -1962,7 +2488,7 @@
         }
       }
     },
-    "/api/events/{eventId}/markets": {
+    "/api/v1/events/{eventId}/markets": {
       "get": {
         "tags": [
           "Events"
@@ -1985,7 +2511,7 @@
         }
       }
     },
-    "/api/events/categories": {
+    "/api/v1/events/categories": {
       "get": {
         "tags": [
           "Events"
@@ -1998,7 +2524,7 @@
         }
       }
     },
-    "/api/games": {
+    "/api/v1/games": {
       "get": {
         "tags": [
           "Games"
@@ -2011,7 +2537,7 @@
         }
       }
     },
-    "/api/games/coin-flip": {
+    "/api/v1/games/coin-flip": {
       "get": {
         "tags": [
           "Games"
@@ -2024,7 +2550,7 @@
         }
       }
     },
-    "/api/games/coin-flip/play": {
+    "/api/v1/games/coin-flip/play": {
       "post": {
         "tags": [
           "Games"
@@ -2065,7 +2591,47 @@
         }
       }
     },
-    "/api/games/coin-flip/history": {
+    "/api/v1/games/coin-flip/play-batch": {
+      "post": {
+        "tags": [
+          "Games"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Executa várias rodadas de cara ou coroa em sequência",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "choices": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "HEADS",
+                        "TAILS"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultados das rodadas e saldo final"
+          }
+        }
+      }
+    },
+    "/api/v1/games/coin-flip/history": {
       "get": {
         "tags": [
           "Games"
@@ -2094,7 +2660,7 @@
         }
       }
     },
-    "/api/games/coin-flip/feed": {
+    "/api/v1/games/coin-flip/feed": {
       "get": {
         "tags": [
           "Games"
@@ -2107,7 +2673,138 @@
         }
       }
     },
-    "/api/users/me": {
+    "/api/v1/admin/sigap/transmit": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Transmite um arquivo ao SIGAP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fileType": {
+                    "type": "string",
+                    "enum": [
+                      "APOSTADOR",
+                      "APOSTAS",
+                      "CARTEIRA",
+                      "OPERADOR_DIARIO",
+                      "OPERADOR_MENSAL"
+                    ]
+                  },
+                  "referenceDate": {
+                    "type": "string"
+                  },
+                  "payload": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Remessa transmitida"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/sigap/submissions": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta remessas SIGAP registradas",
+        "responses": {
+          "200": {
+            "description": "Lista de remessas"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/sigap/submissions/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta uma remessa SIGAP pelo id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remessa"
+          },
+          "404": {
+            "description": "Remessa não encontrada"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/sigap/impediment": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Consulta se um documento (CPF) está impedido de apostar",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "documentNumber": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da consulta"
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
       "get": {
         "tags": [
           "Users"
@@ -2222,7 +2919,7 @@
         }
       }
     },
-    "/api/users/me/email": {
+    "/api/v1/users/me/email": {
       "patch": {
         "tags": [
           "Users"
@@ -2301,7 +2998,7 @@
         }
       }
     },
-    "/api/wallets/me": {
+    "/api/v1/wallets/me": {
       "get": {
         "tags": [
           "Wallets"
@@ -2346,7 +3043,7 @@
         }
       }
     },
-    "/api/wallets/deposit": {
+    "/api/v1/wallets/deposit": {
       "post": {
         "tags": [
           "Wallets"
@@ -2425,7 +3122,7 @@
         }
       }
     },
-    "/api/wallets/withdraw": {
+    "/api/v1/wallets/withdraw": {
       "post": {
         "tags": [
           "Wallets"
@@ -2509,7 +3206,7 @@
         }
       }
     },
-    "/api/wallets/history": {
+    "/api/v1/wallets/history": {
       "get": {
         "tags": [
           "Wallets"

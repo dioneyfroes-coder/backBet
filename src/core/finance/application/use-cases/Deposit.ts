@@ -24,13 +24,14 @@ export class Deposit {
   ) {
     const operation = () => this.executeOnce(userId, amount, currency, description);
     if (!this.idempotency || !idempotencyKey) {
-      return operation();
+      return { ...(await operation()), replayed: false };
     }
-    return this.idempotency.execute(
+    const { value, replayed } = await this.idempotency.executeWithMeta(
       `${userId}:deposit:${idempotencyKey}`,
       JSON.stringify({ userId, amount, currency, description }),
       operation,
     );
+    return { ...value, replayed };
   }
 
   private async executeOnce(userId: string, amount: number, currency: Currency, description?: string) {

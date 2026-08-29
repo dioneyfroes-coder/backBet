@@ -13,7 +13,10 @@ export class PlaceBetUseCase {
     private readonly responsibleGambling?: ResponsibleGamblingService,
   ) {}
 
-  async execute(input: ICreateBetDTO, idempotencyKey?: string): Promise<Bet> {
+  async execute(
+    input: ICreateBetDTO,
+    idempotencyKey?: string,
+  ): Promise<{ bet: Bet; replayed: boolean }> {
     const operation = async () => {
       if (this.responsibleGambling) {
         await executeWithBetErrorMapping(() =>
@@ -29,13 +32,14 @@ export class PlaceBetUseCase {
       return bet;
     };
     if (!this.idempotency || !idempotencyKey) {
-      return operation();
+      return { bet: await operation(), replayed: false };
     }
-    return this.idempotency.execute(
+    const { value, replayed } = await this.idempotency.executeWithMeta(
       `${input.userId}:bet:${idempotencyKey}`,
       JSON.stringify(input),
       operation,
       restoreBet,
     );
+    return { bet: value, replayed };
   }
 }

@@ -133,9 +133,9 @@ async function registerAndLogin(prefix: string) {
     firstName: 'Risk',
     lastName: 'Limit',
   };
-  const reg = await request(app).post('/api/auth/register').send(payload);
+  const reg = await request(app).post('/api/v1/auth/register').send(payload);
   expect(reg.status).toBe(201);
-  const login = await request(app).post('/api/auth/login').send({
+  const login = await request(app).post('/api/v1/auth/login').send({
     email: payload.email,
     password: PASSWORD,
   });
@@ -150,7 +150,7 @@ async function registerAndLogin(prefix: string) {
 
 async function fundWallet(accessToken: string, amount: number): Promise<void> {
   const res = await request(app)
-    .post('/api/wallets/deposit')
+    .post('/api/v1/wallets/deposit')
     .set('Authorization', `Bearer ${accessToken}`)
     .send({ amount, currency: 'BRL', description: 'seed' });
   expect(res.status).toBe(201);
@@ -181,7 +181,7 @@ async function seedScheduledEvent(): Promise<void> {
 
 async function placeBet(accessToken: string, amount: number) {
   return request(app)
-    .post('/api/bets')
+    .post('/api/v1/bets')
     .set('Authorization', `Bearer ${accessToken}`)
     .send({
       eventId: FOOTBALL_EVENT,
@@ -194,7 +194,7 @@ async function placeBet(accessToken: string, amount: number) {
 
 async function walletBalance(accessToken: string): Promise<number> {
   const res = await request(app)
-    .get('/api/wallets/me')
+    .get('/api/v1/wallets/me')
     .set('Authorization', `Bearer ${accessToken}`);
   expect(res.status).toBe(200);
   return res.body.data.balance as number;
@@ -227,7 +227,7 @@ describe('Risk Fase 20.1 — Limite de exposição rejeita aposta via HTTP', () 
     expect(await walletBalance(user.accessToken)).toBe(450);
 
     const myBets = await request(app)
-      .get('/api/bets/me')
+      .get('/api/v1/bets/me')
       .set('Authorization', `Bearer ${user.accessToken}`);
     expect(myBets.status).toBe(200);
     expect(myBets.body.data.bets.length).toBe(1);
@@ -249,7 +249,7 @@ describe('Risk Fase 20.1 — Limite de exposição rejeita aposta via HTTP', () 
     expect(await walletBalance(user.accessToken)).toBe(200);
 
     const myBets = await request(app)
-      .get('/api/bets/me')
+      .get('/api/v1/bets/me')
       .set('Authorization', `Bearer ${user.accessToken}`);
     expect(myBets.status).toBe(200);
     expect(myBets.body.data.bets.length).toBe(0);

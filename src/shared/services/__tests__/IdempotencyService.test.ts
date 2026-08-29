@@ -86,4 +86,21 @@ describe('IdempotencyService', () => {
       statusCode: 400,
     });
   });
+
+  it('executeWithMeta flags replays while honoring execute as the plain contract', async () => {
+    const service = createService();
+    const operation = jest.fn(async () => 'result-1');
+    const key = 'user-1:withdraw:req-1';
+    const fingerprint = JSON.stringify({ amount: 10 });
+
+    const first = await service.executeWithMeta(key, fingerprint, operation);
+    const replay = await service.executeWithMeta(key, fingerprint, operation);
+
+    expect(first).toEqual({ value: 'result-1', replayed: false });
+    expect(replay).toEqual({ value: 'result-1', replayed: true });
+    expect(operation).toHaveBeenCalledTimes(1);
+
+    const plain = await service.execute(key, fingerprint, async () => 'other');
+    expect(plain).toBe('result-1');
+  });
 });

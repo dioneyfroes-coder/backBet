@@ -184,7 +184,7 @@ async function main() {
 
     // TODO: Registrar outras rotas
     // const betRoutes = createBetRoutes();
-    // apiServer.registerRoutes(betRoutes, '/bets');
+    // apiServer.registerRoutes(betRoutes); // monta em /api/v1
 
     // Registrar handlers globais
     apiServer.get404Handler();

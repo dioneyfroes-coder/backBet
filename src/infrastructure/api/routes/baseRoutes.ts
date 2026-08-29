@@ -12,7 +12,7 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
 
   /**
    * @openapi
-   * /api:
+   * /api/v1:
    *   get:
    *     tags:
    *       - Health
@@ -33,10 +33,10 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
       timestamp: new Date().toISOString(),
       links: {
         docs: '/api/docs',
-        auth: '/api/auth',
-        events: '/api/events',
-        games: '/api/games',
-        admin: '/api/admin',
+        auth: '/api/v1/auth',
+        events: '/api/v1/events',
+        games: '/api/v1/games',
+        admin: '/api/v1/admin',
         console: '/console',
       },
     });
@@ -44,7 +44,7 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
 
   /**
    * @openapi
-   * /api/status:
+   * /api/v1/status:
    *   get:
    *     tags:
    *       - Health
@@ -66,7 +66,7 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
 
   /**
    * @openapi
-   * /api/links:
+   * /api/v1/links:
    *   get:
    *     tags:
    *       - Health
@@ -81,11 +81,11 @@ export const createBaseRoutes = (deps: BaseRoutesDeps = {}): Router => {
       links: [
         { rel: 'docs', href: '/api/docs', description: 'Documentação completa' },
         { rel: 'health', href: '/health', description: 'Health-check legado' },
-        { rel: 'events', href: '/api/events', description: 'Catálogo público de eventos' },
-        { rel: 'games', href: '/api/games', description: 'Backend de jogos (coin flip)' },
-        { rel: 'bets', href: '/api/bets', description: 'Gestão de apostas' },
-        { rel: 'wallet', href: '/api/wallets', description: 'Saldos e transações' },
-        { rel: 'admin', href: '/api/admin', description: 'Backoffice seguro' },
+        { rel: 'events', href: '/api/v1/events', description: 'Catálogo público de eventos' },
+        { rel: 'games', href: '/api/v1/games', description: 'Backend de jogos (coin flip)' },
+        { rel: 'bets', href: '/api/v1/bets', description: 'Gestão de apostas' },
+        { rel: 'wallet', href: '/api/v1/wallets', description: 'Saldos e transações' },
+        { rel: 'admin', href: '/api/v1/admin', description: 'Backoffice seguro' },
         { rel: 'console', href: '/console', description: 'Interface mínima de demonstração' },
       ],
     });

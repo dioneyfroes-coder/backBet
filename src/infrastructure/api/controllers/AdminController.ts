@@ -70,7 +70,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/overview:
+   * /api/v1/admin/overview:
    *   get:
    *     tags:
    *       - Admin
@@ -99,7 +99,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/risk/users/{userId}:
+   * /api/v1/admin/risk/users/{userId}:
    *   get:
    *     tags:
    *       - Admin
@@ -131,7 +131,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/risk/users/{userId}/reconcile:
+   * /api/v1/admin/risk/users/{userId}/reconcile:
    *   post:
    *     tags:
    *       - Admin
@@ -166,7 +166,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/bets/{betId}/settle:
+   * /api/v1/admin/bets/{betId}/settle:
    *   post:
    *     tags:
    *       - Admin
@@ -230,7 +230,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/events/{eventId}/status:
+   * /api/v1/admin/events/{eventId}/status:
    *   patch:
    *     tags:
    *       - Admin
@@ -293,7 +293,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}:
+   * /api/v1/admin/users/{userId}:
    *   get:
    *     tags:
    *       - Admin
@@ -329,7 +329,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/wallet:
+   * /api/v1/admin/users/{userId}/wallet:
    *   get:
    *     tags:
    *       - Admin
@@ -365,7 +365,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/bets:
+   * /api/v1/admin/users/{userId}/bets:
    *   get:
    *     tags:
    *       - Admin
@@ -410,7 +410,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/bets/{betId}:
+   * /api/v1/admin/bets/{betId}:
    *   get:
    *     tags:
    *       - Admin
@@ -446,7 +446,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/withdrawals:
+   * /api/v1/admin/users/{userId}/withdrawals:
    *   get:
    *     tags:
    *       - Admin
@@ -491,7 +491,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/withdrawals/{requestId}:
+   * /api/v1/admin/withdrawals/{requestId}:
    *   get:
    *     tags:
    *       - Admin
@@ -527,7 +527,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/ledger:
+   * /api/v1/admin/users/{userId}/ledger:
    *   get:
    *     tags:
    *       - Admin
@@ -571,7 +571,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/block:
+   * /api/v1/admin/users/{userId}/block:
    *   post:
    *     tags:
    *       - Admin
@@ -624,7 +624,7 @@ export class AdminController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/users/{userId}/unblock:
+   * /api/v1/admin/users/{userId}/unblock:
    *   post:
    *     tags:
    *       - Admin

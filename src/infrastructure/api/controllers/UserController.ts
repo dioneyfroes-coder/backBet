@@ -54,7 +54,7 @@ export class UserController extends BaseController {
 
   /**
    * @openapi
-   * /api/users/me:
+   * /api/v1/users/me:
    *   get:
    *     tags:
    *       - Users
@@ -107,7 +107,7 @@ export class UserController extends BaseController {
 
   /**
    * @openapi
-   * /api/users/me:
+   * /api/v1/users/me:
    *   patch:
    *     tags:
    *       - Users
@@ -198,7 +198,7 @@ export class UserController extends BaseController {
 
   /**
    * @openapi
-   * /api/users/me/email:
+   * /api/v1/users/me/email:
    *   patch:
    *     tags:
    *       - Users

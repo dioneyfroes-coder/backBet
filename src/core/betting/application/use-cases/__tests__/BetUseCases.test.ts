@@ -64,7 +64,7 @@ describe('Bet application use cases', () => {
 
       expect(executeWithBetErrorMappingMock).toHaveBeenCalledTimes(1);
       expect(betService.cancelBet).toHaveBeenCalledWith(input);
-      expect(result).toBe(mockBet);
+      expect(result.bet).toBe(mockBet);
     });
 
     it('propagates mapped errors without calling the service', async () => {
@@ -128,8 +128,9 @@ describe('Bet application use cases', () => {
       const first = await useCase.execute(input, 'req-cancel-1');
       const replay = await useCase.execute(input, 'req-cancel-1');
 
-      expect(first.status).toBe('CANCELED');
-      expect(replay.status).toBe('CANCELED');
+      expect(first.bet.status).toBe('CANCELED');
+      expect(replay.bet.status).toBe('CANCELED');
+      expect(replay.replayed).toBe(true);
       expect(betService.cancelBet).toHaveBeenCalledTimes(1);
     });
 

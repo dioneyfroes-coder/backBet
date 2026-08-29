@@ -53,7 +53,7 @@ export class SigapController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/sigap/transmit:
+   * /api/v1/admin/sigap/transmit:
    *   post:
    *     tags:
    *       - Admin
@@ -96,7 +96,7 @@ export class SigapController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/sigap/submissions:
+   * /api/v1/admin/sigap/submissions:
    *   get:
    *     tags:
    *       - Admin
@@ -130,7 +130,7 @@ export class SigapController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/sigap/submissions/{id}:
+   * /api/v1/admin/sigap/submissions/{id}:
    *   get:
    *     tags:
    *       - Admin
@@ -162,7 +162,7 @@ export class SigapController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/sigap/impediment:
+   * /api/v1/admin/sigap/impediment:
    *   post:
    *     tags:
    *       - Admin

@@ -73,7 +73,7 @@ describe('Admin Audit routes — Fase 15', () => {
   });
 
   it('retorna lista vazia de eventos por padrão', async () => {
-    const res = await request(app).get('/api/admin/audit/events');
+    const res = await request(app).get('/api/v1/admin/audit/events');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.events).toHaveLength(0);
@@ -89,7 +89,7 @@ describe('Admin Audit routes — Fase 15', () => {
       after: { result: 'WON' },
     });
 
-    const res = await request(app).get('/api/admin/audit/events').query({ type: 'ADMIN_ACTION' });
+    const res = await request(app).get('/api/v1/admin/audit/events').query({ type: 'ADMIN_ACTION' });
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(1);
     expect(res.body.data.events[0].action).toBe('bet.settle');
@@ -107,12 +107,12 @@ describe('Admin Audit routes — Fase 15', () => {
     await auditService.recordAccess({ action: 'http.request', resourceType: 'http' });
 
     const filtered = await request(app)
-      .get('/api/admin/audit/events')
+      .get('/api/v1/admin/audit/events')
       .query({ type: 'ACCESS' });
     expect(filtered.body.data.total).toBe(1);
 
     const byActor = await request(app)
-      .get('/api/admin/audit/events')
+      .get('/api/v1/admin/audit/events')
       .query({ actorUserId: adminUserId });
     expect(byActor.body.data.total).toBe(5);
   });
@@ -126,13 +126,13 @@ describe('Admin Audit routes — Fase 15', () => {
     });
     expect(event).not.toBeNull();
 
-    const res = await request(app).get(`/api/admin/audit/events/${event?.eventId}`);
+    const res = await request(app).get(`/api/v1/admin/audit/events/${event?.eventId}`);
     expect(res.status).toBe(200);
     expect(res.body.data.action).toBe('risk.user.reconcile');
   });
 
   it('retorna 404 para evento inexistente', async () => {
-    const res = await request(app).get('/api/admin/audit/events/nao-existe');
+    const res = await request(app).get('/api/v1/admin/audit/events/nao-existe');
     expect(res.status).toBe(404);
   });
 
@@ -145,7 +145,7 @@ describe('Admin Audit routes — Fase 15', () => {
     });
 
     const res = await request(app)
-      .post('/api/admin/audit/retention/apply')
+      .post('/api/v1/admin/audit/retention/apply')
       .send({ retentionDays: 3650 });
     expect(res.status).toBe(200);
     expect(res.body.data.deleted).toBe(0);
@@ -153,7 +153,7 @@ describe('Admin Audit routes — Fase 15', () => {
 
   it('rejeita acesso não-admin', async () => {
     appConfig.admin.allowedUserIds = ['another-admin'];
-    const res = await request(app).get('/api/admin/audit/events');
+    const res = await request(app).get('/api/v1/admin/audit/events');
     expect(res.status).toBe(403);
   });
 });

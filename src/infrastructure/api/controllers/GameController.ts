@@ -26,7 +26,7 @@ export class GameController extends BaseController {
   async listGames(_req: Request, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games:
+     * /api/v1/games:
      *   get:
      *     tags:
      *       - Games
@@ -42,7 +42,7 @@ export class GameController extends BaseController {
   async getCoinFlipConfig(_req: Request, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games/coin-flip:
+     * /api/v1/games/coin-flip:
      *   get:
      *     tags:
      *       - Games
@@ -66,7 +66,7 @@ export class GameController extends BaseController {
   async playCoinFlip(req: AuthenticatedRequest, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games/coin-flip/play:
+     * /api/v1/games/coin-flip/play:
      *   post:
      *     tags:
      *       - Games
@@ -119,7 +119,7 @@ export class GameController extends BaseController {
   async playCoinFlipBatch(req: AuthenticatedRequest, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games/coin-flip/play-batch:
+     * /api/v1/games/coin-flip/play-batch:
      *   post:
      *     tags:
      *       - Games
@@ -173,7 +173,7 @@ export class GameController extends BaseController {
   async getHistory(req: AuthenticatedRequest, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games/coin-flip/history:
+     * /api/v1/games/coin-flip/history:
      *   get:
      *     tags:
      *       - Games
@@ -205,7 +205,7 @@ export class GameController extends BaseController {
   async getFeed(_req: Request, res: Response): Promise<Response> {
     /**
      * @openapi
-     * /api/games/coin-flip/feed:
+     * /api/v1/games/coin-flip/feed:
      *   get:
      *     tags:
      *       - Games

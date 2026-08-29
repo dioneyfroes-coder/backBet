@@ -23,13 +23,14 @@ export class Withdraw {
   ) {
     const operation = () => this.executeOnce(userId, amount, currency, pixKey, description);
     if (!this.idempotency || !idempotencyKey) {
-      return operation();
+      return { ...(await operation()), replayed: false };
     }
-    return this.idempotency.execute(
+    const { value, replayed } = await this.idempotency.executeWithMeta(
       `${userId}:withdraw:${idempotencyKey}`,
       JSON.stringify({ userId, amount, currency, pixKey, description }),
       operation,
     );
+    return { ...value, replayed };
   }
 
   private async executeOnce(

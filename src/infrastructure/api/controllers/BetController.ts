@@ -9,6 +9,7 @@ import { GetUserBetsUseCase } from '@core/betting/application/use-cases/GetUserB
 import { GetEventBetsUseCase } from '@core/betting/application/use-cases/GetEventUseCase';
 import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
 import { ICreateBetDTO } from '@/core/betting/types/bet.types';
+import { parsePagination, paginate } from '../utils/pagination';
 
 /**
  * Controller de apostas
@@ -26,7 +27,7 @@ export class BetController extends BaseController {
 
   /**
    * @openapi
-   * /api/bets/event/{eventId}:
+   * /api/v1/bets/event/{eventId}:
    *   get:
    *     tags:
    *       - Bets
@@ -51,12 +52,13 @@ export class BetController extends BaseController {
     if (!eventId) return this.badRequest(res, 'eventId é obrigatório');
 
     const bets = await this.getEventBetsUseCase.execute(eventId);
-    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+    const { items, pagination } = paginate(bets, parsePagination(req.query));
+    return this.ok(res, { bets: items.map((b) => b.toJSON()), pagination });
   }
 
   /**
    * @openapi
-   * /api/bets:
+   * /api/v1/bets:
    *   post:
    *     tags:
    *       - Bets
@@ -94,9 +96,8 @@ export class BetController extends BaseController {
       type: payload.type === 'MULTIPLE' ? 'MULTIPLE' : 'SINGLE',
     };
     const idempotencyKey = this.getIdempotencyKey(req);
-    const bet = idempotencyKey
-      ? await this.placeBetUseCase.execute(input, idempotencyKey)
-      : await this.placeBetUseCase.execute(input);
+    const { bet, replayed } = await this.placeBetUseCase.execute(input, idempotencyKey);
+    if (replayed) res.set('Idempotency-Replayed', 'true');
     await flushEventOddsCache(payload.eventId).catch((error) =>
       console.warn('Failed to flush event cache', error),
     );
@@ -105,7 +106,7 @@ export class BetController extends BaseController {
 
   /**
    * @openapi
-   * /api/bets/{betId}/cancel:
+   * /api/v1/bets/{betId}/cancel:
    *   post:
    *     tags:
    *       - Bets
@@ -144,20 +145,15 @@ export class BetController extends BaseController {
       ...(req.body || {}),
     }) as CancelBetDTOType;
     const idempotencyKey = this.getIdempotencyKey(req);
-    const bet = idempotencyKey
-      ? await this.cancelBetUseCase.execute(
-          {
-            betId: payload.betId,
-            reason: payload.reason ?? '',
-            canceledBy: userId,
-          },
-          idempotencyKey,
-        )
-      : await this.cancelBetUseCase.execute({
-          betId: payload.betId,
-          reason: payload.reason ?? '',
-          canceledBy: userId,
-        });
+    const { bet, replayed } = await this.cancelBetUseCase.execute(
+      {
+        betId: payload.betId,
+        reason: payload.reason ?? '',
+        canceledBy: userId,
+      },
+      idempotencyKey,
+    );
+    if (replayed) res.set('Idempotency-Replayed', 'true');
     await flushEventOddsCache(bet.eventId).catch((error) =>
       console.warn('Failed to flush event cache', error),
     );
@@ -166,7 +162,7 @@ export class BetController extends BaseController {
 
   /**
    * @openapi
-   * /api/bets/me:
+   * /api/v1/bets/me:
    *   get:
    *     tags:
    *       - Bets
@@ -186,7 +182,8 @@ export class BetController extends BaseController {
     if (!userId) return this.unauthorized(res, 'Autenticação requerida');
 
     const bets = await this.getUserBetsUseCase.execute(userId);
-    return this.ok(res, { bets: bets.map((b) => b.toJSON()) });
+    const { items, pagination } = paginate(bets, parsePagination(req.query));
+    return this.ok(res, { bets: items.map((b) => b.toJSON()), pagination });
   }
 
   private getIdempotencyKey(req: Request): string | undefined {

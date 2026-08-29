@@ -10,6 +10,11 @@ export type IdempotencyRecord<T> = {
   result?: T;
 };
 
+export type IdempotencyExecutionResult<T> = {
+  value: T;
+  replayed: boolean;
+};
+
 export interface IdempotencyStore {
   get<T>(key: string): Promise<IdempotencyRecord<T> | null>;
   setIfAbsent<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<boolean>;
@@ -75,6 +80,15 @@ export class IdempotencyService {
     operation: () => Promise<T>,
     restoreResult?: (result: T) => T,
   ): Promise<T> {
+    return (await this.executeWithMeta(key, fingerprint, operation, restoreResult)).value;
+  }
+
+  async executeWithMeta<T>(
+    key: string,
+    fingerprint: string,
+    operation: () => Promise<T>,
+    restoreResult?: (result: T) => T,
+  ): Promise<IdempotencyExecutionResult<T>> {
     const normalizedKey = key.trim();
     if (!normalizedKey) {
       throw new AppError('VALIDATION_ERROR', 'Idempotency-Key não pode ser vazio', 400);
@@ -84,7 +98,7 @@ export class IdempotencyService {
     const existing = await this.store.get<T>(storageKey);
     if (existing) {
       idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'replay' });
-      return this.resolveExisting(storageKey, existing, fingerprint, restoreResult);
+      return this.resolveExistingMeta(storageKey, existing, fingerprint, restoreResult);
     }
 
     const claimed = await this.store.setIfAbsent(
@@ -96,7 +110,7 @@ export class IdempotencyService {
       idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'conflict' });
       const concurrent = await this.store.get<T>(storageKey);
       if (concurrent) {
-        return this.resolveExisting(storageKey, concurrent, fingerprint, restoreResult);
+        return this.resolveExistingMeta(storageKey, concurrent, fingerprint, restoreResult);
       }
       throw new AppError('SERVICE_UNAVAILABLE', 'Não foi possível reservar a operação', 503);
     }
@@ -106,7 +120,7 @@ export class IdempotencyService {
     try {
       const result = await operation();
       await this.store.set(storageKey, { fingerprint, status: 'COMPLETED', result }, this.ttlSeconds);
-      return result;
+      return { value: result, replayed: false };
     } catch (error) {
       await this.store.delete(storageKey);
       throw error;
@@ -121,12 +135,12 @@ export class IdempotencyService {
     return parts[0] || 'unknown';
   }
 
-  private resolveExisting<T>(
+  private resolveExistingMeta<T>(
     key: string,
     existing: IdempotencyRecord<T>,
     fingerprint: string,
     restoreResult?: (result: T) => T,
-  ): T {
+  ): IdempotencyExecutionResult<T> {
     if (existing.fingerprint !== fingerprint) {
       throw new AppError(
         'CONFLICT',
@@ -136,7 +150,10 @@ export class IdempotencyService {
       );
     }
     if (existing.status === 'COMPLETED' && existing.result !== undefined) {
-      return restoreResult ? restoreResult(existing.result) : existing.result;
+      return {
+        value: restoreResult ? restoreResult(existing.result) : existing.result,
+        replayed: true,
+      };
     }
     throw new AppError('CONFLICT', 'A operação com esta Idempotency-Key já está em processamento', 409);
   }

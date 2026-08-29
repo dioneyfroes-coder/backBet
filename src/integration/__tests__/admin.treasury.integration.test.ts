@@ -103,7 +103,7 @@ describe('Admin Treasury routes', () => {
   });
 
   it('returns treasury summary with zero balances by default', async () => {
-    const res = await request(app).get('/api/admin/treasury/summary');
+    const res = await request(app).get('/api/v1/admin/treasury/summary');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -113,14 +113,14 @@ describe('Admin Treasury routes', () => {
 
   it('records profit and rebalances funds', async () => {
     const profitRes = await request(app)
-      .post('/api/admin/treasury/profit')
+      .post('/api/v1/admin/treasury/profit')
       .send({ amount: 20_000, description: 'seed capital' });
 
     expect(profitRes.status).toBe(200);
     expect(profitRes.body.data.summary.profitBalance).toBe(20_000);
 
     const rebalanceRes = await request(app)
-      .post('/api/admin/treasury/rebalance')
+      .post('/api/v1/admin/treasury/rebalance')
       .send({ targetPrizeRatio: 0.4, minProfitBuffer: 1_000, maxTransfer: 10_000 });
 
     expect(rebalanceRes.status).toBe(200);
@@ -130,10 +130,10 @@ describe('Admin Treasury routes', () => {
 
   it('reconciles the treasury and reports ledger fidelity', async () => {
     await request(app)
-      .post('/api/admin/treasury/profit')
+      .post('/api/v1/admin/treasury/profit')
       .send({ amount: 5_000, description: 'seed' });
 
-    const res = await request(app).post('/api/admin/treasury/reconcile');
+    const res = await request(app).post('/api/v1/admin/treasury/reconcile');
 
     expect(res.status).toBe(200);
     expect(res.body.data.reconciliation.walletId).toBe(appConfig.treasury.walletId);
@@ -145,7 +145,7 @@ describe('Admin Treasury routes', () => {
 
   it('rejects non-admin users from the treasury reconcile route', async () => {
     appConfig.admin.allowedUserIds = ['another-admin'];
-    const res = await request(app).post('/api/admin/treasury/reconcile');
+    const res = await request(app).post('/api/v1/admin/treasury/reconcile');
 
     expect(res.status).toBe(403);
   });

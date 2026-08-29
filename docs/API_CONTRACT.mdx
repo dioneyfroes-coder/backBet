@@ -1,0 +1,164 @@
+# Contrato da API BackBet — v1 (`/api/v1`)
+
+> Contrato de integração da API pública do BackBet.
+> A especificação OpenAPI (3.1.0) é a fonte operacional da verdade: `docs/openapi.json`,
+> servida também em `GET /api/docs` (Swagger UI) via `src/infrastructure/config/swagger.ts`.
+
+## 1. Base URL e versionamento
+
+- Todas as rotas da API pública vivem sob **`/api/v1`**.
+- Não existe rota versionada fora de `/api/v1` e não há rota `/api` (raiz) — o prefixo de
+  versão **não é omitível**.
+- Endpoints de infraestrutura permanecem fora do versionamento:
+  - `GET /health` — healthcheck simples.
+  - `GET /api/docs`, `GET /api/docs.json` — Swagger UI e spec OpenAPI.
+  - `GET /api/links`, `GET /api/status` — handshake/descoberta de links (retornam apenas links `/api/v1/*`).
+- O **prefixo de versão é parte do contrato**: clientes devem usá-lo literalmente.
+  Mudanças que quebrem compatibilidade só entram em `/api/v2`.
+
+| Ambiente  | Base URL                  |
+| --------- | ------------------------- |
+| Dev       | `http://localhost:3000`   |
+| Produção  | `https://api.backbet.com` |
+
+## 2. Envelope padrão
+
+Toda resposta usa o mesmo envelope:
+
+### Sucesso
+
+```json
+{
+  "success": true,
+  "data": { },
+  "meta": { "timestamp": "2025-11-14T23:20:42.778Z" }
+}
+```
+
+### Erro
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "Dados inválidos",
+    "details": { "email": "Formato de email inválido" }
+  },
+  "meta": { "timestamp": "2025-11-14T23:20:42.778Z", "requestId": "..." }
+}
+```
+
+- `error.details` é opcional e só aparece quando há detalhes (ex.: validação por campo).
+- `meta.requestId` é incluído pelo error handler; o 404 de rota inexistente também o retorna.
+- `Content-Type`: `application/json`. `POST /api/v1/users/me/documents` usa `multipart/form-data`.
+
+## 3. Autenticação e autorização
+
+- Header: `Authorization: Bearer <JWT>` (na base local com `BACKBET_RUNTIME_ENV=development`,
+  o User ID puro também é aceito).
+- Rotas protegidas respondem `401 UNAUTHORIZED` sem token e `403 FORBIDDEN` sem permissão.
+- `GET /api/v1/events/*`, `GET /api/v1/games/*`, `/api/v1/auth/*` e `/api/v1/contact`
+  são públicas. Demais rotas exigem token.
+
+## 4. Idempotência
+
+Operações de escrita **idempotentes** (`POST /api/v1/wallets/deposit`,
+`POST /api/v1/wallets/withdraw`, `POST /api/v1/bets`, `POST /api/v1/bets/:betId/cancel`)
+aceitam o header:
+
+```
+Idempotency-Key: <chave-única-do-cliente>
+```
+
+Contrato:
+
+- Replay da **mesma** chave com os **mesmos** dados → retorna o mesmo resultado, com o header
+  **`Idempotency-Replayed: true`** (HTTP 2xx igual ao primeiro).
+- Replay com os **mesmos** dados de payload **diferentes** → `409 CONFLICT`
+  (`"A Idempotency-Key já foi usada com dados diferentes"`).
+- Chave em **processamento** concorrente → `409 CONFLICT`
+  (`"A operação com esta Idempotency-Key já está em processamento"`); falha de reserva → `503`.
+- Chave vazia → `400 VALIDATION_ERROR`.
+- Operações sem `Idempotency-Key` executam normalmente e **não** retornam o header de replay.
+
+## 5. Paginação
+
+Endpoints de listagem paginados seguem o mesmo formato de query e resposta:
+
+- Query: `?limit=<1..200>&offset=<0..N>`
+  - `limit` default **50**, máximo **200**.
+  - `offset` default **0**.
+  - Valores inválidos são normalizados para o padrão (não geram erro).
+
+Endpoints paginados: `GET /api/v1/events`, `GET /api/v1/bets` (apostas do usuário),
+`GET /api/v1/events/:eventId/bets`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "events": [],
+    "pagination": { "limit": 50, "offset": 0, "total": 142 }
+  },
+  "meta": { "timestamp": "2025-11-14T23:20:42.778Z" }
+}
+```
+
+- O explicitamento `total` reflete o total de itens disponíveis **antes** do corte.
+- Para navegar: `offset = offset + limit` na próxima requisição, enquanto `offset < total`.
+
+## 6. Catálogo de códigos de erro
+
+### HTTP-raiz
+
+| Code                     | HTTP | Uso                                                                 |
+| ------------------------ | ---- | ------------------------------------------------------------------- |
+| `BAD_REQUEST`            | 400  | Payload inválido, operação não permitida no estado atual             |
+| `VALIDATION_ERROR`       | 400  | Falha de validação de schema (detalhes por campo em `error.details`) |
+| `UNAUTHORIZED`           | 401  | Ausência ou invalidade do token                                      |
+| `FORBIDDEN`              | 403  | Acesso negado ao recurso/operação                                    |
+| `NOT_FOUND`              | 404  | Recurso inexistente; rota inexistente usa `NOT_FOUND` no handler 404 |
+| `CONFLICT`               | 409  | Conflito de idempotência, chave já usada, concorrência/lock otimista |
+| `RATE_LIMIT_EXCEEDED`    | 429  | Rate limit atingido                                                  |
+| `INTERNAL_SERVER_ERROR`  | 500  | Erro inesperado do servidor                                          |
+| `SERVICE_UNAVAILABLE`    | 503  | Serviço temporariamente indisponível (ex.: reserva idempotente)      |
+
+### Domínio de apostas (via `executeWithBetErrorMapping`)
+
+| Code               | HTTP  | Uso                                            |
+| ------------------ | ----- | ---------------------------------------------- |
+| `BET_NOT_FOUND`    | 404   | Aposta inexistente                             |
+| `BET_NOT_OWNER`    | 403   | A aposta pertence a outro usuário              |
+| `BET_NOT_PENDING`  | 409   | Aposta fora do estado cancelável/settable      |
+| `BET_INVALID_*`    | 400   | Invariante do domínio violado (ID, amount...)  |
+| `EVENT_*`          | 400/409 | Mercado/evento indisponível no momento       |
+
+### Outros domínios
+
+| Code                            | HTTP | Uso                                                     |
+| ------------------------------- | ---- | ------------------------------------------------------- |
+| `ADMIN_NOT_CONFIGURED`          | 500  | Usuário/entidade de backoffice não configurado           |
+| `AUDIT_INVALID_RETENTION_DAYS`  | 400  | Retenção de auditoria inválida                          |
+
+## 7. Rotas principais
+
+Públicas: `GET /api/v1/events`, `GET /api/v1/events/upcoming`, `GET /api/v1/events/categories`,
+`GET /api/v1/events/:eventId`, `GET /api/v1/events/:eventId/markets | bets`,
+`GET /api/v1/games/*`, `GET /api/v1/auth/*`, `POST /api/v1/contact`.
+
+Sessão/usuário: `GET/PUT /api/v1/users/me`, `POST /api/v1/users/me/documents`,
+`GET /api/v1/users/me/preferences`.
+
+Carteira: `GET /api/v1/wallets/me`, `POST /api/v1/wallets/deposit`,
+`POST /api/v1/wallets/withdraw`, `GET /api/v1/wallets/transactions`.
+
+Apostas: `POST /api/v1/bets`, `GET /api/v1/bets`, `POST /api/v1/bets/:betId/cancel`.
+
+Backoffice (admin): tudo sob `/api/v1/admin/*` (exige usuário admin).
+
+## 8. Links úteis
+
+- Spec OpenAPI: `docs/openapi.json` ou `GET /api/docs.json`
+- Swagger UI: `GET /api/docs`
+- Verificação pós-build offline: `scripts/smoke-api.cjs`

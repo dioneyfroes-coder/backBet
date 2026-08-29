@@ -27,7 +27,7 @@ export class WalletController extends BaseController {
 
   /**
    * @openapi
-   * /api/wallets/me:
+   * /api/v1/wallets/me:
    *   get:
    *     tags:
    *       - Wallets
@@ -92,7 +92,7 @@ export class WalletController extends BaseController {
 
   /**
    * @openapi
-   * /api/wallets/deposit:
+   * /api/v1/wallets/deposit:
    *   post:
    *     tags:
    *       - Wallets
@@ -157,25 +157,20 @@ export class WalletController extends BaseController {
     }
 
     const idempotencyKey = this.getIdempotencyKey(req);
-    const depositResult = idempotencyKey
-      ? await this.depositUseCase.execute(
-          userId,
-          payload.amount,
-          payload.currency,
-          payload.description,
-          idempotencyKey,
-        )
-      : await this.depositUseCase.execute(
-          userId,
-          payload.amount,
-          payload.currency,
-          payload.description,
-        );
+    const depositResult = await this.depositUseCase.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      payload.description,
+      idempotencyKey,
+    );
     const {
       wallet: updatedWallet,
       pixCharge,
       pixConfirmation,
+      replayed,
     } = depositResult;
+    if (replayed) res.set('Idempotency-Replayed', 'true');
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
@@ -202,7 +197,7 @@ export class WalletController extends BaseController {
 
   /**
    * @openapi
-   * /api/wallets/withdraw:
+   * /api/v1/wallets/withdraw:
    *   post:
    *     tags:
    *       - Wallets
@@ -283,23 +278,16 @@ export class WalletController extends BaseController {
     }
 
     const idempotencyKey = this.getIdempotencyKey(req);
-    const withdrawResult = idempotencyKey
-      ? await this.withdrawUseCase.execute(
-          userId,
-          payload.amount,
-          payload.currency,
-          effectivePixKey,
-          payload.description,
-          idempotencyKey,
-        )
-      : await this.withdrawUseCase.execute(
-          userId,
-          payload.amount,
-          payload.currency,
-          effectivePixKey,
-          payload.description,
-        );
-    const { wallet: updatedWallet, pixPayout } = withdrawResult;
+    const withdrawResult = await this.withdrawUseCase.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      effectivePixKey,
+      payload.description,
+      idempotencyKey,
+    );
+    const { wallet: updatedWallet, pixPayout, replayed } = withdrawResult;
+    if (replayed) res.set('Idempotency-Replayed', 'true');
     await flushWalletCache(userId).catch((error) =>
       console.warn('Failed to flush wallet cache', error),
     );
@@ -324,7 +312,7 @@ export class WalletController extends BaseController {
 
   /**
    * @openapi
-   * /api/wallets/history:
+   * /api/v1/wallets/history:
    *   get:
    *     tags:
    *       - Wallets

@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = '/api';
+  const API_BASE = '/api/v1';
   const SESSION_KEY = 'backbet_session';
 
   const state = {

@@ -55,7 +55,7 @@ describe('AuditService — Fase 15: auditoria', () => {
       requestId: 'req-2',
       status: 200,
       method: 'GET',
-      path: '/api/wallets/me',
+      path: '/api/v1/wallets/me',
       durationMs: 15,
     });
     const { events, total } = await service.query({ type: 'ACCESS' });

@@ -128,10 +128,10 @@ describe('API integration tests', () => {
 
   const registerAndLogin = async (label: string) => {
     const payload = makeRegisterPayload(`${label}@example.com`, `${label}_user`);
-    const registerRes = await request(app).post('/api/auth/register').send(payload);
+    const registerRes = await request(app).post('/api/v1/auth/register').send(payload);
     expect(registerRes.status).toBe(201);
 
-    const loginRes = await request(app).post('/api/auth/login').send({
+    const loginRes = await request(app).post('/api/v1/auth/login').send({
       email: payload.email,
       password: payload.password,
     });
@@ -140,8 +140,8 @@ describe('API integration tests', () => {
     return loginRes.body.data;
   };
 
-  test('POST /api/auth/register -> registers a user and returns wallet', async () => {
-    const res = await request(app).post('/api/auth/register').send({
+  test('POST /api/v1/auth/register -> registers a user and returns wallet', async () => {
+    const res = await request(app).post('/api/v1/auth/register').send({
       email: 'inttest@example.com',
       password: 'Password123!',
       username: 'int_user',
@@ -156,12 +156,12 @@ describe('API integration tests', () => {
     expect(res.body.data.user.id).toBeDefined();
   });
 
-  test('GET /api/auth/me -> returns authenticated user', async () => {
+  test('GET /api/v1/auth/me -> returns authenticated user', async () => {
     const loginData = await registerAndLogin('me');
     console.log('loginData', loginData);
 
     const res = await request(app)
-      .get('/api/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${loginData.accessToken}`);
     console.log('auth/me response', res.status, res.body);
 
@@ -170,11 +170,11 @@ describe('API integration tests', () => {
     expect(res.body.data.id).toBe(loginData.user.id);
   });
 
-  test('POST /api/wallets/deposit -> creates wallet and deposits', async () => {
+  test('POST /api/v1/wallets/deposit -> creates wallet and deposits', async () => {
     const loginData = await registerAndLogin('wallet');
 
     const depositRes = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 150.5, currency: 'BRL', description: 'Test deposit' });
 
@@ -185,11 +185,11 @@ describe('API integration tests', () => {
     expect(depositRes.body.data.wallet.balance).toBeDefined();
   });
 
-  test('POST /api/wallets/deposit -> rejects amounts below the minimum', async () => {
+  test('POST /api/v1/wallets/deposit -> rejects amounts below the minimum', async () => {
     const loginData = await registerAndLogin('walletlowdeposit');
 
     const res = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 0.5, currency: 'BRL' });
 
@@ -198,16 +198,16 @@ describe('API integration tests', () => {
     expect(res.body.error?.code).toBe('VALIDATION_ERROR');
   });
 
-  test('POST /api/wallets/withdraw -> rejects amounts below the minimum', async () => {
+  test('POST /api/v1/wallets/withdraw -> rejects amounts below the minimum', async () => {
     const loginData = await registerAndLogin('walletlowwithdraw');
 
     await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 200, currency: 'BRL' });
 
     const res = await request(app)
-      .post('/api/wallets/withdraw')
+      .post('/api/v1/wallets/withdraw')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 50, currency: 'BRL', pixKey: 'user@pix' });
 
@@ -216,11 +216,11 @@ describe('API integration tests', () => {
     expect(res.body.error?.code).toBe('VALIDATION_ERROR');
   });
 
-  test('POST /api/bets -> place a bet', async () => {
+  test('POST /api/v1/bets -> place a bet', async () => {
     const loginData = await registerAndLogin('bet');
 
     const res = await request(app)
-      .post('/api/bets')
+      .post('/api/v1/bets')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({
         eventId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
@@ -235,10 +235,10 @@ describe('API integration tests', () => {
     expect(res.body).toBeDefined();
   });
 
-  test('POST /api/auth/refresh -> issues new access token', async () => {
+  test('POST /api/v1/auth/refresh -> issues new access token', async () => {
     const loginData = await registerAndLogin('refresh');
 
-    const refreshRes = await request(app).post('/api/auth/refresh').send({
+    const refreshRes = await request(app).post('/api/v1/auth/refresh').send({
       refreshToken: loginData.refreshToken,
     });
 
@@ -246,7 +246,7 @@ describe('API integration tests', () => {
     expect(refreshRes.body.data.accessToken).toBeDefined();
 
     const meRes = await request(app)
-      .get('/api/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshRes.body.data.accessToken}`);
 
     expect(meRes.status).toBe(200);

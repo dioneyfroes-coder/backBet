@@ -25,7 +25,7 @@ export class AuthController extends BaseController {
 
   /**
    * @openapi
-   * /api/auth/register:
+   * /api/v1/auth/register:
    *   post:
    *     tags:
    *       - Auth
@@ -103,7 +103,7 @@ export class AuthController extends BaseController {
 
   /**
    * @openapi
-   * /api/auth/login:
+   * /api/v1/auth/login:
    *   post:
    *     tags:
    *       - Auth
@@ -174,7 +174,7 @@ export class AuthController extends BaseController {
 
   /**
    * @openapi
-   * /api/auth/refresh:
+   * /api/v1/auth/refresh:
    *   post:
    *     tags:
    *       - Auth
@@ -230,7 +230,7 @@ export class AuthController extends BaseController {
 
   /**
    * @openapi
-   * /api/auth/me:
+   * /api/v1/auth/me:
    *   get:
    *     tags:
    *       - Auth
@@ -275,7 +275,7 @@ export class AuthController extends BaseController {
 
   /**
    * @openapi
-   * /api/auth/logout:
+   * /api/v1/auth/logout:
    *   post:
    *     tags:
    *       - Auth

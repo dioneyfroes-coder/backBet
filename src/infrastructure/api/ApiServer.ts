@@ -359,7 +359,7 @@ export class ApiServer {
   }
 
   public registerRoutes(router: express.Router, prefix: string = ''): void {
-    const fullPath = `/api${prefix}`;
+    const fullPath = `/api/v1${prefix}`;
     this.app.use(fullPath, router);
   }
 
@@ -464,12 +464,19 @@ export class ApiServer {
   }
 
   public get404Handler(): void {
-    this.app.use((_req: Request, res: Response) => {
+    this.app.use((req: Request, res: Response) => {
+      const requestWithContext = req as RequestWithContext;
+      const requestContextSnapshot = getRequestContext();
+      const requestId = requestContextSnapshot?.requestId || requestWithContext.id;
       res.status(404).json({
+        success: false,
         error: {
           code: 'NOT_FOUND',
           message: 'Endpoint não encontrado',
-          statusCode: 404,
+        },
+        meta: {
+          timestamp: new Date().toISOString(),
+          requestId,
         },
       });
     });

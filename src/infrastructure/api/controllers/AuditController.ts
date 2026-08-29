@@ -15,7 +15,7 @@ export class AuditController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/audit/events:
+   * /api/v1/admin/audit/events:
    *   get:
    *     tags:
    *       - Admin
@@ -88,7 +88,7 @@ export class AuditController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/audit/events/{eventId}:
+   * /api/v1/admin/audit/events/{eventId}:
    *   get:
    *     tags:
    *       - Admin
@@ -120,7 +120,7 @@ export class AuditController extends BaseController {
 
   /**
    * @openapi
-   * /api/admin/audit/retention/apply:
+   * /api/v1/admin/audit/retention/apply:
    *   post:
    *     tags:
    *       - Admin

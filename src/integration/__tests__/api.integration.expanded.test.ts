@@ -125,10 +125,10 @@ describe('API expanded integration tests (isolated)', () => {
 
   const registerAndLogin = async (label: string) => {
     const payload = makeRegisterPayload(`${label}@example.com`, `${label}_user`);
-    const registerRes = await request(app).post('/api/auth/register').send(payload);
+    const registerRes = await request(app).post('/api/v1/auth/register').send(payload);
     expect(registerRes.status).toBe(201);
 
-    const loginRes = await request(app).post('/api/auth/login').send({
+    const loginRes = await request(app).post('/api/v1/auth/login').send({
       email: payload.email,
       password: payload.password,
     });
@@ -151,10 +151,10 @@ describe('API expanded integration tests (isolated)', () => {
       lastName: 'User',
     };
 
-    const r1 = await request(app).post('/api/auth/register').send(payload);
+    const r1 = await request(app).post('/api/v1/auth/register').send(payload);
     expect(r1.status).toBe(201);
 
-    const r2 = await request(app).post('/api/auth/register').send(payload);
+    const r2 = await request(app).post('/api/v1/auth/register').send(payload);
     expect(r2.status).toBe(409);
     expect(r2.body.success).toBe(false);
     expect(r2.body.error).toBeDefined();
@@ -163,8 +163,8 @@ describe('API expanded integration tests (isolated)', () => {
     expect(typeof r2.body.meta.timestamp).toBe('string');
   });
 
-  test('GET /api/auth/me without Authorization returns 401 UNAUTHORIZED', async () => {
-    const res = await request(app).get('/api/auth/me');
+  test('GET /api/v1/auth/me without Authorization returns 401 UNAUTHORIZED', async () => {
+    const res = await request(app).get('/api/v1/auth/me');
     expect(res.status).toBe(401);
     // API may return either the unified { success: false } shape or legacy shape without success
     if (typeof res.body.success !== 'undefined') {
@@ -180,7 +180,7 @@ describe('API expanded integration tests (isolated)', () => {
 
     // Missing amount
     const res = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ currency: 'BRL' });
 
@@ -198,7 +198,7 @@ describe('API expanded integration tests (isolated)', () => {
 
     // Ensure wallet exists but no deposit
     const res = await request(app)
-      .post('/api/wallets/withdraw')
+      .post('/api/v1/wallets/withdraw')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({
         amount: 500.0,
@@ -218,17 +218,17 @@ describe('API expanded integration tests (isolated)', () => {
 
     // two deposits
     await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 10, currency: 'BRL', description: 'd1' });
 
     await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .send({ amount: 20, currency: 'BRL', description: 'd2' });
 
     const res = await request(app)
-      .get('/api/wallets/history')
+      .get('/api/v1/wallets/history')
       .set('Authorization', `Bearer ${loginData.accessToken}`)
       .query({ limit: 10, offset: 0 });
 

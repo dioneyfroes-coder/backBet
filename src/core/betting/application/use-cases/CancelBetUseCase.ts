@@ -11,16 +11,20 @@ export class CancelBetUseCase {
     private readonly idempotency?: IdempotencyService,
   ) {}
 
-  async execute(input: ICancelBetDTO, idempotencyKey?: string): Promise<Bet> {
+  async execute(
+    input: ICancelBetDTO,
+    idempotencyKey?: string,
+  ): Promise<{ bet: Bet; replayed: boolean }> {
     const operation = () => executeWithBetErrorMapping(() => this.betService.cancelBet(input));
     if (!this.idempotency || !idempotencyKey) {
-      return operation();
+      return { bet: await operation(), replayed: false };
     }
-    return this.idempotency.execute(
+    const { value, replayed } = await this.idempotency.executeWithMeta(
       `${input.betId}:bet-cancel:${idempotencyKey}`,
       JSON.stringify(input),
       operation,
       restoreBet,
     );
+    return { bet: value, replayed };
   }
 }

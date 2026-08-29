@@ -107,18 +107,18 @@ async function main() {
       `status=${r.status} title=${r.body?.info?.title || '-'}`,
     );
     const FOOTBALL_UUID = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
-    r = await req('GET', `/api/events/${FOOTBALL_UUID}`);
+    r = await req('GET', `/api/v1/events/${FOOTBALL_UUID}`);
     record('GET /api/events/:id', r.status === 200 && !!r.body?.data, `status=${r.status}`);
 
     // 2. Register
-    r = await req('POST', '/api/auth/register', {
+    r = await req('POST', '/api/v1/auth/register', {
       body: { email: EMAIL, password: PASSWORD, username: USERNAME, firstName: 'Smoke', lastName: 'Test' },
     });
     record('POST /api/auth/register', r.status === 201 && !!r.body?.data?.user, `status=${r.status}`);
     const userId = r.body?.data?.user?.id;
 
     // 3. Login
-    r = await req('POST', '/api/auth/login', { body: { email: EMAIL, password: PASSWORD } });
+    r = await req('POST', '/api/v1/auth/login', { body: { email: EMAIL, password: PASSWORD } });
     record(
       'POST /api/auth/login',
       r.status === 200 && !!r.body?.data?.accessToken,
@@ -128,11 +128,11 @@ async function main() {
     const refreshToken = r.body?.data?.refreshToken;
 
     // 4. GET me (JWT real)
-    r = await req('GET', '/api/auth/me', { token: accessToken });
+    r = await req('GET', '/api/v1/auth/me', { token: accessToken });
     record('GET /api/auth/me', r.status === 200 && r.body?.data?.id === userId, `status=${r.status}`);
 
     // 5. Deposit
-    r = await req('POST', '/api/wallets/deposit', {
+    r = await req('POST', '/api/v1/wallets/deposit', {
       token: accessToken,
       body: { amount: 150.5, currency: 'BRL', description: 'smoke deposit' },
     });
@@ -144,7 +144,7 @@ async function main() {
     );
 
     // 6. GET wallet
-    r = await req('GET', '/api/wallets/me', { token: accessToken });
+    r = await req('GET', '/api/v1/wallets/me', { token: accessToken });
     record(
       'GET /api/wallets/me',
       r.status === 200 && r.body?.data?.balance === 150.5,
@@ -152,7 +152,7 @@ async function main() {
     );
 
     // 7. Withdraw abaixo do mínimo (validação real do fluxo)
-    r = await req('POST', '/api/wallets/withdraw', {
+    r = await req('POST', '/api/v1/wallets/withdraw', {
       token: accessToken,
       body: { amount: 50, currency: 'BRL', pixKey: 'user@pix' },
     });
@@ -163,7 +163,7 @@ async function main() {
     );
 
     // 8. Place bet real (evento semeado no repositório in-memory)
-    r = await req('POST', '/api/bets', {
+    r = await req('POST', '/api/v1/bets', {
       token: accessToken,
       body: {
         eventId: FOOTBALL_UUID,
@@ -177,21 +177,21 @@ async function main() {
     const betId = r.body?.data?.id;
     record('POST /api/bets (aposta real)', r.status === 201 && !!betId, `status=${r.status} bet=${betId}`);
     if (betId) {
-      r = await req('GET', '/api/bets/me', { token: accessToken });
+      r = await req('GET', '/api/v1/bets/me', { token: accessToken });
       const listed = Array.isArray(r.body?.data?.bets) && r.body.data.bets.some((b) => b.id === betId);
       record('GET /api/bets/me', r.status === 200 && listed, `status=${r.status} listed=${listed}`);
 
-      r = await req('GET', '/api/wallets/me', { token: accessToken });
+      r = await req('GET', '/api/v1/wallets/me', { token: accessToken });
       record(
         'saldo após aposta (estaca abatida)',
         r.status === 200 && r.body?.data?.balance === 140.5,
         `balance=${r.body?.data?.balance} (esperado 140.5)`,
       );
 
-      r = await req('POST', `/api/bets/${betId}/cancel`, { token: accessToken });
+      r = await req('POST', `/api/v1/bets/${betId}/cancel`, { token: accessToken });
       record('POST /api/bets/:id/cancel (refund)', r.status === 200, `status=${r.status}`);
 
-      r = await req('GET', '/api/wallets/me', { token: accessToken });
+      r = await req('GET', '/api/v1/wallets/me', { token: accessToken });
       record(
         'saldo após cancelamento (estaca devolvida)',
         r.status === 200 && r.body?.data?.balance === 150.5,
@@ -200,7 +200,7 @@ async function main() {
     }
 
     // 9. Refresh token
-    r = await req('POST', '/api/auth/refresh', { body: { refreshToken } });
+    r = await req('POST', '/api/v1/auth/refresh', { body: { refreshToken } });
     record('POST /api/auth/refresh', r.status === 200 && !!r.body?.data?.accessToken, `status=${r.status}`);
   } catch (err) {
     record('fluxo de smoke', false, String(err));

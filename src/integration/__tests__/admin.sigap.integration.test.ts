@@ -104,7 +104,7 @@ describe('Admin SIGAP routes — Fase 16', () => {
 
   it('transmite um arquivo SIGAP e retorna ACKED', async () => {
     const res = await request(app)
-      .post('/api/admin/sigap/transmit')
+      .post('/api/v1/admin/sigap/transmit')
       .send({
         fileType: 'OPERADOR_DIARIO',
         referenceDate: '2026-08-28',
@@ -118,22 +118,22 @@ describe('Admin SIGAP routes — Fase 16', () => {
 
   it('lista submissões após transmitir', async () => {
     await request(app)
-      .post('/api/admin/sigap/transmit')
+      .post('/api/v1/admin/sigap/transmit')
       .send({ fileType: 'APOSTADOR', referenceDate: '2026-08-28', payload: [{ id: 'u-1' }] });
-    const res = await request(app).get('/api/admin/sigap/submissions');
+    const res = await request(app).get('/api/v1/admin/sigap/submissions');
     expect(res.status).toBe(200);
     expect(res.body.data.total).toBe(1);
     expect(res.body.data.items[0].fileType).toBe('APOSTADOR');
   });
 
   it('retorna 404 para submissão inexistente', async () => {
-    const res = await request(app).get('/api/admin/sigap/submissions/nao-existe');
+    const res = await request(app).get('/api/v1/admin/sigap/submissions/nao-existe');
     expect(res.status).toBe(404);
   });
 
   it('consulta impedimento de documento', async () => {
     const res = await request(app)
-      .post('/api/admin/sigap/impediment')
+      .post('/api/v1/admin/sigap/impediment')
       .send({ documentNumber: '111.444.777-35' });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('IMPEDED');
@@ -141,14 +141,14 @@ describe('Admin SIGAP routes — Fase 16', () => {
 
   it('rejeita payload vazio com erro de validação', async () => {
     const res = await request(app)
-      .post('/api/admin/sigap/transmit')
+      .post('/api/v1/admin/sigap/transmit')
       .send({ fileType: 'APOSTADOR', referenceDate: '2026-08-28', payload: [] });
     expect(res.status).toBe(400);
   });
 
   it('rejeita acesso não-admin', async () => {
     appConfig.admin.allowedUserIds = ['outro-admin'];
-    const res = await request(app).get('/api/admin/sigap/submissions');
+    const res = await request(app).get('/api/v1/admin/sigap/submissions');
     expect(res.status).toBe(403);
   });
 });

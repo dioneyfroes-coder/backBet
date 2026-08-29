@@ -148,9 +148,9 @@ async function registerAndLogin(prefix: string) {
     firstName: 'Sec',
     lastName: 'Test',
   };
-  const reg = await request(app).post('/api/auth/register').send(payload);
+  const reg = await request(app).post('/api/v1/auth/register').send(payload);
   expect(reg.status).toBe(201);
-  const login = await request(app).post('/api/auth/login').send({
+  const login = await request(app).post('/api/v1/auth/login').send({
     email: payload.email,
     password: PASSWORD,
   });
@@ -167,7 +167,7 @@ async function registerAndLogin(prefix: string) {
 
 async function fundWallet(accessToken: string, amount = 200): Promise<void> {
   const res = await request(app)
-    .post('/api/wallets/deposit')
+    .post('/api/v1/wallets/deposit')
     .set('Authorization', `Bearer ${accessToken}`)
     .send({ amount, currency: 'BRL', description: 'seed' });
   expect(res.status).toBe(201);
@@ -243,7 +243,7 @@ describe('Security Fase 12 — Authentication hardening', () => {
   it('rejects access tokens that are actually refresh tokens', async () => {
     const a = await registerAndLogin('kindswitch');
     const res = await request(app)
-      .get('/api/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${a.refreshToken}`);
     expect(res.status).toBe(401);
   });
@@ -251,14 +251,14 @@ describe('Security Fase 12 — Authentication hardening', () => {
   it('rejects refresh of a token that is not a refresh token', async () => {
     const a = await registerAndLogin('notrefresh');
     const res = await request(app)
-      .post('/api/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .send({ refreshToken: a.accessToken });
     expect(res.status).toBe(401);
   });
 
   it('performs a valid refresh flow with new tokens', async () => {
     const a = await registerAndLogin('refreshok');
-    const res = await request(app).post('/api/auth/refresh').send({ refreshToken: a.refreshToken });
+    const res = await request(app).post('/api/v1/auth/refresh').send({ refreshToken: a.refreshToken });
     expect(res.status).toBe(200);
     const data = res.body.data;
     expect(data.accessToken).toBeTruthy();
@@ -268,26 +268,26 @@ describe('Security Fase 12 — Authentication hardening', () => {
 
   it('rejects tokens signed with an unknown secret (forgery)', async () => {
     const forged = forgeAccessToken('attacker', 'session-1', 'this-is-not-the-secret');
-    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${forged}`);
+    const res = await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${forged}`);
     expect(res.status).toBe(401);
   });
 
   it('rejects expired access tokens', async () => {
     const a = await registerAndLogin('expired');
     const expired = forgeAccessToken(a.userId, a.sessionId, appConfig.jwt.secret, 'access', '-1s');
-    const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${expired}`);
+    const res = await request(app).get('/api/v1/auth/me').set('Authorization', `Bearer ${expired}`);
     expect(res.status).toBe(401);
   });
 
   it('brute force login is throttled to 429', async () => {
     let lastRes = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: 'ghost@example.com', password: 'WrongPass1!' });
     expect(lastRes.status).toBe(401);
     const statuses: number[] = [lastRes.status];
     for (let i = 0; i < 20; i++) {
       lastRes = await request(app)
-        .post('/api/auth/login')
+        .post('/api/v1/auth/login')
         .send({ email: 'ghost@example.com', password: `WrongPass${i}!` });
       statuses.push(lastRes.status);
     }
@@ -297,10 +297,10 @@ describe('Security Fase 12 — Authentication hardening', () => {
   it('does not leak whether an email is registered on login', async () => {
     const a = await registerAndLogin('enumlogin');
     const wrongPassword = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: a.email, password: 'WrongPass1!' });
     const unknownEmail = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({ email: 'nobody@example.com', password: 'WrongPass1!' });
     expect(wrongPassword.status).toBe(401);
     expect(unknownEmail.status).toBe(401);
@@ -310,10 +310,10 @@ describe('Security Fase 12 — Authentication hardening', () => {
   it('does not leak whether an email is registered on password recovery', async () => {
     const a = await registerAndLogin('enumrecovery');
     const existing = await request(app)
-      .post('/api/auth/request-password-recovery')
+      .post('/api/v1/auth/request-password-recovery')
       .send({ email: a.email });
     const unknown = await request(app)
-      .post('/api/auth/request-password-recovery')
+      .post('/api/v1/auth/request-password-recovery')
       .send({ email: 'nobody@example.com' });
     expect(existing.status).toBe(200);
     expect(unknown.status).toBe(200);
@@ -327,25 +327,25 @@ describe('Security Fase 12 — Authorization (403)', () => {
   });
 
   it('returns 401 without a valid token', async () => {
-    const res = await request(app).get('/api/auth/me');
+    const res = await request(app).get('/api/v1/auth/me');
     expect(res.status).toBe(401);
   });
 
   it('returns 401 with a garbage bearer token', async () => {
-    const res = await request(app).get('/api/auth/me').set('Authorization', 'Bearer not-a-jwt');
+    const res = await request(app).get('/api/v1/auth/me').set('Authorization', 'Bearer not-a-jwt');
     expect(res.status).toBe(401);
   });
 
   it('blocks a regular user from admin endpoints (403)', async () => {
     const a = await registerAndLogin('notadmin');
     const overview = await request(app)
-      .get('/api/admin/overview')
+      .get('/api/v1/admin/overview')
       .set('Authorization', `Bearer ${a.accessToken}`);
     const risk = await request(app)
-      .get(`/api/admin/risk/users/${a.userId}`)
+      .get(`/api/v1/admin/risk/users/${a.userId}`)
       .set('Authorization', `Bearer ${a.accessToken}`);
     const treasury = await request(app)
-      .get('/api/admin/treasury/summary')
+      .get('/api/v1/admin/treasury/summary')
       .set('Authorization', `Bearer ${a.accessToken}`);
     expect(overview.status).toBe(403);
     expect(risk.status).toBe(403);
@@ -356,7 +356,7 @@ describe('Security Fase 12 — Authorization (403)', () => {
     const a = await registerAndLogin('realadmin');
     appConfig.admin.allowedUserIds = [a.userId];
     const res = await request(app)
-      .get('/api/admin/overview')
+      .get('/api/v1/admin/overview')
       .set('Authorization', `Bearer ${a.accessToken}`);
     expect(res.status).toBe(200);
   });
@@ -367,7 +367,7 @@ describe('Security Fase 12 — Authorization (403)', () => {
     const intruder = await registerAndLogin('betintruder');
     await fundWallet(owner.accessToken);
     const placed = await request(app)
-      .post('/api/bets')
+      .post('/api/v1/bets')
       .set('Authorization', `Bearer ${owner.accessToken}`)
       .send({
         eventId: SEC_EVENT_ID,
@@ -380,14 +380,14 @@ describe('Security Fase 12 — Authorization (403)', () => {
     const betId = placed.body.data.id;
 
     const denied = await request(app)
-      .post(`/api/bets/${betId}/cancel`)
+      .post(`/api/v1/bets/${betId}/cancel`)
       .set('Authorization', `Bearer ${intruder.accessToken}`)
       .send({ reason: 'intruder' });
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe('BET_NOT_OWNER');
 
     const ownerCancel = await request(app)
-      .post(`/api/bets/${betId}/cancel`)
+      .post(`/api/v1/bets/${betId}/cancel`)
       .set('Authorization', `Bearer ${owner.accessToken}`)
       .send({ reason: 'owner cancel' });
     expect(ownerCancel.status).toBe(200);
@@ -400,7 +400,7 @@ describe('Security Fase 12 — Authorization (403)', () => {
     appConfig.admin.allowedUserIds = [admin.userId];
     await fundWallet(owner.accessToken);
     const placed = await request(app)
-      .post('/api/bets')
+      .post('/api/v1/bets')
       .set('Authorization', `Bearer ${owner.accessToken}`)
       .send({
         eventId: SEC_EVENT_ID,
@@ -412,7 +412,7 @@ describe('Security Fase 12 — Authorization (403)', () => {
     expect(placed.status).toBe(201);
 
     const res = await request(app)
-      .post(`/api/bets/${placed.body.data.id}/cancel`)
+      .post(`/api/v1/bets/${placed.body.data.id}/cancel`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ reason: 'admin cancel' });
     expect(res.status).toBe(200);
@@ -425,14 +425,14 @@ describe('Security Fase 12 — Authorization (403)', () => {
     await fundWallet(alice.accessToken);
 
     const created = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${alice.accessToken}`)
       .send({ amount: 100, currency: 'BRL', password: PASSWORD });
     expect(created.status).toBe(201);
     const requestId = created.body.data.withdrawalRequest.id;
 
     const denied = await request(app)
-      .patch(`/api/finance/withdrawal-requests/${requestId}`)
+      .patch(`/api/v1/finance/withdrawal-requests/${requestId}`)
       .set('Authorization', `Bearer ${bob.accessToken}`)
       .send({ action: 'REJECTED', notes: 'bob meddling' });
     expect(denied.status).toBe(403);
@@ -445,13 +445,13 @@ describe('Security Fase 12 — Authorization (403)', () => {
     await fundWallet(alice.accessToken);
 
     const created = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${alice.accessToken}`)
       .send({ amount: 100, currency: 'BRL', password: PASSWORD });
     const requestId = created.body.data.withdrawalRequest.id;
 
     const res = await request(app)
-      .patch(`/api/finance/withdrawal-requests/${requestId}`)
+      .patch(`/api/v1/finance/withdrawal-requests/${requestId}`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .send({ action: 'REJECTED', notes: 'approved by admin' });
     expect(res.status).toBe(200);
@@ -463,10 +463,10 @@ describe('Security Fase 12 — Authorization (403)', () => {
     await fundWallet(a.accessToken, 500);
 
     const aBalance = await request(app)
-      .get('/api/wallets/me')
+      .get('/api/v1/wallets/me')
       .set('Authorization', `Bearer ${a.accessToken}`);
     const bBalance = await request(app)
-      .get('/api/wallets/me')
+      .get('/api/v1/wallets/me')
       .set('Authorization', `Bearer ${b.accessToken}`);
     expect(aBalance.status).toBe(200);
     expect(bBalance.status).toBe(200);
@@ -483,7 +483,7 @@ describe('Security Fase 13 — Segurança específica de dinheiro', () => {
   it('bloqueia depósito acima do máximo por operação (400)', async () => {
     const user = await registerAndLogin('msec1');
     const res = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 6000, currency: 'BRL' });
     expect(res.status).toBe(400);
@@ -496,14 +496,14 @@ describe('Security Fase 13 — Segurança específica de dinheiro', () => {
 
     for (let i = 0; i < 3; i += 1) {
       const ok = await request(app)
-        .post('/api/finance/withdrawal-requests')
+        .post('/api/v1/finance/withdrawal-requests')
         .set('Authorization', `Bearer ${user.accessToken}`)
         .send({ amount: 100, currency: 'BRL', password: PASSWORD });
       expect(ok.status).toBe(201);
     }
 
     const blocked = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 100, currency: 'BRL', password: PASSWORD });
     expect(blocked.status).toBe(429);
@@ -515,13 +515,13 @@ describe('Security Fase 13 — Segurança específica de dinheiro', () => {
     await fundWallet(user.accessToken);
 
     const updated = await request(app)
-      .put('/api/users/me/pix-key')
+      .put('/api/v1/users/me/pix-key')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ pixKey: 'msec3@bank.example' });
     expect(updated.status).toBe(200);
 
     const blocked = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 100, currency: 'BRL', password: PASSWORD });
     expect(blocked.status).toBe(403);
@@ -539,21 +539,21 @@ describe('Security Fase 14 — Compliance (KYC) e jogo responsável', () => {
     await fundWallet(user.accessToken, 200);
 
     const blocked = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 200, currency: 'BRL', password: PASSWORD });
     expect(blocked.status).toBe(403);
     expect(blocked.body.error.code).toBe('COMPLIANCE_IDENTITY_REQUIRED');
 
     const verified = await request(app)
-      .post('/api/users/me/identity-verification')
+      .post('/api/v1/users/me/identity-verification')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ documentNumber: '12345678901', fullName: 'Sec Test' });
     expect(verified.status).toBe(200);
     expect(verified.body.data.verification.status).toBe('VERIFIED');
 
     const ok = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 200, currency: 'BRL', password: PASSWORD });
     expect(ok.status).toBe(201);
@@ -564,14 +564,14 @@ describe('Security Fase 14 — Compliance (KYC) e jogo responsável', () => {
     await fundWallet(user.accessToken, 200);
 
     const rejected = await request(app)
-      .post('/api/users/me/identity-verification')
+      .post('/api/v1/users/me/identity-verification')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ documentNumber: '0001' });
     expect(rejected.status).toBe(200);
     expect(rejected.body.data.verification.status).toBe('REJECTED');
 
     const blocked = await request(app)
-      .post('/api/finance/withdrawal-requests')
+      .post('/api/v1/finance/withdrawal-requests')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 200, currency: 'BRL', password: PASSWORD });
     expect(blocked.status).toBe(403);
@@ -581,20 +581,20 @@ describe('Security Fase 14 — Compliance (KYC) e jogo responsável', () => {
   it('bloqueia depósito acima do limite diário de jogo responsável (403 -> 201)', async () => {
     const user = await registerAndLogin('rg1');
     const setLimit = await request(app)
-      .patch('/api/users/me/responsible-gambling')
+      .patch('/api/v1/users/me/responsible-gambling')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ depositLimit: { amountCents: 500, period: 'DAY' } });
     expect(setLimit.status).toBe(200);
 
     const over = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 6, currency: 'BRL' });
     expect(over.status).toBe(403);
     expect(over.body.error.code).toBe('RESPONSIBLE_GAMBLING_DEPOSIT_LIMIT_EXCEEDED');
 
     const within = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 4, currency: 'BRL' });
     expect(within.status).toBe(201);
@@ -603,14 +603,14 @@ describe('Security Fase 14 — Compliance (KYC) e jogo responsável', () => {
   it('autoexclusão bloqueia depósito (403)', async () => {
     const user = await registerAndLogin('rg2');
     const set = await request(app)
-      .patch('/api/users/me/responsible-gambling')
+      .patch('/api/v1/users/me/responsible-gambling')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ selfExclusionUntil: 'indefinite' });
     expect(set.status).toBe(200);
     expect(set.body.data.profile.selfExcluded).toBe(true);
 
     const blocked = await request(app)
-      .post('/api/wallets/deposit')
+      .post('/api/v1/wallets/deposit')
       .set('Authorization', `Bearer ${user.accessToken}`)
       .send({ amount: 5, currency: 'BRL' });
     expect(blocked.status).toBe(403);
@@ -624,7 +624,7 @@ describe('Security Fase 12 — HTTP hardening', () => {
   });
 
   it('sends security headers from helmet', async () => {
-    const res = await request(app).get('/api/auth/me');
+    const res = await request(app).get('/api/v1/auth/me');
     expect(res.status).toBe(401);
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['x-frame-options']).toBe('DENY');
@@ -633,7 +633,7 @@ describe('Security Fase 12 — HTTP hardening', () => {
 
   it('blocks disallowed origins via CORS', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .set('Origin', 'http://evil.example.com')
       .send({ email: 'x@example.com', password: 'WrongPass1!' });
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
@@ -641,7 +641,7 @@ describe('Security Fase 12 — HTTP hardening', () => {
 
   it('allows configured origins via CORS', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .set('Origin', 'http://localhost:3000')
       .send({ email: 'x@example.com', password: 'WrongPass1!' });
     expect(res.headers['access-control-allow-origin']).toBe('http://localhost:3000');
@@ -650,7 +650,7 @@ describe('Security Fase 12 — HTTP hardening', () => {
   it('rejects oversized request bodies with 413', async () => {
     const huge = '{"x":"' + 'a'.repeat(11 * 1024 * 1024) + '"}';
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .set('Content-Type', 'application/json')
       .send(huge);
     expect(res.status).toBe(413);
@@ -658,7 +658,7 @@ describe('Security Fase 12 — HTTP hardening', () => {
 
   it('validates request payloads with 400 on malformed input', async () => {
     const res = await request(app)
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send({ email: 'not-an-email', password: 'short', username: '' });
     expect(res.status).toBe(400);
   });

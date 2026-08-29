@@ -20,11 +20,11 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:3000/api',
+        url: 'http://localhost:3000',
         description: 'Desenvolvimento',
       },
       {
-        url: 'https://api.backbet.com/api',
+        url: 'https://api.backbet.com',
         description: 'Produção',
       },
     ],
@@ -37,7 +37,26 @@ const swaggerOptions = {
           description: 'JWT Bearer token ou User ID em desenvolvimento',
         },
       },
+      parameters: {
+        IdempotencyKey: {
+          name: 'Idempotency-Key',
+          in: 'header',
+          required: false,
+          description:
+            'Chave de idempotência fornecida pelo cliente. Replays retornam o mesmo resultado com o header Idempotency-Replayed: true.',
+          schema: { type: 'string', example: 'req-8f6c2b1a' },
+        },
+      },
       schemas: {
+        Pagination: {
+          type: 'object',
+          properties: {
+            limit: { type: 'integer', example: 50, description: 'Quantidade retornada nesta página' },
+            offset: { type: 'integer', example: 0, description: 'Quantidade de itens pulada' },
+            total: { type: 'integer', example: 142, description: 'Total de itens disponíveis' },
+          },
+          example: { limit: 50, offset: 0, total: 142 },
+        },
         User: {
           type: 'object',
           properties: {
@@ -568,6 +587,7 @@ const swaggerOptions = {
               type: 'array',
               items: { $ref: '#/components/schemas/BetResponse' },
             },
+            pagination: { $ref: '#/components/schemas/Pagination' },
           },
         },
         EventMarket: {
@@ -618,6 +638,7 @@ const swaggerOptions = {
               type: 'array',
               items: { $ref: '#/components/schemas/Event' },
             },
+            pagination: { $ref: '#/components/schemas/Pagination' },
           },
         },
         EventMarketsResponse: {
@@ -757,7 +778,7 @@ const swaggerOptions = {
 // Add explicit paths for contact and upload (helps generators and docs)
 // Note: controllers already contain detailed JSDoc, but explicit paths improve visibility
 (swaggerOptions.definition as any).paths = {
-  '/contact': {
+  '/api/v1/contact': {
     post: {
       tags: ['Contact'],
       summary: 'Send a contact message',
@@ -785,7 +806,7 @@ const swaggerOptions = {
       },
     },
   },
-  '/users/me/documents': {
+  '/api/v1/users/me/documents': {
     post: {
       tags: ['Users'],
       summary: 'Upload identity document for the authenticated user',

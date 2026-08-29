@@ -6,6 +6,7 @@ import { GetUpcomingEventsUseCase } from '@core/betting/application/use-cases/Ge
 import { ListEventCategoriesUseCase } from '@core/betting/application/use-cases/ListEventCategoriesUseCase';
 import { ListEventsQueryDTO, ListEventsQueryDTOType } from '../dtos/EventDTOs';
 import { Event } from '@core/betting/domain/entities/Event';
+import { parsePagination, paginate } from '../utils/pagination';
 
 export class EventController extends BaseController {
   constructor(
@@ -23,7 +24,7 @@ export class EventController extends BaseController {
 
   /**
    * @openapi
-   * /api/events:
+   * /api/v1/events:
    *   get:
    *     tags:
    *       - Events
@@ -48,33 +49,48 @@ export class EventController extends BaseController {
    *         schema:
    *           type: string
    *           format: date-time
-   *       - in: query
-   *         name: limit
-   *         schema:
-   *           type: integer
-   *           minimum: 1
-   *           maximum: 100
-   *       - in: query
-   *         name: search
-   *         schema:
-   *           type: string
-   *     responses:
-   *       '200':
-   *         description: Catálogo de eventos
-   */
+*       - in: query
+    *         name: limit
+    *         schema:
+    *           type: integer
+    *           minimum: 1
+    *           maximum: 200
+    *           default: 50
+    *       - in: query
+    *         name: offset
+    *         schema:
+    *           type: integer
+    *           minimum: 0
+    *           default: 0
+    *       - in: query
+    *         name: search
+    *         schema:
+    *           type: string
+    *     responses:
+    *       '200':
+    *         description: Catálogo de eventos
+    *         content:
+    *           application/json:
+    *             schema:
+    *               $ref: '#/components/schemas/EventListResponse'
+    */
   async listEvents(req: Request, res: Response) {
     try {
       const query = (this.validateSchema(ListEventsQueryDTO, req.query) ??
         {}) as ListEventsQueryDTOType;
+      const paginationQuery = parsePagination(query);
       const events = await this.listEventsUseCase.execute({
         status: query.status,
         category: query.category,
         dateFrom: query.dateFrom,
         dateTo: query.dateTo,
-        limit: query.limit,
         search: query.search,
       });
-      return this.ok(res, { events: events.map((event) => this.serializeEvent(event)) });
+      const { items, pagination } = paginate(events, paginationQuery);
+      return this.ok(res, {
+        events: items.map((event) => this.serializeEvent(event)),
+        pagination,
+      });
     } catch (error) {
       return this.handleError(error, res);
     }
@@ -82,7 +98,7 @@ export class EventController extends BaseController {
 
   /**
    * @openapi
-   * /api/events/upcoming:
+   * /api/v1/events/upcoming:
    *   get:
    *     tags:
    *       - Events
@@ -111,7 +127,7 @@ export class EventController extends BaseController {
 
   /**
    * @openapi
-   * /api/events/{eventId}:
+   * /api/v1/events/{eventId}:
    *   get:
    *     tags:
    *       - Events
@@ -139,7 +155,7 @@ export class EventController extends BaseController {
 
   /**
    * @openapi
-   * /api/events/{eventId}/markets:
+   * /api/v1/events/{eventId}/markets:
    *   get:
    *     tags:
    *       - Events
@@ -166,7 +182,7 @@ export class EventController extends BaseController {
 
   /**
    * @openapi
-   * /api/events/categories:
+   * /api/v1/events/categories:
    *   get:
    *     tags:
    *       - Events
