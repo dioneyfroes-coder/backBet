@@ -6,6 +6,7 @@ import { CreditPackageService } from '@/core/finance/domain/services/CreditPacka
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import { createWithdrawalQueue } from '@/infrastructure/withdrawals/withdrawalQueueFactory';
+import { startWithdrawalQueueBacklogPolling } from '@/infrastructure/withdrawals/withdrawalQueueMetrics';
 import { ListCreditPackages } from '@/core/finance/application/use-cases/ListCreditPackages';
 import { PurchaseCreditPackage } from '@/core/finance/application/use-cases/PurchaseCreditPackage';
 import { RequestWithdrawal } from '@/core/finance/application/use-cases/RequestWithdrawal';
@@ -60,6 +61,10 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
   const withdrawalRequestRepository: IWithdrawalRequestRepository =
     deps.withdrawalRequestRepository ?? (await createWithdrawalRequestRepository());
   const withdrawalQueue = await createWithdrawalQueue();
+  const runtimeForPolling = (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || '').toLowerCase();
+  if (runtimeForPolling !== 'test') {
+    startWithdrawalQueueBacklogPolling(withdrawalQueue);
+  }
   const withdrawalRequestService = new WithdrawalRequestService(
     withdrawalRequestRepository,
     walletService,

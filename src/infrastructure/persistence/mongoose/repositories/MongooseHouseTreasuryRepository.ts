@@ -6,6 +6,8 @@ import { TreasuryLedgerEntry } from '@/core/treasury/domain/entities/TreasuryLed
 import { HouseTreasuryModel, IHouseTreasuryDocument } from '../schemas/TreasurySchema';
 import { HouseTreasuryRecord, TreasuryLedgerRecord } from '@/types/persistence';
 import { optimisticLockConflictCounter } from '@/infrastructure/observability/metrics';
+import { transactionFailuresCounter } from '@/infrastructure/observability/metrics';
+import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
 
 type PersistedRecord = Omit<HouseTreasuryRecord, '_id'> & {
   _id: HouseTreasuryRecord['_id'] | { toString(): string };
@@ -89,6 +91,11 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     const session = await HouseTreasuryModel.startSession();
     try {
       return await session.withTransaction(() => work(session));
+    } catch (error) {
+      if (isInfraTransactionFailure(error)) {
+        transactionFailuresCounter.inc({ resource: 'house_treasury' });
+      }
+      throw error;
     } finally {
       await session.endSession();
     }

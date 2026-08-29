@@ -9,6 +9,7 @@ export type WithdrawalPayoutPayload = {
 
 export interface IWithdrawalQueue {
   enqueuePayout(payload: WithdrawalPayoutPayload): Promise<void>;
+  getPendingCount?(): Promise<number>;
 }
 
 export default IWithdrawalQueue;

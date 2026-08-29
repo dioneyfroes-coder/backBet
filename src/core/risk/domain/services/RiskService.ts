@@ -8,6 +8,10 @@ import { BetStatus } from '@/core/betting/types/bet.types';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { RiskRepositoryOptions } from '../repositories/IRiskRepository';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
+import {
+  riskRejectionsCounter,
+  riskReconciliationMismatchCounter,
+} from '@/infrastructure/observability/metrics';
 
 export class RiskService {
   // If repository is provided, use it; otherwise fallback to in-memory map for compatibility/tests
@@ -68,7 +72,10 @@ export class RiskService {
     marketId?: string,
   ): Promise<boolean> {
     // Basic checks: single stake limit
-    if (stake > RISK_CONFIG.MAX_SINGLE_STAKE) return false;
+    if (stake > RISK_CONFIG.MAX_SINGLE_STAKE) {
+      riskRejectionsCounter.inc({ reason: 'single_stake' });
+      return false;
+    }
 
     const stakeMoney = new Money(stake, 'BRL');
     const liability = stakeMoney.calculateLiability(oddsValue);
@@ -81,6 +88,7 @@ export class RiskService {
       return true;
     }
     if (RISK_CONFIG.BLACKLIST_USER_IDS.includes(userId)) {
+      riskRejectionsCounter.inc({ reason: 'blacklist' });
       writeStructuredLog({ event: 'risk_reject', userId, reason: 'blacklist' }, 'warn');
       return false;
     }
@@ -97,6 +105,7 @@ export class RiskService {
         (b) => b.status === 'PENDING' && b.createdAt.getTime() >= windowStart,
       );
       if (recentPending.length + 1 > RISK_CONFIG.MAX_BETS_PER_WINDOW) {
+        riskRejectionsCounter.inc({ reason: 'velocity_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -116,6 +125,7 @@ export class RiskService {
     if (eventId) {
       const eventExposure = await this.getEventExposure(eventId);
       if ((eventExposure * 100 + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
+        riskRejectionsCounter.inc({ reason: 'event_exposure_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -134,6 +144,7 @@ export class RiskService {
     if (marketId) {
       const marketExposure = await this.getMarketExposure(marketId);
       if ((marketExposure * 100 + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {
+        riskRejectionsCounter.inc({ reason: 'market_exposure_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -150,6 +161,7 @@ export class RiskService {
     }
 
     if (currentExposure + liability.amount > maxExposure) {
+      riskRejectionsCounter.inc({ reason: 'exceeds_max_exposure' });
       writeStructuredLog(
         {
           event: 'risk_reject',
@@ -295,6 +307,7 @@ export class RiskService {
     }
 
     if (actualCents !== expectedCents) {
+      riskReconciliationMismatchCounter.inc({ kind: 'user' });
       if (this.riskRepository) {
         const profile = await this.riskRepository.getByUserId(userId);
         await this.riskRepository.upsert(
@@ -346,6 +359,7 @@ export class RiskService {
     const actualCents = counter?.exposureCents ?? 0;
 
     if (actualCents !== expectedCents) {
+      riskReconciliationMismatchCounter.inc({ kind: 'counter' });
       if (this.riskRepository) {
         await this.riskRepository.setCounterExposure(scope, refId, expectedCents);
       }

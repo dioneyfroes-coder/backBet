@@ -14,6 +14,13 @@ import { TransactionRunner, TransactionSession } from '@/core/shared/types/Trans
 import { WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 import { appConfig } from '@/shared/config/appConfig';
+import {
+  betsPlacedCounter,
+  betsRejectedCounter,
+  betsWonCounter,
+  betsLostCounter,
+  riskRejectionsCounter,
+} from '@/infrastructure/observability/metrics';
 
 export class BetService {
   constructor(
@@ -43,6 +50,7 @@ export class BetService {
         input.marketId,
       );
       if (!allowed) {
+        betsRejectedCounter.inc();
         throw new DomainError({ code: 'RISK_REJECTED', message: 'Bet rejected by risk rules' });
       }
     }
@@ -93,6 +101,8 @@ export class BetService {
           riskOptions,
         );
         if (!userReserved || !eventReserved || !marketReserved) {
+          riskRejectionsCounter.inc({ reason: 'exposure_limit' });
+          betsRejectedCounter.inc();
           throw new DomainError({
             code: 'RISK_LIMIT_EXCEEDED',
             message: 'Bet rejected: exposure limit would be exceeded',
@@ -106,6 +116,7 @@ export class BetService {
       ? await this.transactionRunner.withTransaction(operation)
       : await operation();
 
+    betsPlacedCounter.inc();
     return bet;
   }
 
@@ -192,9 +203,13 @@ export class BetService {
       else await this.betRepository.update(bet);
       return bet;
     };
-    return this.transactionRunner
-      ? this.transactionRunner.withTransaction(operation)
-      : operation();
+    const resolvedBet = this.transactionRunner
+      ? await this.transactionRunner.withTransaction(operation)
+      : await operation();
+
+    if (resolvedBet.status === 'WON') betsWonCounter.inc();
+    else if (resolvedBet.status === 'LOST') betsLostCounter.inc();
+    return resolvedBet;
   }
 
   async getUserBets(userId: string): Promise<Bet[]> {

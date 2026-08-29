@@ -8,6 +8,7 @@ import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
 import { randomUUID } from 'crypto';
+import { depositsCounter, withdrawalsCounter } from '@/infrastructure/observability/metrics';
 
 export class WalletService {
   constructor(
@@ -38,6 +39,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
+    depositsCounter.inc({ type: context?.type ?? 'DEPOSIT' });
     await this.appendLedger(userId, amount, wallet.currency, context, 'DEPOSIT', options);
     this.logWalletAction('deposit', wallet, amount, context);
     return wallet;
@@ -69,6 +71,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
+    withdrawalsCounter.inc();
     await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw', wallet, amount, context);
     return wallet;
@@ -105,6 +108,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
+    withdrawalsCounter.inc();
     await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw_locked', wallet, amount, context);
     return wallet;

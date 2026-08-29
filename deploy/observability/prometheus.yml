@@ -6,6 +6,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - alerting/alerts.yml
+
 scrape_configs:
   - job_name: "backbet"
     metrics_path: /metrics

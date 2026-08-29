@@ -13,6 +13,11 @@ export class BullWithdrawalQueue implements IWithdrawalQueue {
     this.queue = new Queue('withdrawal_payouts', REDIS_URL) as BullQueue;
   }
 
+  async getPendingCount(): Promise<number> {
+    const counts = await this.queue.getJobCounts();
+    return (counts.waiting ?? 0) + (counts.active ?? 0) + (counts.delayed ?? 0);
+  }
+
   async enqueuePayout(payload: WithdrawalPayoutPayload): Promise<void> {
     // use jobId = requestId for idempotency
     await this.queue.add('payout', payload, {

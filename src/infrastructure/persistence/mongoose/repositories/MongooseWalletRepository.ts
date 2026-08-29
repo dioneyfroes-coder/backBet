@@ -5,6 +5,8 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { AppError } from '@/shared/errors/AppError';
 import { WalletModel, IWalletDocument } from '../schemas/WalletSchema';
 import { WalletRecord, WalletTransactionRecord } from '@/types/persistence';
+import { transactionFailuresCounter } from '@/infrastructure/observability/metrics';
+import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
 
 type WalletRecordRaw = Omit<WalletRecord, '_id'> & {
   _id: WalletRecord['_id'] | { toString(): string };
@@ -167,6 +169,11 @@ export class MongooseWalletRepository implements IWalletRepository {
     const session = await WalletModel.startSession();
     try {
       return await session.withTransaction(() => work(session));
+    } catch (error) {
+      if (isInfraTransactionFailure(error)) {
+        transactionFailuresCounter.inc({ resource: 'wallet' });
+      }
+      throw error;
     } finally {
       await session.endSession();
     }

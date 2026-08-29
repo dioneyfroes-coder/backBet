@@ -146,8 +146,72 @@ const sigapSubmissionCounter = new Counter({
 
 const sigapSubmissionFailureCounter = new Counter({
   name: 'backbet_sigap_submission_failures_total',
-  help: 'Total de falhas de transmiss��ǜo ao SIGAP',
+  help: 'Total de falhas de transmissão ao SIGAP',
   labelNames: ['fileType'],
+  registers: [registry],
+});
+
+const betsPlacedCounter = new Counter({
+  name: 'backbet_bets_total',
+  help: 'Total de apostas criadas com sucesso',
+  registers: [registry],
+});
+
+const betsRejectedCounter = new Counter({
+  name: 'backbet_bets_rejected_total',
+  help: 'Total de apostas rejeitadas (regras de risco)',
+  registers: [registry],
+});
+
+const betsWonCounter = new Counter({
+  name: 'backbet_bets_won_total',
+  help: 'Total de apostas resolvidas como WON',
+  registers: [registry],
+});
+
+const betsLostCounter = new Counter({
+  name: 'backbet_bets_lost_total',
+  help: 'Total de apostas resolvidas como LOST',
+  registers: [registry],
+});
+
+const depositsCounter = new Counter({
+  name: 'backbet_deposits_total',
+  help: 'Total de créditos aplicados na carteira',
+  labelNames: ['type'],
+  registers: [registry],
+});
+
+const withdrawalsCounter = new Counter({
+  name: 'backbet_withdrawals_total',
+  help: 'Total de débitos de saque efetivados na carteira',
+  registers: [registry],
+});
+
+const riskRejectionsCounter = new Counter({
+  name: 'backbet_risk_rejections_total',
+  help: 'Total de apostas bloqueadas pelas regras de risco',
+  labelNames: ['reason'],
+  registers: [registry],
+});
+
+const riskReconciliationMismatchCounter = new Counter({
+  name: 'backbet_risk_reconciliation_mismatches_total',
+  help: 'Total de divergências encontradas na reconciliação de exposição de risco',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+
+const transactionFailuresCounter = new Counter({
+  name: 'backbet_transaction_failures_total',
+  help: 'Total de transações Mongo abortadas por falha de infraestrutura',
+  labelNames: ['resource'],
+  registers: [registry],
+});
+
+const withdrawalQueueBacklogGauge = new Gauge({
+  name: 'backbet_withdrawal_queue_backlog',
+  help: 'Quantidade de payouts pendentes na fila de saques',
   registers: [registry],
 });
 
@@ -175,4 +239,14 @@ export {
   responsibleGamblingBlockedCounter,
   sigapSubmissionCounter,
   sigapSubmissionFailureCounter,
+  betsPlacedCounter,
+  betsRejectedCounter,
+  betsWonCounter,
+  betsLostCounter,
+  depositsCounter,
+  withdrawalsCounter,
+  riskRejectionsCounter,
+  riskReconciliationMismatchCounter,
+  transactionFailuresCounter,
+  withdrawalQueueBacklogGauge,
 };

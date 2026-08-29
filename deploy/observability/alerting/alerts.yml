@@ -1,0 +1,127 @@
+# BackBet — regras de alerta (Fase 23 — Observabilidade)
+#
+# Referenciadas pelo prometheus.yml via rule_files. As expressões usam apenas
+# métricas já exportadas pelo endpoint /metrics (backbet_*). Para notificar via
+# Alertmanager, aponte o bloco "alerting" do prometheus.yml para o Alertmanager.
+groups:
+  - name: backbet-critical
+    rules:
+      - alert: BackBet_MongoUnavailable
+        expr: backbet_dependency_health{dependency="mongo"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "MongoDB indisponível"
+          description: "backbet_dependency_health{dependency='mongo'} = 0 há mais de 1 minuto. Verifique USE_MONGOOSE_PERSISTENCE, MONGO_URL, o replica set e o circuito Mongo."
+
+      - alert: BackBet_RedisUnavailable
+        expr: backbet_dependency_health{dependency="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Redis indisponível"
+          description: "backbet_dependency_health{dependency='redis'} = 0 há mais de 1 minuto. Verifique CACHE_ENABLED, REDIS_URL e o circuito Redis."
+
+      - alert: BackBet_TransactionFailures
+        expr: increase(backbet_transaction_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Falhas de transação Mongo"
+          description: "Transações foram abortadas por falha de infraestrutura ({{ $labels.resource }}) nos últimos 5 minutos. Inspecionar logs 'request_error' e estado do Mongo."
+
+      - alert: BackBet_WalletConflicts
+        expr: increase(backbet_optimistic_lock_conflicts_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Conflitos de optimistic lock"
+          description: "Mais de 10 conflitos de concorrência por 2 minutos ({{ $labels.resource }}). Corrida alta em carteiras/tesouraria ou retry excessivo."
+
+      - alert: BackBet_PaymentFailures
+        expr: increase(backbet_withdrawal_payout_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Falhas de payout"
+          description: "Payouts de saque falharam nos últimos 5 minutos. Verificar adaptador de pagamento, saldo da Treasury e a fila de saques."
+
+      - alert: BackBet_WithdrawalQueueBacklog
+        expr: backbet_withdrawal_queue_backlog > 10
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Backlog na fila de saques"
+          description: "Fila de saques com mais de 10 payouts pendentes. Verificar o worker de saques e a dependência de pagamento."
+
+      - alert: BackBet_TreasuryReconciliationMismatch
+        expr: increase(backbet_treasury_reconciliation_mismatches_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Divergência na reconciliação da Treasury"
+          description: "A reconciliação financeira detectou divergências nos últimos 5 minutos (walletId={{ $labels.walletId }})."
+
+      - alert: BackBet_RiskReconciliationMismatch
+        expr: increase(backbet_risk_reconciliation_mismatches_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Divergência de exposição de risco"
+          description: "Reconciliação de risco corrigiu exposições divergentes nos últimos 5 minutos (kind={{ $labels.kind }}). Investigar corridas de liability."
+
+      - alert: BackBet_Http5xxSpike
+        expr: increase(backbet_http_errors_total[5m]) > 15
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Spike de HTTP 5xx"
+          description: "Mais de 15 respostas 5xx em 2 minutos. Conferir erros recentes, dependências e alterações de deploy."
+
+      - alert: BackBet_LatencySpike
+        expr: histogram_quantile(0.95, sum by (le) (rate(backbet_http_request_duration_seconds_bucket[5m]))) > 2
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Latência HTTP elevada"
+          description: "Percentil 95 de latência acima de 2s por 2 minutos. Verificar CPU/Mongo/Redis e circuit breakers."
+
+      - alert: BackBet_BetsRejectedSpike
+        expr: increase(backbet_bets_rejected_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Spike de apostas rejeitadas"
+          description: "Mais de 10 apostas rejeitadas por risco em 2 minutos. Verificar configurações de RISK_CONFIG e possíveis ataques de abuso."
+
+      - alert: BackBet_IdempotencyConflicts
+        expr: increase(backbet_idempotency_claims_total{result="conflict"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Conflitos de idempotência"
+          description: "Chamadas concorrentes com a mesma chave idempotente deram conflito nos últimos 10 minutos (operação={{ $labels.operation }}). Possível retry agressivo ou cliente mal comportado."

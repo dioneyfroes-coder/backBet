@@ -163,6 +163,26 @@ Todos os toggles vivem em `appConfig.observability` e podem ser ajustados dinami
 
 Sempre que um toggle `OBS_*` é inicializado, sobrescrito ou resetado, o serviço emite o log `observability_toggle_state` e o snapshot atual passa a aparecer nos campos `observability` dos endpoints `/health` e `/readiness`, permitindo auditar mudanças sem acessar os arquivos `.env` diretamente.
 
+## Métricas de negócio e regras de alerta (Fase 23)
+
+Além das métricas HTTP e de dependências, a aplicação agora expõe métricas de negócio no `/metrics` (quando `OBS_ENABLE_PROMETHEUS=true`):
+
+| Métrica | Significado | Onde é incrementada |
+|---------|-------------|---------------------|
+| `backbet_bets_total` | Apostas criadas com sucesso | `BetService.placeBet` |
+| `backbet_bets_rejected_total` | Apostas rejeitadas (RISK_REJECTED / RISK_LIMIT_EXCEEDED) | `BetService.placeBet` |
+| `backbet_bets_won_total` / `backbet_bets_lost_total` | Apostas resolvidas como WON / LOST | `BetService.resolveBet` |
+| `backbet_deposits_total{type}` | Créditos efetivados na carteira (type = DEPOSIT/BET_WIN/BET_REFUND) | `WalletService.deposit` |
+| `backbet_withdrawals_total` | Saques efetivados (WITHDRAWAL_COMPLETED) | `WalletService.withdraw` / `withdrawLocked` |
+| `backbet_risk_rejections_total{reason}` | Bloqueios pelas regras de risco | `RiskService.canPlaceBet` e `BetService` (exposure_limit) |
+| `backbet_risk_reconciliation_mismatches_total{kind}` | Divergências corrigidas na reconciliação de exposição | `RiskService.recalculateUserExposure/recalculateCounter` |
+| `backbet_transaction_failures_total{resource}` | Transações Mongo abortadas por falha de infraestrutura | `MongooseWalletRepository` / `MongooseHouseTreasuryRepository.withTransaction` |
+| `backbet_withdrawal_queue_backlog` | Payouts pendentes na fila de saques (gauge) | `withdrawalQueueMetrics` (polling 15s) |
+
+Replays idempotentes (ledger `referenceId` já aplicado) **não** incrementam `deposits_total`/`withdrawals_total`, preservando a semântica de "movimentação real".
+
+As regras de alerta vivem em `deploy/observability/alerting/alerts.yml` (referenciadas pelo `prometheus.yml` via `rule_files`) e cobrem: Mongo/Redis down, falhas de transação, conflitos de optimistic lock, falhas de payout, backlog da fila de saques, divergências de reconciliação (Treasury e exposição de risco), spike de HTTP 5xx, pico de latência (p95 > 2s), spikes de apostas rejeitadas e conflitos de idempotência. Notificação via Alertmanager fica a cargo do deploy (bloco `alerting` no `prometheus.yml`).
+
 ## Testes e verificações
 
 - `npm test -- observabilityEndpoints` garante `/health`, `/health/cache`, `/readiness`, o comportamento 410 de `/metrics` e o serializador de erros.
@@ -182,4 +202,4 @@ curl -i http://localhost:3000/metrics
 
 ---
 
-**Última atualização:** 25 de novembro de 2025
+**Última atualização:** 29 de agosto de 2026
