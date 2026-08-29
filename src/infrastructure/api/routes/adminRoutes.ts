@@ -12,6 +12,8 @@ import {
   createWalletRepository,
   createHouseTreasuryRepository,
   createLedgerRepository,
+  createUserRepository,
+  createWithdrawalRequestRepository,
 } from '@/infrastructure/persistence/factory';
 import { AdminController } from '../controllers/AdminController';
 import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
@@ -19,6 +21,9 @@ import { IEventRepository } from '@core/betting/domain/repositories/IEventReposi
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
+import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
+import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import { UserService } from '@core/user/domain/services/UserService';
 import { WalletService } from '@core/finance/domain/services/WalletService';
 import { BetService } from '@core/betting/domain/services/BetService';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
@@ -60,6 +65,8 @@ export type AdminRoutesDeps = {
   houseTreasuryRepository?: IHouseTreasuryRepository;
   auditRepository?: IAuditEventRepository;
   sigapSubmissionRepository?: ISigapSubmissionRepository;
+  userRepository?: IUserRepository;
+  withdrawalRepository?: IWithdrawalRequestRepository;
   dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>;
 };
 
@@ -75,11 +82,15 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   const riskRepository: IRiskRepository = deps.riskRepository ?? (await createRiskRepository());
   const houseTreasuryRepository: IHouseTreasuryRepository =
     deps.houseTreasuryRepository ?? (await createHouseTreasuryRepository());
+  const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
+  const withdrawalRepository: IWithdrawalRequestRepository =
+    deps.withdrawalRepository ?? (await createWithdrawalRequestRepository());
 
   const walletService = new WalletService(walletRepository, ledgerRepository);
   const riskService = new RiskService(riskRepository, betRepository);
   const eventCatalogService = new EventCatalogService(eventRepository);
   const betService = new BetService(betRepository, eventRepository, walletService, riskService);
+  const userService = new UserService(userRepository);
   const treasuryService = new HouseTreasuryService(houseTreasuryRepository, {
     walletId: appConfig.treasury.walletId,
     currency: appConfig.treasury.currency,
@@ -140,6 +151,11 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     eventCatalogService,
     deps.dependencyHealthProvider,
     auditService,
+    userService,
+    walletRepository,
+    betRepository,
+    withdrawalRepository,
+    ledgerRepository,
   );
   const treasuryController = new TreasuryController(
     new GetTreasurySummary(treasuryService),
@@ -157,6 +173,70 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     protectedRoute,
     requireAdminRole,
     asyncHandler((req: AuthenticatedRequest, res) => adminController.getOverview(req, res)),
+  );
+
+  // Fase 28 — Administração: consultas e bloqueio de usuário
+  router.get(
+    '/users/:userId',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getUser(req, res)),
+  );
+
+  router.get(
+    '/users/:userId/wallet',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getUserWallet(req, res)),
+  );
+
+  router.get(
+    '/users/:userId/bets',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getUserBets(req, res)),
+  );
+
+  router.get(
+    '/users/:userId/withdrawals',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getUserWithdrawals(req, res)),
+  );
+
+  router.get(
+    '/users/:userId/ledger',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getUserLedger(req, res)),
+  );
+
+  router.post(
+    '/users/:userId/block',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.blockUser(req, res)),
+  );
+
+  router.post(
+    '/users/:userId/unblock',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.unblockUser(req, res)),
+  );
+
+  router.get(
+    '/bets/:betId',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getBet(req, res)),
+  );
+
+  router.get(
+    '/withdrawals/:requestId',
+    protectedRoute,
+    requireAdminRole,
+    asyncHandler((req: AuthenticatedRequest, res) => adminController.getWithdrawal(req, res)),
   );
 
   router.get(

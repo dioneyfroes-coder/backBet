@@ -4,6 +4,11 @@ import { ResolveBetUseCase } from '@core/betting/application/use-cases/ResolveBe
 import { UpdateEventStatusUseCase } from '@core/betting/application/use-cases/UpdateEventStatusUseCase';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { EventCatalogService } from '@core/betting/domain/services/EventCatalogService';
+import { UserService } from '@core/user/domain/services/UserService';
+import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
+import { IBetRepository } from '@core/betting/domain/repositories/IBetRepository';
+import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { SettleBetDTO, SettleBetDTOType } from '../dtos/AdminDTOs';
 import { UpdateEventStatusDTO, UpdateEventStatusDTOType } from '../dtos/EventDTOs';
 import { appConfig } from '@/shared/config/appConfig';
@@ -11,6 +16,7 @@ import { getObservabilityToggles } from '@/shared/observability/featureToggles';
 import { flushEventOddsCache } from '@/infrastructure/cache/cacheHooks';
 import { AuditService } from '@/core/audit/domain/services/AuditService';
 import { getRequestContext } from '@/shared/observability/requestContext';
+import { AppError } from '@/shared/errors/AppError';
 
 export class AdminController extends BaseController {
   constructor(
@@ -20,6 +26,11 @@ export class AdminController extends BaseController {
     private readonly eventCatalogService: EventCatalogService,
     private readonly dependencyHealthProvider?: () => Record<'redis' | 'mongo', number>,
     private readonly auditService?: AuditService,
+    private readonly userService?: UserService,
+    private readonly walletRepository?: IWalletRepository,
+    private readonly betRepository?: IBetRepository,
+    private readonly withdrawalRepository?: IWithdrawalRequestRepository,
+    private readonly ledgerRepository?: ILedgerRepository,
   ) {
     super();
   }
@@ -246,7 +257,7 @@ export class AdminController extends BaseController {
    *       '200':
    *         description: Evento atualizado
    */
-  async updateEventStatus(req: Request, res: Response) {
+    async updateEventStatus(req: Request, res: Response) {
     try {
       const payload = this.validateSchema(
         UpdateEventStatusDTO,
@@ -264,6 +275,401 @@ export class AdminController extends BaseController {
         reason: 'Administrative event status update',
       });
       return this.ok(res, event.toJSON());
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  // ---------- Fase 28 — Administração: consultas e bloqueio ----------
+
+  private parsePagination(query: Request['query']): { limit: number; offset: number } {
+    const rawLimit = Number(query.limit);
+    const rawOffset = Number(query.offset);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 20;
+    const maxLimit = Math.min(limit, 200);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+    return { limit: maxLimit, offset };
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Consulta um usuário (visão administrativa, sem hash de senha)
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       '200':
+   *         description: Dados do usuário
+   *       '404':
+   *         description: Usuário não encontrado
+   */
+  async getUser(req: Request, res: Response) {
+    try {
+      if (!this.userService) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Usuário de administração não configurado', 500);
+      }
+      const user = await this.userService.findById(req.params.userId);
+      if (!user) {
+        return this.notFound(res, 'Usuário não encontrado');
+      }
+      return this.ok(res, { user: user.toDTO() });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/wallet:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Consulta a carteira de um usuário
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       '200':
+   *         description: Carteira do usuário
+   *       '404':
+   *         description: Carteira não encontrada
+   */
+  async getUserWallet(req: Request, res: Response) {
+    try {
+      if (!this.walletRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de carteira não configurado', 500);
+      }
+      const wallet = await this.walletRepository.findByUserId(req.params.userId);
+      if (!wallet) {
+        return this.notFound(res, 'Carteira não encontrada');
+      }
+      return this.ok(res, { wallet: wallet.toDTO() });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/bets:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Lista as apostas de um usuário
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       '200':
+   *         description: Apostas do usuário
+   */
+  async getUserBets(req: Request, res: Response) {
+    try {
+      if (!this.betRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de apostas não configurado', 500);
+      }
+      const { limit, offset } = this.parsePagination(req.query);
+      const all = await this.betRepository.findByUserId(req.params.userId);
+      const ordered = [...all].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const page = ordered.slice(offset, offset + limit);
+      return this.ok(res, {
+        bets: page.map((bet) => bet.toJSON()),
+        pagination: { total: ordered.length, limit, offset },
+      });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/bets/{betId}:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Consulta uma aposta específica
+   *     parameters:
+   *       - in: path
+   *         name: betId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       '200':
+   *         description: Aposta
+   *       '404':
+   *         description: Aposta não encontrada
+   */
+  async getBet(req: Request, res: Response) {
+    try {
+      if (!this.betRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de apostas não configurado', 500);
+      }
+      const bet = await this.betRepository.findById(req.params.betId);
+      if (!bet) {
+        return this.notFound(res, 'Aposta não encontrada');
+      }
+      return this.ok(res, { bet: bet.toJSON() });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/withdrawals:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Lista os saques (retiradas) de um usuário
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       '200':
+   *         description: Saques do usuário
+   */
+  async getUserWithdrawals(req: Request, res: Response) {
+    try {
+      if (!this.withdrawalRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de saques não configurado', 500);
+      }
+      const { limit, offset } = this.parsePagination(req.query);
+      const all = await this.withdrawalRepository.findByUserId(req.params.userId);
+      const ordered = [...all].sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
+      const page = ordered.slice(offset, offset + limit);
+      return this.ok(res, {
+        withdrawals: page.map((w) => w.toDTO()),
+        pagination: { total: ordered.length, limit, offset },
+      });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/withdrawals/{requestId}:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Consulta um saque (retirada) específico
+   *     parameters:
+   *       - in: path
+   *         name: requestId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       '200':
+   *         description: Saque
+   *       '404':
+   *         description: Saque não encontrado
+   */
+  async getWithdrawal(req: Request, res: Response) {
+    try {
+      if (!this.withdrawalRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de saques não configurado', 500);
+      }
+      const withdrawal = await this.withdrawalRepository.findById(req.params.requestId);
+      if (!withdrawal) {
+        return this.notFound(res, 'Saque não encontrado');
+      }
+      return this.ok(res, { withdrawal: withdrawal.toDTO() });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/ledger:
+   *   get:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Consulta o ledger financeiro de um usuário (inclui depósitos, apostas, prêmios, saques)
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *       - in: query
+   *         name: offset
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       '200':
+   *         description: Movimentações financeiras do usuário
+   */
+  async getUserLedger(req: Request, res: Response) {
+    try {
+      if (!this.ledgerRepository) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Admin de ledger não configurado', 500);
+      }
+      const { limit, offset } = this.parsePagination(req.query);
+      const entries = await this.ledgerRepository.findByUserId(req.params.userId, { limit, offset });
+      const all = await this.ledgerRepository.findByUserId(req.params.userId);
+      return this.ok(res, {
+        entries: entries.map((entry) => entry.toDTO()),
+        pagination: { total: all.length, limit, offset },
+      });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/block:
+   *   post:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Bloqueia (suspende) um usuário
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               reason:
+   *                 type: string
+   *     responses:
+   *       '200':
+   *         description: Usuário bloqueado
+   */
+  async blockUser(req: Request, res: Response) {
+    try {
+      if (!this.userService) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Usuário de administração não configurado', 500);
+      }
+      const before = await this.userService.findById(req.params.userId);
+      await this.userService.suspendUser(req.params.userId);
+      const after = await this.userService.findById(req.params.userId);
+      this.auditAdminAction(req, {
+        action: 'user.block',
+        resourceType: 'user',
+        resourceId: req.params.userId,
+        before: before ? { status: before.status } : undefined,
+        after: after ? { status: after.status } : undefined,
+        reason: (req.body as { reason?: string } | undefined)?.reason || 'Administrative block',
+      });
+      return this.ok(res, {
+        userId: req.params.userId,
+        status: after?.status,
+      });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/admin/users/{userId}/unblock:
+   *   post:
+   *     tags:
+   *       - Admin
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Desbloqueia (reativa) um usuário
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               reason:
+   *                 type: string
+   *     responses:
+   *       '200':
+   *         description: Usuário desbloqueado
+   */
+  async unblockUser(req: Request, res: Response) {
+    try {
+      if (!this.userService) {
+        throw new AppError('ADMIN_NOT_CONFIGURED', 'Usuário de administração não configurado', 500);
+      }
+      const before = await this.userService.findById(req.params.userId);
+      await this.userService.activateUser(req.params.userId);
+      const after = await this.userService.findById(req.params.userId);
+      this.auditAdminAction(req, {
+        action: 'user.unblock',
+        resourceType: 'user',
+        resourceId: req.params.userId,
+        before: before ? { status: before.status } : undefined,
+        after: after ? { status: after.status } : undefined,
+        reason: (req.body as { reason?: string } | undefined)?.reason || 'Administrative unblock',
+      });
+      return this.ok(res, {
+        userId: req.params.userId,
+        status: after?.status,
+      });
     } catch (error) {
       return this.handleError(error, res);
     }
