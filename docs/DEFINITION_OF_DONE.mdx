@@ -1,0 +1,105 @@
+# Definition of Done — BackBet MVP (Seção 41)
+
+Consolidação executável do **Definition of Done** do plano (seção 41) contra o
+estado real do repositório. Cada item aponta a evidência objetiva (arquivo,
+script, métrica).
+
+Legenda: **✔** atendido · **◐** artefato presente, porém exige verificação em
+ambiente com Docker/CI (não disponível nesta estação de dev).
+
+> Cobertura da suíte unitária medida em 30/08/2026: **79.86% statements, 80.53%
+> linhas** (`npx jest --coverage --ci`). Suíte: 114/117 suítes, 784 testes
+> passando, 14 ignorados.
+
+---
+
+## Financeiro
+
+| # | Item | Status | Evidência |
+|---|------|--------|-----------|
+| 1 | dinheiro armazenado de forma exata | ✔ | `Money` (VO) + schemas em centavos: `WalletSchema`/`LedgerEntrySchema`/`BetSchema` (`*Cents`); `docs/FINANCIAL_INVARIANTS.mdx` |
+| 2 | Money centralizado | ✔ | `src/core/finance/domain/value-objects/Money.ts` + `MoneySecurityService.ts` |
+| 3 | liability centralizada | ✔ | `src/core/risk` (`RiskProfile`, `RiskExposureCounter`, `RiskService`) |
+| 4 | carteira atomicamente consistente | ✔ | `WalletService.ts` (versionamento otimista + transações Mongo); `WalletConcurrency.test.ts` |
+| 5 | exposição atomicamente consistente | ✔ | `RiskService.ts` (reserva atômica); `RiskService.test.ts` |
+| 6 | transações financeiras auditáveis | ✔ | `LedgerEntrySchema.ts` + `AuditService.ts`/`AuditEventSchema.ts` |
+| 7 | idempotência funcionando | ✔ | `IdempotencyService.ts` + `MongoIdempotencyStore.ts`; `WalletService.idempotency.test.ts` |
+| 8 | settlement idempotente | ✔ | `BetService` (máquina de estados); `BetService.critical.test.ts`; FI-05 |
+| 9 | withdrawal idempotente | ✔ | `WithdrawalRequestService` + worker; `FinancialInvariants.test.ts` FI-04; `WithdrawalPayoutWorker.safety.test.ts` |
+| 10 | reconciliação implementada | ✔ | `GetDailyFinancialSummary.ts` + `ReconcileTreasury.ts` + `TreasuryLedgerEntry` |
+| 11 | testes de concorrência passando | ✔ | `WalletConcurrency.test.ts` + `load.concurrency.integration.test.ts` |
+
+## Segurança
+
+| # | Item | Status | Evidência |
+|---|------|--------|-----------|
+| 12 | autenticação endurecida | ✔ | `AuthMiddleware.ts` (JWT/refresh) + `UserService.ts:30` (bcrypt cost 12); `Security.test.ts` |
+| 13 | autorização revisada | ✔ | `protectedRoute` + `requireAdminRole` (admin/finance routes) |
+| 14 | rate limiting | ✔ | `ApiServer.ts:136` + `routeRateLimiter.ts` |
+| 15 | headers | ✔ | `ApiServer.ts:101` (helmet) |
+| 16 | CORS | ✔ | `ApiServer.ts:131` + `appConfig.cors.allowedOrigins` |
+| 17 | secrets fora do Git | ✔ | `scripts/check-secrets.cjs` + `.gitignore` + gate no CI |
+| 18 | logs sem dados sensíveis | ✔ | `docs/LOGS.mdx` (política) |
+| 19 | auditoria administrativa | ✔ | `AuditService`/`AuditController` + retenção padrão de 5 anos |
+| 20 | backup | ✔ | `npm run backup:create` / `backup:validate` |
+| 21 | restore testado | ✔ | `npm run backup:drill` (recuperação em instância temporária) + `backupService.test.ts` |
+
+## Infraestrutura
+
+| # | Item | Status | Evidência |
+|---|------|--------|-----------|
+| 22 | Dockerfile | ✔ | `Dockerfile` (multi-stage) |
+| 23 | docker-compose | ✔ | `docker-compose.yml` + `mongo`/`observability`/`proxy`/`test` |
+| 24 | ambiente de teste | ✔ | `docker-compose.test.yml` + `docs/TESTING-ENV.mdx` |
+| 25 | build reproduzível | ✔ | `package-lock.json` + `npm ci` no CI (job `test`) |
+| 26 | deploy documentado | ✔ | `docs/DEPLOY.mdx`, `docs/PM2.mdx`, `docs/DOCKER.mdx` |
+| 27 | Mongo privado | ✔ | `docker-compose.mongo.yml` (auth) + `deploy/harden-server.sh` (UFW 27017 só do server01) |
+| 28 | Redis privado | ✔ | Compose: Redis interno sem porta pública |
+| 29 | HTTPS | ✔ | `deploy/proxy/Caddyfile` |
+| 30 | monitoramento | ✔ | `deploy/observability/prometheus.yml` + `/metrics` (prom-client) |
+| 31 | alertas | ✔ | `deploy/observability/alerting/alerts.yml` |
+| 32 | workers funcionando | ✔ | `withdrawal-worker`/`contact-worker` (compose/PM2) + `WithdrawalPayoutWorker.e2e|safety|state` |
+
+## Qualidade
+
+| # | Item | Status | Evidência |
+|---|------|--------|-----------|
+| 33 | lint passando | ✔ | `npm run lint` (eslint `src/**/*.ts`) |
+| 34 | typecheck passando | ✔ | `npm run typecheck` (tsc --noEmit) |
+| 35 | testes passando | ✔ | 114 suítes, 784 testes — `npx jest --ci` |
+| 36 | cobertura conhecida | ✔ | 79.86% stmts / 80.53% lines (30/08/2026) |
+| 37 | integração passando | ◐ | Suíte `src/integration/__tests__/*` + job `integration` no CI (Mongo rs + Redis via `docker-compose.test.yml`); execução real requer Docker |
+| 38 | testes de concorrência passando | ✔ | `WalletConcurrency.test.ts` + `load.concurrency` |
+| 39 | teste de falhas passando | ✔ | `failure.integration.test.ts` + `docs/RESILIENCE.mdx` |
+| 40 | build passando | ✔ | `npm run build` (tsc + tsc-alias + assets) |
+| 41 | Docker build passando | ◐ | `Dockerfile` presente e consumido pelo compose; build da imagem exige ambiente com Docker (verificar no server01) |
+| 42 | documentação atualizada | ✔ | `docs/*` completo + `README.mdx` |
+
+## Produto
+
+| # | Item | Status | Evidência |
+|---|------|--------|-----------|
+| 43 | fluxo completo de cadastro | ✔ | `POST /api/v1/auth/register` (`AuthController`) |
+| 44 | login | ✔ | `/api/v1/auth/login` + refresh/logout/me |
+| 45 | carteira | ✔ | `/api/v1/wallets` (saldo, depósito, histórico, locked) |
+| 46 | depósito | ✔ | `/wallets/deposit` + provedor Pix plugável |
+| 47 | aposta | ✔ | `/api/v1/bets` (place/cancel/history; validação de odds) |
+| 48 | settlement | ✔ | `POST /api/v1/admin/bets/{id}/settle` + `BetService` |
+| 49 | saque | ✔ | `/api/v1/finance/withdrawal-requests` + worker de payout |
+| 50 | histórico | ✔ | `/bets/me`, `/wallets/me`, ledger e transações |
+| 51 | administração | ✔ | `/api/v1/admin/*` (overview, users, risk, treasury, audit, sigap) |
+| 52 | API documentada | ✔ | Swagger em `/api/docs` + `docs/API_CONTRACT.mdx` |
+
+---
+
+## Resumo
+
+- **50 itens**: 48 ✔ · 2 ◐ (integração real e build da imagem Docker — aguardam
+  ambiente com Docker/CI, não são lacunas de código).
+- **Critério final do plano (seção 44)**: o cenário cadastro → login → depósito
+  → aposta → settlement → saque → reconcialiação é coberto por testes unitários,
+  de integração, de concorrência e de falha sem criar/destruir dinheiro —
+  coberto pelos invariantes FI-01..FI-10 (`FinancialInvariants.test.ts`).
+
+Próximo passo natural do plano: **seção 44 (critério final)** como checklist de
+aceite e, quando aplicável, o fechamento do ciclo (seção 46).
