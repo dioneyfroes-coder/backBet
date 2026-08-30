@@ -1,0 +1,120 @@
+# Estratégia Comercial Recomendada (Fase 36)
+
+Documento da Fase 36 — **estratégia comercial recomendada** (seções 40, 45 e 46 do
+plano). Conclui o ciclo MVP com a decisão de produto, não com expansão de código.
+
+---
+
+## A decisão em uma frase
+
+> **Vender o BackBet como plataforma/backend de gestão de apostas para
+> operadores autorizados (B2B)** — não operar uma bet própria (B2C).
+
+Operar uma bet brasileira real (`Modelo A`) exige autorização, capital,
+compliance, certificação, pagamentos, KYC, AML, jogo responsável, segurança,
+regulação, marketing, atendimento e risco financeiro — um negócio pesado e um
+**projeto separado de compliance**, não uma etapa de programação.
+
+O `Modelo B` entrega um produto que **já existe** neste repositório:
+
+```text
+Cliente autorizado     ← operador arca com as obrigações regulatórias
+   ↓
+BackBet                ← plataforma de gestão de apostas
+   ↓
+API  /api/v1           ← contrato estável e documentado
+   ↓
+pagamento / KYC / SIGAP / geolocalização / device   ← provedores plugáveis
+```
+
+---
+
+## Modelo A × Modelo B
+
+| Critério | Modelo A — operar uma bet | Modelo B — B2B para operadores |
+|----------|---------------------------|--------------------------------|
+| Autorização SPA | Necessária (projeto de compliance pesado) | Responsabilidade do cliente operador |
+| Capital regulatório | Necessário | Não é do BackBet |
+| Certificação de sistemas | Exigida | Exigida do ambiente/host do operador |
+| KYC / AML / jogo responsável | Garantir na operação | Fornecido via `ports` plugáveis |
+| Pagamentos (Pix/PSP) | Contratar e operar | Provedor plugável por operador |
+| Risco financeiro | Da operação | Da plataforma (liability/exposure já tratados) |
+| Marketing / atendimento | Necessário | Do operador |
+| Primeiro produto comercial | Caro e lento | Possível já com o MVP atual |
+
+**Conclusão do plano: para o seu objetivo, B2B é muito mais interessante como
+primeiro produto comercial.**
+
+---
+
+## O que o BackBet já entrega para a proposta B2B
+
+Cada módulo abaixo é argumento de venda com **evidência testável** no
+repositório — o que um operador/auditor espera.
+
+| Proposta de valor | Módulo | Evidência |
+|-------------------|--------|-----------|
+| Dinheiro exato, sem float | `finance` (Money/Wallet/Ledger) | `WalletSchema`/`LedgerEntrySchema`/`BetSchema` em `*Cents`; `docs/FINANCIAL_INVARIANTS.mdx` (FI-01..FI-10) |
+| Sem double-spending em saques | Máquina de estados + idempotência | `WithdrawalRequestService` + `IdempotencyService`/`MongoIdempotencyStore`; `FinancialInvariants.test.ts` FI-04 |
+| Concorrência controlada na carteira | Controle de versão otimista + transações Mongo | `WalletConcurrency.test.ts` (100 saques concorrentes) |
+| Exposição/liability centralizada | `risk` (RiskService, RiskProfile, counters) | `RiskExposureCounterSchema`; testes de reserva atômica |
+| Settlement idempotente | `betting`, `treasury` | `ReconcileTreasury`, `HouseTreasuryService`, `GetDailyFinancialSummary` |
+| Auditoria e retenção | `audit` | `AuditEventSchema` + retenção default de 5 anos; `docs/AUDIT_RETENTION.mdx` |
+| Backup e recuperação | `scripts/backup-*` | `backup:create/validate/restore/drill`; `docs/BACKUP_RECOVERY.mdx` (RPO/RTO) |
+| Segurança de acesso | `infrastructure/api` | JWT, `requireAdminRole`, rate limit, helmet, CORS, payload; `Security.test.ts` |
+| Compliance plugável | `compliance` | Ports de KYC/geolocalização/device + gate de saque; `docs/SIGAP_CONFORMIDADE.mdx` |
+| Reporte regulatório SIGAP | `sigap` | `SigapService` + `SigapTransmissionJob` (prontos para adapter real) |
+| Jogo responsável | `responsibleGambling` | Limites personalizáveis por usuário; schema persistido |
+| API documentada e versionada | `/api/v1` + Swagger | `ApiServer.ts:190/362`; `docs/API_CONTRACT.mdx` |
+| Infraestrutura containerizada | Docker/compose/CI | `Dockerfile`, compose (dev/test/mongo/observability), `.github/workflows/ci.yml` |
+
+---
+
+## Dívidas de produto para o B2B (não implementadas — fora do escopo do MVP)
+
+Para virar produto, o B2B ainda exigirá (decisão de produto posterior):
+
+1. **Multi-tenant** — hoje o modelo é single-operador; seria preciso isolar
+   operadores (config, dados, provedores/pix-keys, domínio).
+2. **Onboarding de operador** — provisionamento, contratos de API, credenciais.
+3. **White label / skins** — branding por operador no frontend.
+4. **SLA e monitoramento acordado** — observabilidade já existe
+   (`deploy/observability/*`), mas não há contrato de nível de serviço.
+5. **Documentação de integração para operadores** — o `API_CONTRACT` é base.
+
+Essas são **evoluções de produto**, não pendências do ciclo MVP.
+
+---
+
+## Alternativa dentro do escopo do plano (se não houver intenção comercial real)
+
+```text
+BackBet como projeto de portfólio
+   +
+Open Source de terceiros em paralelo
+```
+
+Neste caso, o BackBet já cumpre a função de portfólio na forma que o plano
+estabelece (seção 45):
+
+> **"Plataforma backend de apostas construída em TypeScript, com arquitetura
+> modular, transações MongoDB, controle de concorrência otimista, idempotência,
+> carteira financeira, gestão de exposição de risco, workers assíncronos,
+> observabilidade, auditoria, testes de integração e infraestrutura
+> containerizada."**
+
+E cada decisão crítica vira material de entrevista (double-spending,
+concorrência, idempotência, transações Mongo, consistência wallet↔bet,
+recuperação de saque, detecção de inconsistência, scaling, disaster recovery).
+
+---
+
+## Decisão final (checklist)
+
+- [ ] BackBet v1.0 consolidado (doD técnico das seções 41/44 do plano);
+- [ ] Escolher B2B (plataforma para operadores autorizados) **ou**
+      portfólio + open source;
+- [ ] Se B2B: tratar regulação nacional como **projeto separado de compliance**
+      (autorização SPA, SIGAP, certificação) — jamais como etapa de código;
+- [ ] A partir daqui, toda funcionalidade nova é avaliada como **produto**,
+      não como desculpa para expandir o projeto.
