@@ -56,6 +56,15 @@ export class RiskService {
     return 0;
   }
 
+  /** Same counter, but in integer cents — evita aritmética de ponto flutuante. */
+  private async getCounterExposureCents(scope: RiskExposureScope, refId: string): Promise<number> {
+    if (this.riskRepository) {
+      const counter = await this.riskRepository.getCounter(scope, refId);
+      return counter?.exposureCents ?? 0;
+    }
+    return 0;
+  }
+
   async getEventExposure(eventId: string): Promise<number> {
     return this.getCounterExposure('EVENT', eventId);
   }
@@ -123,8 +132,8 @@ export class RiskService {
     // counters, not a re-computation from every bet. The authoritative, atomic
     // enforcement happens on the reservation step inside the place-bet transaction.
     if (eventId) {
-      const eventExposure = await this.getEventExposure(eventId);
-      if ((eventExposure * 100 + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT) {
+      const eventExposureCents = await this.getCounterExposureCents('EVENT', eventId);
+      if (eventExposureCents + liabilityCents > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT * 100) {
         riskRejectionsCounter.inc({ reason: 'event_exposure_limit' });
         writeStructuredLog(
           {
@@ -132,8 +141,9 @@ export class RiskService {
             userId,
             reason: 'event_exposure_limit',
             eventId,
-            exposureSameEvent: eventExposure,
-            liability: liability.amount,
+            exposureSameEventCents: eventExposureCents,
+            liabilityCents,
+            maxEventExposureCents: RISK_CONFIG.MAX_EXPOSURE_PER_EVENT * 100,
           },
           'warn',
         );
@@ -142,8 +152,8 @@ export class RiskService {
     }
 
     if (marketId) {
-      const marketExposure = await this.getMarketExposure(marketId);
-      if ((marketExposure * 100 + liabilityCents) / 100 > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET) {
+      const marketExposureCents = await this.getCounterExposureCents('MARKET', marketId);
+      if (marketExposureCents + liabilityCents > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET * 100) {
         riskRejectionsCounter.inc({ reason: 'market_exposure_limit' });
         writeStructuredLog(
           {
@@ -151,8 +161,9 @@ export class RiskService {
             userId,
             reason: 'market_exposure_limit',
             marketId,
-            exposureSameMarket: marketExposure,
-            liability: liability.amount,
+            exposureSameMarketCents: marketExposureCents,
+            liabilityCents,
+            maxMarketExposureCents: RISK_CONFIG.MAX_EXPOSURE_PER_MARKET * 100,
           },
           'warn',
         );
@@ -160,16 +171,18 @@ export class RiskService {
       }
     }
 
-    if (currentExposure + liability.amount > maxExposure) {
+    const currentExposureCents = Math.round(currentExposure * 100);
+    const maxExposureCents = Math.round(maxExposure * 100);
+    if (currentExposureCents + liabilityCents > maxExposureCents) {
       riskRejectionsCounter.inc({ reason: 'exceeds_max_exposure' });
       writeStructuredLog(
         {
           event: 'risk_reject',
           userId,
           reason: 'exceeds_max_exposure',
-          currentExposure,
-          liability: liability.amount,
-          maxExposure,
+          currentExposureCents,
+          liabilityCents,
+          maxExposureCents,
         },
         'warn',
       );
