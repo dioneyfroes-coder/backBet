@@ -2,7 +2,10 @@ import { WalletService } from '../../domain/services/WalletService';
 import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
-import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import {
+  IdempotencyService,
+  IDEMPOTENCY_PROCESSING_RECOVERY_MS,
+} from '@/shared/services/IdempotencyService';
 import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
 import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 
@@ -30,6 +33,8 @@ export class Deposit {
       `${userId}:deposit:${idempotencyKey}`,
       JSON.stringify({ userId, amount, currency, description }),
       operation,
+      undefined,
+      IDEMPOTENCY_PROCESSING_RECOVERY_MS,
     );
     return { ...value, replayed };
   }

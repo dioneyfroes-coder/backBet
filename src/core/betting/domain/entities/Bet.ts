@@ -23,6 +23,7 @@ export class Bet {
     resolvedAt?: Date,
     cancellationReason?: string,
     private _version = 1,
+    public readonly oddId: string = '',
   ) {
     this._status = status;
     this._resolvedAt = resolvedAt;
@@ -106,6 +107,9 @@ export class Bet {
     if (!isNonEmptyString(this.marketId)) {
       throw new DomainError({ code: 'BET_INVALID_MARKET', message: 'Invalid market ID' });
     }
+    if (this.oddId.length > 0 && !isNonEmptyString(this.oddId)) {
+      throw new DomainError({ code: 'BET_INVALID_ODD', message: 'Invalid odd ID' });
+    }
 
     if (!(this.createdAt instanceof Date)) {
       throw new DomainError({ code: 'BET_INVALID_CREATED_AT', message: 'Invalid creation date' });
@@ -134,6 +138,7 @@ export class Bet {
       userId: this.userId,
       eventId: this.eventId,
       marketId: this.marketId,
+      oddId: this.oddId,
       amount: this.amount.amount,
       odds: this.odds.value,
       status: this._status,

@@ -1,1879 +1,684 @@
-# Plano de Finalização e Lançamento do BackBet — MVP
+Fase 0 — Preparação
 
-## 1. Objetivo
+Antes de alterar código:
 
-Este documento define o caminho para levar o **BackBet** do estado atual até uma versão que possa ser considerada:
+git checkout -b fix/production-integrity
+npm ci
+npm run typecheck
+npm test
 
-1. **MVP tecnicamente lançável**;
-2. **financeiramente consistente**, evitando criação/perda de saldo por falhas, concorrência ou duplicidade;
-3. **operacionalmente administrável**;
-4. **apresentável como projeto de portfólio profissional**;
-5. tecnicamente preparada para ser usada como **software B2B por um operador autorizado**, caso essa seja a direção comercial.
+Se os testes atuais passarem, salve esse estado como referência.
 
-Há uma distinção importante:
 
-> **"Pronto para lançar" tecnicamente não significa "autorizado para operar apostas".**
+Fase 1 — Persistência dos Events
+Problema
 
-No Brasil, desde 1º de janeiro de 2025, apenas empresas autorizadas pela Secretaria de Prêmios e Apostas do Ministério da Fazenda podem operar nacionalmente apostas de quota fixa. A autorização envolve requisitos jurídicos, fiscais, econômico-financeiros, técnicos e de idoneidade.
+Atualmente:
 
-Portanto, o BackBet pode ser finalizado como **produto tecnológico/MVP**, mas não deve ser colocado para aceitar dinheiro real de apostadores brasileiros sem que a estrutura jurídica, regulatória, certificação e operação correspondente estejam resolvidas.
+EventRepository
+└── eventos em memória
 
----
+enquanto:
 
-# 2. Estado atual do BackBet
-
-A versão atual já possui uma base consideravelmente acima de um CRUD convencional.
-
-Há:
-
-- TypeScript;
-- Express;
-- MongoDB/Mongoose;
-- Redis;
-- JWT/Passport;
-- Zod;
-- rate limiting;
-- Helmet;
-- Jest;
-- Supertest;
-- CI;
-- OpenTelemetry;
-- Prometheus;
-- Swagger/OpenAPI;
-- workers;
-- idempotência;
-- carteira;
-- apostas;
-- risco;
-- treasury;
-- pagamentos/Pix através de ports/adapters;
-- recuperação de senha;
-- documentação extensa;
-- separação de domínio, aplicação e infraestrutura.
-
-A evolução mais importante recente foi na parte financeira:
-
-```text
-Money
-  ↓
-centavos internos
-  ↓
-controle de versão da carteira
-  ↓
-transações MongoDB
-  ↓
-idempotência
-  ↓
-workers de saque
-```
-
-Isso é uma base adequada para continuar.
-
-Entretanto, há **quatro problemas prioritários que ainda impedem considerar o sistema financeiramente fechado**:
-
-```text
-1. Mongo ainda persiste dinheiro como Number/decimal de aplicação.
-2. RiskService faz verificação antes da transação e não reserva exposição atomicamente.
-3. Liability ainda usa cálculos independentes com number.
-4. O projeto ainda não possui Docker/ambiente reproduzível no ZIP atual.
-```
-
----
-
-# 3. Regra geral para finalizar o projeto
-
-A partir deste ponto, o objetivo não deve ser adicionar funcionalidades indiscriminadamente.
-
-A regra deve ser:
-
-> **corrigir, testar, tornar observável e documentar o que já existe.**
-
-O BackBet já tem funcionalidades suficientes para um MVP.
-
-Não adicionar novos jogos, novos tipos de aposta, novos métodos de pagamento ou novas abstrações antes de fechar as partes abaixo.
-
----
-
-# 4. Fase 0 — Congelar o escopo do MVP
-
-Antes de escrever código, definir exatamente o que será considerado "v1".
-
-## Escopo recomendado
-
-### Usuário
-
-- cadastro;
-- login;
-- autenticação;
-- recuperação de senha;
-- atualização cadastral;
-- gerenciamento de Pix;
-- bloqueio/desbloqueio;
-- encerramento de conta.
-
-### Carteira
-
-- depósito;
-- saldo disponível;
-- saldo bloqueado;
-- saque;
-- histórico;
-- idempotência;
-- auditoria.
-
-### Apostas
-
-- listar eventos;
-- listar mercados;
-- consultar odds;
-- realizar aposta;
-- cancelar quando permitido;
-- resolver aposta;
-- pagamento de prêmio;
-- histórico.
-
-### Risco
-
-- limite por aposta;
-- limite de exposição;
-- limite por evento;
-- limite por mercado;
-- velocidade;
-- blacklist;
-- whitelist;
-- exposição atual.
-
-### Operação
-
-- health check;
-- readiness;
-- logs;
-- métricas;
-- tracing;
-- workers;
-- recuperação de falha;
-- backups.
-
-### Remover do MVP operacional
-
-O **CoinFlip deve permanecer desligado por padrão** na primeira versão comercial.
-
-Ele adiciona:
-
-- outro domínio de jogo;
-- regras matemáticas;
-- auditoria adicional;
-- necessidade de certificação caso seja oferecido como jogo online;
-- mais superfície de fraude;
-- mais complexidade operacional.
-
-A regulamentação brasileira estabelece exigências específicas para jogos online e certificação.
-
-O MVP deve começar com **apostas esportivas de quota fixa**, não com uma plataforma de cassino completa.
-
----
-
-# 5. Fase 1 — Fechar definitivamente o modelo monetário
-
-Esta é a etapa mais importante.
-
-## 5.1 Escolher uma representação única
-
-A recomendação para o BackBet é:
-
-```text
-MongoDB
-    ↓
-inteiro em centavos
-
-Domain
-    ↓
-Money
-
-API
-    ↓
-valor decimal
-```
-
-Exemplo:
-
-```text
-R$ 157,83
-
-Mongo:
-15783
-
-Domain:
-Money(157.83, BRL)
-
-API:
-{
-  "amount": 157.83,
-  "currency": "BRL"
-}
-```
-
-Não deve haver lugares diferentes utilizando:
-
-```text
-number
-float
-decimal
-string monetária
-centavos
-```
-
-sem uma regra clara.
-
-## 5.2 Alterar schemas
-
-Migrar:
-
-```text
-Wallet.balance
-Wallet.lockedBalance
-Transaction.amount
-Bet.amount
-Bet.potentialReturn
-RiskProfile.exposure
-RiskProfile.maxExposure
-Treasury values
-```
-
-para representação inteira em centavos.
-
-Exemplo:
-
-```ts
-balanceCents: number
-lockedBalanceCents: number
-```
-
-ou manter os nomes atuais, desde que fique explicitamente documentado que o valor armazenado é inteiro em centavos.
-
-## 5.3 Criar Money completo
-
-O `Money` atual está melhor, mas ainda aceita:
-
-```ts
-new Money(10.999, 'BRL')
-```
-
-e arredonda.
-
-Para dinheiro real, o comportamento deve ser decidido explicitamente.
-
-Minha recomendação:
-
-```text
-10.00 → válido
-10.99 → válido
-10.999 → rejeitar
-```
-
-O arredondamento deve acontecer somente em operações matemáticas nas quais a regra do domínio determinar arredondamento.
-
-## 5.4 Unificar `Money` e `BetAmount`
-
-Hoje existe lógica monetária duplicada entre:
-
-```text
-Money
-BetAmount
-```
-
-Remover essa duplicação.
-
-Idealmente:
-
-```text
-Money
-  ↓
-BetAmount apenas como regra específica de aposta
-```
-
-e não como outra implementação paralela de dinheiro.
-
----
-
-# 6. Fase 2 — Tornar liability matematicamente consistente
-
-Criar uma operação de domínio única para:
-
-```text
-stake × (odds - 1)
-```
-
-Em vez de espalhar:
-
-```ts
-Math.round(...)
-Number(...toFixed(2))
-```
-
-por diferentes serviços.
-
-Criar algo conceitualmente equivalente a:
-
-```text
-calculateLiability(
-    Money stake,
-    Odds odds
-): Money
-```
-
-Então:
-
-```text
 Bet
-Risk
-Treasury
-Reports
-```
+└── eventId
 
-passam a usar exatamente a mesma fórmula.
+fica persistido no Mongo.
 
-Isso evita que:
+Se reiniciar o container:
 
-```text
+Bet continua existindo
+Event desaparece
+Objetivo
+
+Criar:
+
+MongooseEventRepository
+
+seguindo o mesmo padrão dos outros repositories.
+
+Passos
+
+1. Criar schema Mongo
+
+Algo conceitualmente semelhante a:
+
+Event
+├── id
+├── name
+├── sport
+├── status
+├── startsAt
+├── markets[]
+├── createdAt
+└── updatedAt
+
+Se o projeto já possui Market/Odd separados, respeitar a modelagem existente em vez de inventar outra.
+
+2. Implementar interface
+
+O novo repository deve implementar exatamente a interface usada pelo domínio:
+
+findById()
+findAll()
+create()
+update()
+delete()
+...
+
+somente os métodos realmente necessários.
+
+3. Alterar o factory
+
+Onde hoje existe algo equivalente a:
+
+new EventRepository()
+
+quando:
+
+USE_MONGOOSE_PERSISTENCE=true
+
+usar:
+
+MongooseEventRepository
+
+4. Manter InMemoryEventRepository
+
+Ele continua existindo para:
+
+unit tests
+
+Não substitua tudo por Mongo.
+
+Testes obrigatórios
+create event
+→ Mongo
+
+find event
+→ Mongo
+
+restart repository
+→ event continua existindo
+
+create bet
+→ eventId aponta para event persistido
+Critério de conclusão
+
+Não pode existir mais este cenário:
+
+USE_MONGOOSE_PERSISTENCE=true
++
+EventRepository em memória
+Fase 2 — Settlement administrativo transacional
+
+Esse é um dos mais importantes.
+
+Problema
+
+Fluxo normal:
+
 BetService
-```
+   ↓
+transactionRunner
+   ↓
+Mongo transaction
 
-calcule um valor enquanto:
+Mas o admin cria outro BetService sem transaction runner.
 
-```text
+Objetivo
+
+Fazer:
+
+POST /admin/bets/:id/settle
+
+usar exatamente a mesma garantia transacional do fluxo normal.
+
+Passos
+
+1. Identificar a composição atual
+
+Localizar:
+
+adminRoutes
+BetService
+WalletService
 RiskService
-```
+BetRepository
+transactionRunner
 
-calcula outro.
+2. Não criar um segundo mecanismo de transação.
 
-## Testes obrigatórios
+Reutilizar o existente.
 
-Testar:
+Algo conceitualmente:
 
-```text
-R$ 10,00 @ 1.01
-R$ 10,00 @ 1.10
-R$ 10,00 @ 2.00
-R$ 100,00 @ 10.00
-valores mínimos
-valores máximos
-casas decimais
-```
+const betService = new BetService(
+    betRepository,
+    eventRepository,
+    walletService,
+    riskService,
+    transactionRunner
+);
 
----
+ou adaptar a factory/container que já existe.
 
-# 7. Fase 3 — Transformar a carteira em um pequeno ledger confiável
+3. Verificar o fluxo inteiro de settlement
 
-O saldo não deve ser tratado apenas como um número mutável.
+Tem que ser:
 
-A arquitetura recomendada:
+BEGIN TRANSACTION
 
-```text
-Ledger / Transactions
-        ↓
-saldo derivado ou conciliável
-        ↓
-Wallet
-```
+Bet → resolved
+Risk → released
+Wallet → credited
+Ledger → appended
 
-Cada movimento financeiro deve possuir:
+COMMIT
 
-```text
-transactionId
-userId
-type
-amount
-currency
-referenceId
-source
-status
-createdAt
-metadata
-```
+Se qualquer etapa falhar:
 
-Exemplos:
+ROLLBACK
+Teste crítico
 
-```text
-DEPOSIT
-BET_DEBIT
-BET_REFUND
-BET_WIN
-WITHDRAWAL_HOLD
-WITHDRAWAL_COMPLETED
-WITHDRAWAL_REVERSED
-```
+Forçar falha artificial depois de alterar uma das entidades:
 
-## Regra
+Bet atualizado
+↓
+erro proposital
+↓
+ROLLBACK
 
-Nenhuma operação deve simplesmente:
+Depois verificar:
 
-```text
-saldo -= X
-```
+Bet = estado original
+Wallet = estado original
+Risk = estado original
+Ledger = estado original
 
-sem deixar uma representação auditável do motivo.
+Esse teste vale mais que dez testes felizes.
 
----
+Fase 3 — Wallet + Ledger atomicamente
 
-# 8. Fase 4 — Fechar concorrência da carteira
+Aqui eu faria uma pequena mudança arquitetural, mas sem refatoração geral.
 
-A versão atual já possui controle de versão.
+Problema atual
 
-Manter isso.
+Existe a possibilidade de:
 
-Mas escrever testes que simulem:
+Wallet UPDATE
+↓
+Ledger falha
+↓
+erro apenas registrado
 
-```text
-100 requisições simultâneas
-```
+Isso pode gerar:
 
-para:
+Wallet ≠ Ledger
 
-```text
+Em sistema financeiro, isso não é aceitável.
+
+Solução
+
+A operação financeira deve ser uma unidade:
+
+Transaction
+│
+├── Wallet mutation
+│
+└── Ledger entry
+Passo 1
+
+Localizar todas as operações que modificam saldo:
+
 deposit
-withdraw
-lock
-unlock
 bet
-```
+cancel
+settlement
+withdrawal
+refund
 
-Exemplo:
+Faça uma tabela durante a implementação:
 
-```text
-saldo inicial: R$ 100,00
+Operação	Wallet	Ledger	Risk	Transaction
+Deposit	✓	✓	-	✓
+Bet	✓	✓	✓	✓
+Cancel	✓	✓	✓	✓
+Win	✓	✓	✓	✓
+Withdrawal	✓	✓	-	✓
 
-100 × saque de R$ 2,00
-```
+Não avance enquanto alguma operação financeira importante estiver fora desse mapa.
 
-O resultado esperado:
+Passo 2
 
-```text
-50 operações aprovadas
-50 rejeitadas
-saldo = R$ 0,00
-```
-
-Nunca:
-
-```text
-saldo negativo
-saldo incorreto
-perda silenciosa
-duplicação
-```
-
----
-
-# 9. Fase 5 — Corrigir a concorrência do RiskService
-
-Este é atualmente o problema arquitetural financeiro mais importante que ainda existe.
-
-Hoje o fluxo é aproximadamente:
-
-```text
-canPlaceBet()
-      ↓
-consulta exposição
-      ↓
-permite
-      ↓
-transaction
-      ├── withdraw
-      ├── create bet
-      └── register exposure
-```
-
-Duas apostas simultâneas podem passar na mesma verificação.
-
-## Solução
-
-A reserva de exposição precisa ser atômica.
+Fazer o appendLedger() participar da mesma sessão Mongo.
 
 Conceitualmente:
 
-```text
-UPDATE risk_profile
-SET exposure = exposure + liability
-WHERE userId = X
-AND exposure + liability <= maxExposure
-```
+session.withTransaction(async () => {
+    await wallet.update(..., { session });
+    await ledger.insert(..., { session });
+});
+Passo 3
 
-Se a alteração não ocorrer:
+Remover o comportamento:
 
-```text
-RISK_LIMIT_EXCEEDED
-```
+catch(error) {
+    log(error);
+}
 
-A operação deve falhar.
+para operações que fazem parte da transação.
 
-O mesmo princípio deve ser aplicado a:
+O correto é:
 
-```text
-limite por usuário
-limite por evento
-limite por mercado
-```
+catch(error) {
+    throw error;
+}
 
-## Resultado esperado
+A infraestrutura registra o erro, mas a operação financeira deve falhar.
 
-Dois requests concorrentes não podem juntos ultrapassar:
-
-```text
-MAX_EXPOSURE_PER_USER
-MAX_EXPOSURE_PER_EVENT
-MAX_EXPOSURE_PER_MARKET
-```
-
----
-
-# 10. Fase 6 — Não calcular exposição inteira a partir de todas as apostas em cada request
-
-O `RiskService` atualmente consulta apostas pendentes e recalcula exposição.
-
-Isso pode servir para:
-
-```text
-reconciliação
-```
-
-mas não deve ser o caminho crítico de cada aposta.
-
-Usar:
-
-```text
-RiskProfile.exposure
-```
-
-como estado operacional.
-
-E manter um processo de reconciliação:
-
-```text
-RiskProfile
-     ↓
-exposição atual
-
-Bet history
-     ↓
-fonte para auditoria/reconciliação
-```
-
-Criar um job administrativo:
-
-```text
-recalculateRiskExposure(userId)
-```
-
-para verificar divergências.
-
----
-
-# 11. Fase 7 — Fechar idempotência
-
-A implementação atual de idempotência é uma boa evolução, mas precisa ser validada em cenários reais.
-
-Testar:
-
-```text
-request A
-request A repetido
-request A concorrente
-request A após timeout
-request A depois de resposta perdida
-request A com payload diferente
-```
-
-Especialmente:
-
-```text
-deposit
-withdrawal
-bet
-bet cancellation
-bet settlement
-Pix confirmation
-payout
-```
-
-## Regra
-
-A mesma operação financeira nunca pode produzir:
-
-```text
-2 débitos
-2 créditos
-2 apostas
-2 saques
-2 pagamentos
-```
-
-por causa de retry.
-
----
-
-# 12. Fase 8 — Separar claramente estados financeiros
-
-Evitar estados genéricos.
-
-Uma retirada deveria possuir ciclo semelhante a:
-
-```text
-REQUESTED
-   ↓
-VALIDATING
-   ↓
-APPROVED
-   ↓
-PROCESSING
-   ↓
-COMPLETED
-```
-
-ou:
-
-```text
-FAILED
-CANCELED
-REVERSED
-```
-
-O dinheiro não deve desaparecer durante:
-
-```text
-PROCESSING
-```
-
-Ele deve estar representado como:
-
-```text
-available balance
-locked balance
-```
-
-ou equivalente no ledger.
-
----
-
-# 13. Fase 9 — Fechar pagamento/Pix
-
-O código atual possui:
-
-```text
-MockPixProvider
-MockPaymentAdapter
-TestPaymentAdapter
-```
-
-Isso é correto para desenvolvimento.
-
-Mas **não é integração de produção**.
-
-Para lançar dinheiro real será necessário escolher um PSP/instituição autorizada e implementar:
-
-```text
-create charge
-webhook
-verify signature
-payment confirmation
-duplicate notification
-timeout
-refund
-payout
-failure
-reconciliation
-```
-
-Nunca aceitar:
-
-```text
-POST /payment/confirm
-```
-
-como prova suficiente de pagamento.
-
-A confirmação deverá vir do provedor por mecanismo autenticado/verificável.
-
-A regulamentação brasileira possui regras específicas para transações de pagamento de operadores autorizados.
-
----
-
-# 14. Fase 10 — Criar reconciliação financeira
-
-Este é um item obrigatório antes de dinheiro real.
-
-Criar um processo diário que compare:
-
-```text
-Wallet
-vs
-Ledger
-vs
-Bet
-vs
-Withdrawal
-vs
-Payment Provider
-vs
-Treasury
-```
-
-Exemplo:
-
-```text
-saldo do usuário
-=
-depósitos
-- apostas
-+ prêmios
-- saques
-+ estornos
-```
-
-Qualquer diferença deve gerar:
-
-```text
-RECONCILIATION_MISMATCH
-```
-
-e não ser corrigida silenciosamente.
-
-Criar também relatório:
-
-```text
-total deposits
-total withdrawals
-total bets
-total payouts
-house revenue
-pending funds
-unreconciled funds
-```
-
----
-
-# 15. Fase 11 — Fechar Treasury
-
-O módulo Treasury já existe.
-
-Agora ele precisa ter uma propriedade importante:
-
-> **O saldo da casa não pode ser simplesmente um número editável.**
-
-Cada movimentação deve ter:
-
-```text
-entrada
-saída
-origem
-referência
-valor
-data
-saldo após operação
-```
-
-Criar:
-
-```text
-Treasury reconciliation
-```
-
-com periodicidade definida.
-
----
-
-# 16. Fase 12 — Segurança da aplicação
-
-Antes do deploy:
-
-### Autenticação
-
-Verificar:
-
-- senha com hash forte;
-- expiração de tokens;
-- refresh/revogação;
-- proteção contra brute force;
-- recuperação de senha;
-- enumeração de usuários;
-- sessão;
-- MFA quando necessário.
-
-### Autorização
-
-Testar explicitamente:
-
-```text
-user A → recurso de user B
-user → endpoint administrativo
-user → treasury
-user → risk administration
-```
-
-Tudo deve retornar:
-
-```text
-403
-```
-
-quando apropriado.
-
-### HTTP
-
-Manter:
-
-```text
-Helmet
-CORS restrito
-rate limit
-payload limit
-validation
-```
-
-e verificar configuração de produção.
-
----
-
-# 17. Fase 13 — Segurança específica de dinheiro
-
-Adicionar limites independentes para:
-
-```text
-depósito por operação
-depósito por dia
-saque por operação
-saque por dia
-número de saques
-número de depósitos
-```
-
-Adicionar mecanismos de detecção para:
-
-```text
-múltiplos saques rápidos
-mudança de Pix seguida de saque
-múltiplas contas
-comportamento anômalo
-tentativas repetitivas
-```
-
-Isso não precisa virar um sistema sofisticado de machine learning.
-
-Regras determinísticas já são suficientes para o MVP.
-
----
-
-# 18. Fase 14 — KYC, autenticação e jogo responsável
-
-Para operação real no Brasil, esta área não pode ser deixada como "feature futura".
-
-As regras atuais exigem mecanismos específicos de autenticação, inclusive reconhecimento facial em situações como retirada de valores, e nova autenticação após determinados períodos de inatividade. Também há exigências de verificação de localização.
-
-O produto deverá ter integração com:
-
-```text
-KYC provider
-biometria
-prova de vida
-CPF
-verificação de identidade
-geolocalização
-device integrity
-```
-
-A localização não pode depender exclusivamente de IP; a regulamentação exige mecanismos capazes de determinar a localização física e prevê mecanismos antifraude relacionados a VPN/proxy e adulteração de dispositivo.
-
-Também deverão ser implementadas as regras de jogo responsável e comunicação/publicidade aplicáveis.
-
----
-
-# 19. Fase 15 — Auditoria e retenção de dados
-
-Criar uma política formal de retenção.
-
-Para operação regulada, os dados de apostadores e operações devem ser mantidos com backup por **no mínimo cinco anos**, com atualização pelo menos a cada 24 horas e testes de integridade/correspondência pelo menos a cada sete dias.
-
-Implementar:
-
-```text
-audit events
-immutable financial records
-backup
-restore test
-retention policy
-access logs
-admin action logs
-```
-
-Nunca depender somente do log textual da aplicação para auditoria financeira.
-
----
-
-# 20. Fase 16 — SIGAP e conformidade regulatória
-
-Se o software for destinado a um operador brasileiro real, deve existir planejamento de integração com o **SIGAP**.
-
-O Ministério da Fazenda mantém documentação técnica para integração, validação e transmissão de dados pelo SIGAP.
-
-O sistema deverá ser capaz de fornecer os dados necessários sobre:
-
-```text
-apostadores
-apostas
-carteiras
-operações
-dados agregados
-```
-
-Além disso, os certificados de sistemas precisam considerar os requisitos das normas técnicas da SPA, incluindo segurança, pagamentos, prevenção à lavagem de dinheiro, jogo responsável e monitoramento.
-
----
-
-# 21. Fase 17 — Docker
-
-O ZIP atual **não contém Dockerfile nem docker-compose**.
-
-Isso precisa ser resolvido.
-
-Criar:
-
-```text
-Dockerfile
-docker-compose.yml
-.dockerignore
-```
-
-O ambiente local deverá subir:
-
-```text
-backbet
-mongodb
-redis
-opcionalmente otel/observability
-```
-
-Exemplo:
-
-```text
-docker compose up -d
-```
-
-deve produzir um ambiente funcional sem configuração manual obscura.
-
-## Dockerfile
-
-Usar build multi-stage:
-
-```text
-builder
-   ↓
-npm ci
-   ↓
-npm run build
-   ↓
-runtime
-   ↓
-somente produção
-```
-
-Não colocar:
-
-```text
-node_modules
-source desnecessário
-.env
-logs
-```
-
-na imagem final.
-
----
-
-# 22. Fase 18 — Ambiente de testes reproduzível
-
-Criar três ambientes conceituais:
-
-```text
-development
-test
-production
-```
-
-O teste não deve depender de:
-
-```text
-MongoDB pessoal
-Redis pessoal
-configuração da máquina
-```
-
-Preferência:
-
-```text
-docker compose
-```
-
-para infraestrutura de integração.
-
----
-
-# 23. Fase 19 — Rodar o pipeline completo
-
-Antes de considerar terminado:
-
-```bash
-npm ci
-npm run lint
-npm run test:coverage
-npm run build
-```
-
-Depois:
-
-```bash
-docker compose build
-docker compose up
-```
-
-e testar endpoints reais.
-
-O `npm run check` existente deve se tornar o **gate obrigatório do projeto**.
-
-Nenhum merge para `main` se:
-
-```text
-lint ❌
-tests ❌
-coverage ❌
-build ❌
-```
-
----
-
-# 24. Fase 20 — Testes que realmente faltam
-
-Não basta ter muitos testes unitários.
-
-Criar uma matriz de cenários críticos.
-
-## Carteira
-
-```text
-saldo zero
-saldo insuficiente
-saque concorrente
-depósito concorrente
-versão conflitante
-rollback
-```
-
-## Aposta
-
-```text
-aposta normal
-aposta simultânea
-saldo insuficiente
-evento encerrado
-mercado encerrado
-odd inválida
-risco excedido
-rollback da transação
-```
-
-## Settlement
-
-```text
-WIN
-LOSS
-CANCEL
-duplicação de settlement
-retry
-```
-
-## Withdrawal
-
-```text
-request
-processing
-success
-failure
-retry
-duplicate worker
-provider timeout
-provider duplicate response
-```
-
-## Pix
-
-```text
-webhook duplicado
-webhook inválido
-pagamento atrasado
-pagamento confirmado
-pagamento cancelado
-valor divergente
-reference divergente
-```
-
----
-
-# 25. Fase 21 — Teste de carga
-
-Antes do lançamento, executar pelo menos:
-
-```text
-100 usuários simultâneos
-500 apostas simultâneas
-100 saques concorrentes
-100 depósitos concorrentes
-```
-
-O objetivo não é provar que a infraestrutura aguenta milhões de usuários.
-
-O objetivo é provar que:
-
-```text
-concorrência ≠ corrupção financeira
-```
-
-Essa é uma propriedade muito mais importante para o MVP.
-
----
-
-# 26. Fase 22 — Teste de falhas
+Teste
 
 Simular:
 
-```text
-Mongo cai
-Redis cai
-worker cai
-processo Node morre
-rede cai
-payment provider demora
-payment provider responde duas vezes
-request expira
-database transaction aborta
-```
+Wallet update
+✓
 
-Pergunta para cada cenário:
+Ledger insert
+✗
 
-> O sistema perde dinheiro, cria dinheiro, duplica uma operação ou deixa dinheiro preso?
+Resultado:
+Wallet rollback
+Ledger rollback
 
-Cada resposta deve possuir uma estratégia de recuperação.
+Depois:
 
----
+Wallet = original
+Ledger = original
+Fase 4 — Corrigir oddId
 
-# 27. Fase 23 — Observabilidade
+Esse é simples e deve ser feito junto com os anteriores.
 
-O projeto já possui uma boa base.
+No MongooseBetRepository.create() você encontrou:
 
-Agora definir alertas úteis.
+oddId: bet.id
 
-### Alertas críticos
+Isso aparentemente está incorreto.
 
-```text
-Mongo unavailable
-Redis unavailable
-transaction failures
-wallet conflicts
-payment failures
-withdrawal queue backlog
-reconciliation mismatch
-risk inconsistencies
-5xx spike
-latency spike
-```
+Objetivo
 
-### Métricas
+Garantir:
 
-```text
-bets_total
-bets_rejected
-bets_won
-bets_lost
-deposits_total
-withdrawals_total
-payout_failures
-wallet_conflicts
-idempotency_conflicts
-risk_rejections
-reconciliation_mismatches
-```
-
----
-
-# 28. Fase 24 — Backup e recuperação
-
-Não basta configurar backup.
-
-Testar:
-
-```text
-backup
-↓
-destruir ambiente
-↓
-restore
-↓
-validar dados
-```
-
-Criar procedimento documentado para:
-
-```text
-RTO
-RPO
-restore
-rollback
-disaster recovery
-```
-
-Para um MVP pequeno, não precisa de uma arquitetura espacial da NASA.
-
-Mas precisa saber responder:
-
-> "O banco foi destruído às 3h da manhã. Como recuperamos?"
-
----
-
-# 29. Fase 25 — Deploy
-
-Arquitetura inicial suficiente:
-
-```text
-Internet
-   ↓
-Cloudflare
-   ↓
-Load Balancer / Reverse Proxy
-   ↓
-BackBet API
-   ├── MongoDB
-   ├── Redis
-   └── Workers
-```
-
-Separar:
-
-```text
-API
-worker de saque
-worker de e-mail
-worker de contatos
-```
-
-quando necessário.
-
-Não colocar MongoDB publicamente acessível.
-
-Não deixar Redis publicamente acessível.
-
----
-
-# 30. Fase 26 — Secrets
-
-Nenhum segredo no Git.
-
-Usar:
-
-```text
-JWT_SECRET
-MONGO_URI
-REDIS_URL
-SMTP_PASSWORD
-PAYMENT_PROVIDER_KEY
-PIX_PROVIDER_KEY
-OTEL credentials
-```
-
-via secret manager ou variáveis de ambiente protegidas.
-
-Criar `.env.example`.
-
-O `.env.example` deve conter:
-
-```text
-nome
-descrição
-exemplo seguro
-obrigatoriedade
-```
-
-sem segredo real.
-
----
-
-# 31. Fase 27 — Segurança operacional
-
-Antes do primeiro deploy:
-
-```text
-HTTPS
-firewall
-SSH por chave
-SSH root desabilitado
-updates automáticos de segurança
-Mongo privado
-Redis privado
-logs sem secrets
-backups
-monitoramento
-```
-
-Também fazer scan das dependências.
-
----
-
-# 32. Fase 28 — Administração
-
-O MVP precisa de uma forma controlada de operar o sistema.
-
-Não necessariamente um frontend administrativo completo.
-
-Inicialmente pode existir uma API/admin CLI para:
-
-```text
-consultar usuário
-consultar carteira
-consultar aposta
-consultar saque
-consultar depósito
-bloquear usuário
-resolver incidente
-consultar treasury
-consultar risco
-consultar auditoria
-```
-
-Toda operação administrativa precisa registrar:
-
-```text
-quem
-quando
-o quê
-antes
-depois
-motivo
-```
-
----
-
-# 33. Fase 29 — Interface mínima
-
-O BackBet atual é principalmente backend.
-
-Para transformá-lo em produto demonstrável, será necessário pelo menos um cliente mínimo:
-
-```text
-login
-cadastro
-saldo
-eventos
-aposta
-histórico
-depósito
-saque
-perfil
-```
-
-Não precisa ser bonito.
-
-Para o primeiro MVP:
-
-> funcional > bonito.
-
----
-
-# 34. Fase 30 — Contrato da API
-
-Fixar:
-
-```text
-OpenAPI
-versionamento
-HTTP status codes
-error codes
-pagination
-authentication
-idempotency
-```
-
-Exemplo:
-
-```text
-/api/v1/...
-```
-
-Nunca depender de mudanças arbitrárias nos contratos depois que clientes começarem a consumir a API.
-
----
-
-# 35. Fase 31 — Documentação
-
-O projeto já possui documentação demais para simplesmente adicionar mais documentos.
-
-Agora é hora de **simplificar**.
-
-O README principal deve responder em poucos minutos:
-
-```text
-O que é BackBet?
-Qual problema resolve?
-Arquitetura
-Stack
-Como executar
-Como testar
-Como usar a API
-Como subir Docker
-Como funciona o dinheiro
-Como funciona a concorrência
-Como contribuir
-Status do projeto
-```
-
-Documentos históricos ou redundantes devem ser consolidados.
-
----
-
-# 36. Fase 32 — Corrigir pequenas dívidas existentes
-
-Corrigir:
-
-```text
-aplication → application
-```
-
-e inconsistências semelhantes.
-
-Revisar também:
-
-```text
-scripts duplicados
-configurações duplicadas
-naming
-imports
-comentários obsoletos
-documentação divergente
-```
-
-Não fazer refatoração gigantesca.
-
----
-
-# 37. Fase 33 — Criar relatório financeiro interno
-
-Criar endpoint/admin report:
-
-```text
-Daily Financial Summary
-```
+Bet
+├── eventId
+├── marketId
+├── oddId
+└── odds
 
 com:
 
-```text
-deposits
-withdrawals
-bets
-gross gaming revenue
-prizes
-refunds
-house balance
-pending withdrawals
-pending bets
+oddId = ID da odd selecionada
+Antes de alterar
+
+Trace a origem:
+
+API request
+ ↓
+BetService
+ ↓
+domain Bet
+ ↓
+repository
+
+Confirme qual propriedade contém o oddId.
+
+Depois corrija o mapping.
+
+Teste
+
+Criar uma aposta:
+
+oddId = "odd-123"
+
+Consultar Mongo:
+
+oddId = "odd-123"
+
+e não:
+
+oddId = bet.id
+Fase 5 — Idempotência Mongo
+
+Isso não precisa bloquear seu primeiro boot, mas eu faria antes de chamar o sistema de "MVP fechado".
+
+Problema 1 — TTL
+
+Você documenta:
+
+24h
+
+mas precisa garantir isso no Mongo.
+
+Criar índice TTL sobre:
+
+createdAt
+
+com:
+
+expireAfterSeconds: 86400
+
+ou valor configurável.
+
+Problema 2 — PROCESSING preso
+
+Cenário:
+
+request
+ ↓
+PROCESSING
+ ↓
+container morre
+
+Quando voltar:
+
+PROCESSING
+
+não pode ficar eterno.
+
+Solução
+
+Adicionar algo como:
+
+processingAt
+
+e considerar a operação abandonada após determinado período.
+
+Por exemplo:
+
+PROCESSING > 5 min
+
+pode ser recuperado/reprocessado conforme a natureza da operação.
+
+Não use automaticamente a mesma estratégia para todas as operações financeiras. Para operações críticas, a chave deve continuar vinculada a uma operação realmente idempotente.
+
+Fase 6 — Withdrawal / PSP
+
+Aqui eu não tentaria resolver tudo agora.
+
+O objetivo do MVP é garantir que o adapter permita recuperação.
+
+Fluxo ideal:
+
+Withdrawal
+   ↓
+PSP request
+   ↓
+PSP idempotency key
+   ↓
+PROCESSING
+
+Se o worker morrer:
+
+PROCESSING
+   ↓
+consult PSP
+   ↓
+PAID / FAILED / UNKNOWN
+Não faça
+PROCESSING
+↓
+retry cego
+↓
+novo pagamento
+Faça
+PROCESSING
+↓
+consultar status externo
+↓
+decidir
+
+O MockPaymentAdapter deve simular isso nos testes.
+
+Fase 7 — Auditoria final de dinheiro
+
+Depois das correções, faça uma busca no código por:
+
+balance
+amount
+odds
+return
+payout
 exposure
-```
 
-Isso transforma o sistema de "API de apostas" em algo que começa a parecer produto operável.
+e procure operações usando:
 
----
+number
+float
+parseFloat
 
-# 38. Fase 34 — Definir invariantes financeiros
+Não precisa eliminar number do projeto inteiro.
 
-Documentar e testar formalmente regras como:
+A questão é:
 
-```text
-saldo nunca < 0
-lockedBalance nunca < 0
-exposição nunca < 0
-withdrawal nunca pode pagar duas vezes
-bet nunca pode ser liquidada duas vezes
-transactionId nunca é reutilizado
-idempotency key não muda de operação
-WIN gera exatamente um crédito
-CANCEL gera exatamente um refund
-LOSS não gera prêmio
-```
+nenhum valor monetário persistente ou cálculo financeiro crítico deve depender de floating point.
 
-Esses testes são particularmente valiosos para o portfólio porque demonstram domínio do problema.
+Fase 8 — Testes antes do Ubuntu
 
----
+Depois dos patches:
 
-# 39. Fase 35 — Certificação e preparação para operação real
+npm ci
+npm run typecheck
+npm test
+npm run test:integration
+npm run test:failure
+npm run test:load
 
-Para uma operação brasileira real, a aplicação precisará ser avaliada contra os requisitos regulatórios aplicáveis.
+Se algum script não existir, não invente outro imediatamente. Verifique os scripts reais do package.json.
 
-A SPA estabelece requisitos técnicos e de segurança para sistemas de apostas, incluindo proteção contra acessos não autorizados, backups, continuidade de negócios e outros controles.
+Depois:
 
-Também existem requisitos de certificação de sistemas.
+docker compose config
+docker compose build
 
-Portanto, antes do lançamento comercial:
+Se estiver tudo certo:
 
-```text
-BackBet
-   ↓
-security assessment
-   ↓
-compliance assessment
-   ↓
-certificação aplicável
-   ↓
-integração regulatória
-   ↓
-operador autorizado
-   ↓
-produção
-```
+docker compose up
+Fase 9 — Teste nos dois notebooks
 
-Não tentar "resolver isso depois" com o sistema já movimentando dinheiro.
+Sua arquitetura:
 
----
+Notebook 1
+Ubuntu Server
+Docker
+│
+├── BackBet API
+├── Redis
+├── Workers
+└── observabilidade
+        │
+        │ LAN
+        ▼
+Notebook 2
+Ubuntu Server
+Docker
+│
+└── MongoDB replica set
+Primeiro
 
-# 40. Fase 36 — Estratégia comercial recomendada
+Mongo isoladamente.
 
-Para você, existe uma diferença enorme entre:
+Depois
 
-### Modelo A — você operar uma Bet
+API conectando ao Mongo remoto.
 
-Você precisaria lidar diretamente com:
+Depois
 
-```text
-autorização
-capital
-compliance
-certificação
-pagamentos
-KYC
-AML
-jogo responsável
-segurança
-regulação
-marketing
-atendimento
-risco financeiro
-```
+Redis.
 
-É um negócio pesado.
+Depois
 
-### Modelo B — vender o BackBet como software B2B
+Workers.
 
-Você pode posicioná-lo como:
+Finalmente
 
-> **plataforma/backend de gestão de apostas para operadores autorizados.**
+Sistema inteiro.
 
-Nesse cenário:
+Não coloque tudo para subir de uma vez e depois tentar descobrir qual container virou uma batata.
 
-```text
-Cliente autorizado
-       ↓
-BackBet
-       ↓
-API
-       ↓
-pagamento/KYC/SIGAP/etc.
-```
+Fase 10 — Teste financeiro end-to-end
 
-O operador continua responsável pelas obrigações regulatórias que lhe cabem.
+Execute exatamente:
 
-**Para seu objetivo, B2B é muito mais interessante como primeiro produto comercial.**
-
----
-
-# 41. Definition of Done — BackBet MVP
-
-O projeto só deve ser considerado "finalizado" quando todos os itens abaixo forem verdadeiros.
-
-## Financeiro
-
-- [x] dinheiro armazenado de forma exata;
-- [x] Money centralizado;
-- [x] liability centralizada;
-- [x] carteira atomicamente consistente;
-- [x] exposição atomicamente consistente;
-- [x] transações financeiras auditáveis;
-- [x] idempotência funcionando;
-- [x] settlement idempotente;
-- [x] withdrawal idempotente;
-- [x] reconciliação implementada;
-- [x] testes de concorrência passando.
-
-## Segurança
-
-- [x] autenticação endurecida;
-- [x] autorização revisada;
-- [x] rate limiting;
-- [x] headers;
-- [x] CORS;
-- [x] secrets fora do Git;
-- [x] logs sem dados sensíveis;
-- [x] auditoria administrativa;
-- [x] backup;
-- [x] restore testado.
-
-## Infraestrutura
-
-- [x] Dockerfile;
-- [x] docker-compose;
-- [x] ambiente de teste;
-- [x] build reproduzível;
-- [x] deploy documentado;
-- [x] Mongo privado;
-- [x] Redis privado;
-- [x] HTTPS;
-- [x] monitoramento;
-- [x] alertas;
-- [x] workers funcionando.
-
-## Qualidade
-
-- [x] lint passando;
-- [x] typecheck passando;
-- [x] testes passando;
-- [x] cobertura conhecida;
-- [ ] integração passando;
-- [x] testes de concorrência passando;
-- [x] teste de falhas passando;
-- [x] build passando;
-- [ ] Docker build passando;
-- [x] documentação atualizada.
-
-## Produto
-
-- [x] fluxo completo de cadastro;
-- [x] login;
-- [x] carteira;
-- [x] depósito;
-- [x] aposta;
-- [x] settlement;
-- [x] saque;
-- [x] histórico;
-- [x] administração;
-- [x] API documentada.
-
-> **Estado (30/08/2026):** evidência por item em `docs/DEFINITION_OF_DONE.mdx`.
-> Os 2 itens ainda abertos (`integração passando` e `Docker build passando`)
-> dependem de ambiente com Docker/CI — não são lacunas de código.
-
----
-
-# 42. Ordem exata de execução
-
-Esta deve ser a sequência prática:
-
-```text
-01. Congelar escopo
-        ↓
-02. Money/centavos
-        ↓
-03. Liability
-        ↓
-04. Schemas Mongo
-        ↓
-05. Ledger financeiro
-        ↓
-06. Wallet concurrency
-        ↓
-07. Risk atomicidade
-        ↓
-08. Idempotência
-        ↓
-09. Settlement
-        ↓
-10. Withdrawal state machine
-        ↓
-11. Reconciliação
-        ↓
-12. Testes financeiros
-        ↓
-13. Testes concorrentes
-        ↓
-14. Testes de falha
-        ↓
-15. Docker
-        ↓
-16. CI/CD
-        ↓
-17. Segurança
-        ↓
-18. Observabilidade
-        ↓
-19. Backup/restore
-        ↓
-20. Admin
-        ↓
-21. API final
-        ↓
-22. Frontend mínimo
-        ↓
-23. README/documentação
-        ↓
-24. Security review
-        ↓
-25. Compliance/regulação
-        ↓
-26. Deploy de staging
-        ↓
-27. Teste completo em staging
-        ↓
-28. Go/No-Go
-```
-
----
-
-# 43. O que NÃO fazer
-
-Até concluir o ciclo:
-
-```text
-NÃO adicionar outro jogo
-NÃO criar microservices
-NÃO trocar MongoDB por PostgreSQL só por preferência
-NÃO reescrever a arquitetura
-NÃO criar mais abstrações sem necessidade
-NÃO adicionar IA
-NÃO otimizar prematuramente
-NÃO criar 40 endpoints administrativos
-NÃO tentar suportar 12 moedas
-```
-
-O BackBet já tem complexidade suficiente.
-
-O objetivo agora é **confiabilidade**, não tamanho.
-
----
-
-# 44. Critério final para declarar o projeto concluído
-
-O BackBet estará tecnicamente maduro para um MVP quando você conseguir executar este cenário:
-
-```text
 Usuário
-  ↓
-cadastro
-  ↓
-login
-  ↓
-depósito
-  ↓
-saldo atualizado
-  ↓
-aposta
-  ↓
-saldo debitado
-  ↓
-exposição registrada
-  ↓
-evento resolvido
-  ↓
-prêmio calculado
-  ↓
-saldo creditado
-  ↓
-saque
-  ↓
-worker processa
-  ↓
-pagamento confirmado
-  ↓
-ledger reconciliado
-```
+ ↓
+deposit
+ ↓
+wallet
+ ↓
+event
+ ↓
+market
+ ↓
+odd
+ ↓
+bet
+ ↓
+risk
+ ↓
+settlement
+ ↓
+wallet
+ ↓
+ledger
+ ↓
+withdrawal
+ ↓
+worker
+ ↓
+PSP mock
+ ↓
+ledger
 
-e, principalmente, quando o sistema sobreviver a:
+Depois consulte diretamente Mongo:
 
-```text
+users
+wallets
+bets
+events
+risk/exposure
+ledger
+withdrawals
+idempotency
+audit
+treasury
+
+A regra é:
+
+o estado de todas as entidades precisa contar a mesma história.
+
+Fase 11 — Testes de falha
+
+Depois do caminho feliz:
+
+Aposta
 request duplicado
 request concorrente
-processo interrompido
-worker reiniciado
-Mongo temporariamente indisponível
-Redis temporariamente indisponível
-payment provider indisponível
-webhook duplicado
-retry
-```
+Mongo indisponível
+Redis indisponível
+Settlement
+settlement duplicado
+falha depois do Bet update
+falha depois do Wallet update
+falha no Ledger
+Withdrawal
+worker morto
+PSP timeout
+PSP retorna UNKNOWN
+request duplicado
+Mongo
+restart
+connection loss
+replica set restart
+Fase 12 — Congelamento
 
-sem criar ou destruir dinheiro.
+Quando tudo passar:
 
-Esse é o verdadeiro **Definition of Done**.
+v1.0-MVP
 
----
+e não adicionar mais funcionalidades.
 
-# 45. Resultado esperado para o portfólio
+A partir daí:
 
-Depois desse ciclo, o BackBet deixa de ser apresentado simplesmente como:
+BUG encontrado
+   ↓
+reproduzir
+   ↓
+teste
+   ↓
+corrigir
+   ↓
+teste
 
-> "API de apostas feita com Node.js."
+Não:
 
-E passa a ser apresentado como:
+"Já que estamos aqui, vamos melhorar a arquitetura..."
 
-> **Plataforma backend de apostas construída em TypeScript, com arquitetura modular, transações MongoDB, controle de concorrência otimista, idempotência, carteira financeira, gestão de exposição de risco, workers assíncronos, observabilidade, auditoria, testes de integração e infraestrutura containerizada.**
+Esse é o buraco negro clássico de projeto com IA.
 
-Isso é um projeto significativamente mais forte para portfólio.
+Ordem exata que eu seguiria
+01. MongooseEventRepository
+        ↓
+02. Settlement administrativo transacional
+        ↓
+03. Wallet + Ledger atomicidade
+        ↓
+04. Corrigir oddId
+        ↓
+05. Idempotência TTL
+        ↓
+06. Recuperação de PROCESSING
+        ↓
+07. Revisar withdrawal/PSP
+        ↓
+08. typecheck + unit tests
+        ↓
+09. integration tests
+        ↓
+10. Docker build
+        ↓
+11. Ubuntu Server #2 / Mongo
+        ↓
+12. Ubuntu Server #1 / BackBet
+        ↓
+13. E2E financeiro
+        ↓
+14. testes de concorrência
+        ↓
+15. testes de falha
+        ↓
+16. congelar MVP
+Prioridade
 
-E há um segundo benefício: cada decisão crítica pode virar material de entrevista:
+P0 — fazer antes do servidor:
 
-```text
-Como você evitou double-spending?
-Como tratou concorrência?
-Como funciona idempotência?
-Por que usou Mongo transactions?
-Como garante consistência entre wallet e bet?
-Como recupera um saque que falhou?
-Como detecta inconsistência financeira?
-Como faria scaling?
-Como faria disaster recovery?
-```
+Event persistente
+Settlement administrativo transacional
+Wallet + Ledger atômicos
+oddId
 
-Essas são perguntas que permitem demonstrar engenharia de backend de verdade.
+P1 — fazer antes de dinheiro real:
 
----
+TTL/lease de idempotência
+recuperação de withdrawals
+testes de recuperação após crash
+reconciliação financeira
 
-# 46. Meta final
+P2 — depois do MVP:
 
-O objetivo não deve ser transformar o BackBet em uma "Bet perfeita".
+PSP real
+ingestão esportiva real
+HA Mongo
+escalabilidade horizontal
+frontend administrativo completo
+melhorias de observabilidade
 
-O objetivo é chegar a:
-
-```text
-BackBet v1.0
-────────────────────────────────────
-Financeiro consistente
-Concorrência controlada
-Operações idempotentes
-Auditoria
-Testes
-Docker
-CI/CD
-Observabilidade
-Backup
-Segurança
-Documentação
-MVP utilizável
-────────────────────────────────────
-```
-
-Depois disso, **encerre o ciclo**.
-
-A partir daí, qualquer funcionalidade nova deve ser avaliada como produto, não como desculpa para continuar expandindo o projeto.
-
-Para seu caso, o caminho mais racional é terminar o BackBet até esse ponto e então decidir entre:
-
-```text
-BackBet como produto B2B
-       OU
-BackBet como projeto de portfólio
-       +
-Open Source de terceiros em paralelo
-```
-
-Não é necessário transformá-lo em uma operação de apostas real para ele cumprir sua função de portfólio. E, caso a intenção comercial seja real, a parte regulatória brasileira deve ser tratada como um **projeto separado de compliance**, não como uma simples etapa de programação. A operação nacional exige autorização prévia da SPA e o ecossistema regulado envolve SIGAP, requisitos de segurança, pagamentos, jogo responsável e certificação.
+O objetivo agora não é transformar o BackBet em uma Bet365 de garagem. É provar que o núcleo financeiro permanece consistente quando o sistema é executado de verdade.

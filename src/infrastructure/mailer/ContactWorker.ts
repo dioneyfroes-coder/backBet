@@ -4,7 +4,7 @@ import Queue from 'bull';
 import type { Queue as BullQueue } from 'bull';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
@@ -41,6 +41,8 @@ export async function processContactPayload(payload: ContactPayload): Promise<vo
     `contact-email:${payload.ticketId}`,
     JSON.stringify(payload),
     () => processContactPayloadOnce(payload),
+    undefined,
+    IDEMPOTENCY_PROCESSING_RECOVERY_MS,
   );
 }
 

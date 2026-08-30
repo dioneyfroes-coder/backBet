@@ -90,7 +90,16 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   const walletService = new WalletService(walletRepository, ledgerRepository);
   const riskService = new RiskService(riskRepository, betRepository);
   const eventCatalogService = new EventCatalogService(eventRepository);
-  const betService = new BetService(betRepository, eventRepository, walletService, riskService);
+  const transactionRunner = walletRepository.withTransaction
+    ? { withTransaction: walletRepository.withTransaction.bind(walletRepository) }
+    : undefined;
+  const betService = new BetService(
+    betRepository,
+    eventRepository,
+    walletService,
+    riskService,
+    transactionRunner,
+  );
   const userService = new UserService(userRepository);
   const treasuryService = new HouseTreasuryService(houseTreasuryRepository, {
     walletId: appConfig.treasury.walletId,

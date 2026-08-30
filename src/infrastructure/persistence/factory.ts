@@ -62,7 +62,12 @@ export async function createBetRepository(): Promise<IBetRepository> {
 }
 
 export async function createEventRepository(): Promise<IEventRepository> {
-  // Events currently only have in-memory implementation
+  if (USE_MONGOOSE) {
+    const { MongooseEventRepository } = await import(
+      './mongoose/repositories/MongooseEventRepository'
+    );
+    return new MongooseEventRepository();
+  }
   const { EventRepository } = await import('@/core/betting/domain/repositories/EventRepository');
   return new EventRepository();
 }

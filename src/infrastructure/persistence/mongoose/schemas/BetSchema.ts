@@ -1,7 +1,7 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-export interface IBetDocument extends Document {
-  _id: mongoose.Types.ObjectId;
+export interface IBetDocument {
+  _id: string;
   version: number;
   userId: string;
   eventId: string;
@@ -21,6 +21,10 @@ export interface IBetDocument extends Document {
 
 const betSchema = new Schema<IBetDocument>(
   {
+    _id: {
+      type: String,
+      required: true,
+    },
     userId: {
       type: String,
       required: true,

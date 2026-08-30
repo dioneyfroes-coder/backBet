@@ -67,6 +67,7 @@ export class BetRepository implements IBetRepository {
       bet.resolvedAt,
       bet.cancellationReason,
       bet.version,
+      bet.oddId,
     );
   }
 }

@@ -15,11 +15,12 @@ export class MongooseBetRepository implements IBetRepository {
   async create(bet: Bet, options: BetRepositoryOptions = {}): Promise<void> {
     try {
       const betData: Partial<IBetDocument> = {
+        _id: bet.id,
         version: bet.version,
         userId: bet.userId,
         eventId: bet.eventId,
         marketId: bet.marketId,
-        oddId: bet.id,
+        oddId: bet.oddId,
         amountCents: bet.amountCents,
         odds: bet.odds.value,
         potentialReturnCents: bet.potentialReturnCents,
@@ -208,9 +209,10 @@ export class MongooseBetRepository implements IBetRepository {
       data.status,
       data.type,
       data.createdAt,
-      data.resolvedAt ?? data.createdAt,
-      data.cancellationReason ?? '',
+      data.resolvedAt ?? undefined,
+      data.cancellationReason ?? undefined,
       data.version ?? 1,
+      data.oddId ?? '',
     );
   }
 

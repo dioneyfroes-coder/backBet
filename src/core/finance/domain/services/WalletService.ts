@@ -16,6 +16,23 @@ export class WalletService {
     private ledgerRepository?: ILedgerRepository,
   ) {}
 
+  /**
+   * Executa a operação financeira como uma unidade atômica: quando nenhuma
+   * sessão foi fornecida pelo chamador e o repository suporta transações
+   * Mongo, a mutação da Wallet e a entrada do Ledger rodam na MESMA transação.
+   * Se alguma etapa falhar (inclusive appendLedger), tudo é revertido.
+   */
+  private async run<T>(
+    work: (options?: WalletRepositoryOptions) => Promise<T>,
+    givenOptions?: WalletRepositoryOptions,
+  ): Promise<T> {
+    if (givenOptions) return work(givenOptions);
+    if (this.walletRepository.withTransaction) {
+      return this.walletRepository.withTransaction((session) => work({ session }));
+    }
+    return work(undefined);
+  }
+
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {
     const existingWallet = await this.walletRepository.findByUserId(input.userId);
     if (existingWallet) {
@@ -33,6 +50,15 @@ export class WalletService {
   }
 
   async deposit(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    return this.run((opts) => this.doDeposit(userId, amount, context, opts), options);
+  }
+
+  private async doDeposit(
+    userId: string,
+    amount: number,
+    context: TransactionContext | undefined,
+    options: WalletRepositoryOptions | undefined,
+  ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'DEPOSIT', options)) return wallet;
     wallet.deposit(amount, context);
@@ -65,6 +91,15 @@ export class WalletService {
   }
 
   async withdraw(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    return this.run((opts) => this.doWithdraw(userId, amount, context, opts), options);
+  }
+
+  private async doWithdraw(
+    userId: string,
+    amount: number,
+    context: TransactionContext | undefined,
+    options: WalletRepositoryOptions | undefined,
+  ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
     wallet.withdraw(amount, context);
@@ -78,6 +113,15 @@ export class WalletService {
   }
 
   async lock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    return this.run((opts) => this.doLock(userId, amount, context, opts), options);
+  }
+
+  private async doLock(
+    userId: string,
+    amount: number,
+    context: TransactionContext | undefined,
+    options: WalletRepositoryOptions | undefined,
+  ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_HOLD', options)) return wallet;
     wallet.lock(amount, context);
@@ -90,6 +134,15 @@ export class WalletService {
   }
 
   async unlock(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    return this.run((opts) => this.doUnlock(userId, amount, context, opts), options);
+  }
+
+  private async doUnlock(
+    userId: string,
+    amount: number,
+    context: TransactionContext | undefined,
+    options: WalletRepositoryOptions | undefined,
+  ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_REVERSED', options)) return wallet;
     wallet.unlock(amount, context);
@@ -102,6 +155,15 @@ export class WalletService {
   }
 
   async withdrawLocked(userId: string, amount: number, context?: TransactionContext, options?: WalletRepositoryOptions): Promise<Wallet> {
+    return this.run((opts) => this.doWithdrawLocked(userId, amount, context, opts), options);
+  }
+
+  private async doWithdrawLocked(
+    userId: string,
+    amount: number,
+    context: TransactionContext | undefined,
+    options: WalletRepositoryOptions | undefined,
+  ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
     wallet.withdrawLocked(amount, context);
@@ -167,6 +229,11 @@ export class WalletService {
     try {
       await this.ledgerRepository.append(entry, options);
     } catch (error) {
+      // A entrada do ledger é parte da mesma unidade atômica da mutação da
+      // carteira. O erro é registrado para observabilidade e RE-LANÇADO:
+      // dentro de uma transação Mongo isso reverte a mutação (Wallet == Ledger);
+      // fora de transação a operação financeira falha em vez de silenciosamente
+      // gravar um movimento incompleto.
       writeStructuredLog(
         {
           event: 'ledger_append_failed',
@@ -177,6 +244,7 @@ export class WalletService {
         },
         'error',
       );
+      throw error;
     }
   }
 

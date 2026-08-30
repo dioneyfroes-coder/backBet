@@ -104,3 +104,89 @@ describe('IdempotencyService', () => {
     expect(plain).toBe('result-1');
   });
 });
+
+describe('IdempotencyService — recuperação de PROCESSING abandonado', () => {
+  const RECOVERY_MS = 5 * 60 * 1000;
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function freeze(ms: number): void {
+    jest.spyOn(Date, 'now').mockReturnValue(ms);
+  }
+
+  it('recupera PROCESSING parado além do limite e completa a operação', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue({ id: 'op-1' });
+    const key = 'user-1:deposit:tx-1';
+    const storageKey = `backbet:idempotency:${key}`;
+
+    freeze(1_000_000);
+    await store.setIfAbsent(storageKey, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60);
+
+    freeze(1_000_000 + RECOVERY_MS + 1);
+    const first = await service.execute(key, 'fp-1', operation, undefined, RECOVERY_MS);
+
+    expect(first).toEqual({ id: 'op-1' });
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect((await store.get<{ id: string }>(storageKey))?.status).toBe('COMPLETED');
+
+    const replay = await service.execute(key, 'fp-1', operation, undefined, RECOVERY_MS);
+    expect(replay).toEqual({ id: 'op-1' });
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('não recupera PROCESSING ainda dentro do limite (CONFLICT mantido)', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue('done');
+    const key = 'user-1:withdraw:req-1';
+    const storageKey = `backbet:idempotency:${key}`;
+
+    freeze(2_000_000);
+    await store.setIfAbsent(storageKey, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60);
+
+    freeze(2_000_000 + RECOVERY_MS - 1000);
+    await expect(
+      service.execute(key, 'fp-1', operation, undefined, RECOVERY_MS),
+    ).rejects.toMatchObject({ code: 'CONFLICT', statusCode: 409 });
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it('sem recoveryMs o comportamento padrão é CONFLICT para PROCESSING', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue('done');
+    const key = 'user-1:bet:req-1';
+    const storageKey = `backbet:idempotency:${key}`;
+
+    freeze(3_000_000);
+    await store.setIfAbsent(storageKey, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60);
+
+    freeze(3_000_000 + RECOVERY_MS + 1);
+    await expect(service.execute(key, 'fp-1', operation)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      statusCode: 409,
+    });
+    expect(operation).not.toHaveBeenCalled();
+  });
+
+  it('nunca re-executa uma entrada COMPLETED, mesmo antiga', async () => {
+    const store = new InMemoryIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue({ id: 'op-1' });
+    const key = 'user-1:deposit:tx-2';
+    const storageKey = `backbet:idempotency:${key}`;
+
+    freeze(4_000_000);
+    await store.setIfAbsent(storageKey, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60);
+    await store.set(storageKey, { fingerprint: 'fp-1', status: 'COMPLETED', result: { id: 'op-1' } }, 60);
+
+    freeze(4_000_000 + RECOVERY_MS + 1);
+    await service.execute(key, 'fp-1', operation, undefined, RECOVERY_MS);
+
+    expect(operation).not.toHaveBeenCalled();
+  });
+});

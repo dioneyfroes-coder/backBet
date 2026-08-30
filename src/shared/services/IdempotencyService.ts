@@ -20,10 +20,27 @@ export interface IdempotencyStore {
   setIfAbsent<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<boolean>;
   set<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<void>;
   delete(key: string): Promise<void>;
+  /**
+   * Tenta reivindicar atomicamente uma entry PROCESSING abandonada (ex.: worker
+   * morto) parada há mais de `olderThanMs`. Retorna a entrada se conseguiu
+   * reclamar; null caso contrário. Implementada pelo Mongo e pelo in-memory.
+   */
+  reclaimStaleProcessing?<T>(
+    key: string,
+    olderThanMs: number,
+  ): Promise<IdempotencyRecord<T> | null>;
 }
+
+// Tempo padrão após o qual uma operação PROCESSING é considerada abandonada e
+// pode ser recuperada (configurável via IDEMPOTENCY_PROCESSING_RECOVERY_MS).
+export const IDEMPOTENCY_PROCESSING_RECOVERY_MS: number = (() => {
+  const raw = Number(process.env.IDEMPOTENCY_PROCESSING_RECOVERY_MS);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 5 * 60 * 1000;
+})();
 
 export class InMemoryIdempotencyStore implements IdempotencyStore {
   private readonly records = new Map<string, IdempotencyRecord<unknown>>();
+  private readonly processingAtByKey = new Map<string, number>();
 
   async get<T>(key: string): Promise<IdempotencyRecord<T> | null> {
     return (this.records.get(key) as IdempotencyRecord<T> | undefined) ?? null;
@@ -38,15 +55,34 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
       return false;
     }
     this.records.set(key, value);
+    this.processingAtByKey.set(key, Date.now());
     return true;
   }
 
   async set<T>(key: string, value: IdempotencyRecord<T>, _ttlSeconds: number): Promise<void> {
     this.records.set(key, value);
+    this.processingAtByKey.set(key, Date.now());
   }
 
   async delete(key: string): Promise<void> {
     this.records.delete(key);
+    this.processingAtByKey.delete(key);
+  }
+
+  async reclaimStaleProcessing<T>(
+    key: string,
+    olderThanMs: number,
+  ): Promise<IdempotencyRecord<T> | null> {
+    const record = this.records.get(key) as IdempotencyRecord<T> | undefined;
+    const processingAt = this.processingAtByKey.get(key);
+    if (!record || record.status !== 'PROCESSING' || processingAt === undefined) {
+      return null;
+    }
+    if (Date.now() - processingAt < olderThanMs) {
+      return null;
+    }
+    this.processingAtByKey.set(key, Date.now());
+    return record;
   }
 }
 
@@ -66,6 +102,24 @@ class RedisIdempotencyStore implements IdempotencyStore {
   delete(key: string): Promise<void> {
     return redisClient.del(key);
   }
+
+  // Best effort não-atômico (Redis simples): como o retry só ocorre para
+  // operações financeiras com idempotência no ledger, o re-executar não duplica
+  // valores; serve para destravar rows PROCESSING de cache.
+  async reclaimStaleProcessing<T>(
+    key: string,
+    olderThanMs: number,
+  ): Promise<IdempotencyRecord<T> | null> {
+    const existing = await this.get<T>(key);
+    const processingAt = (existing as { processingAt?: number } | null)?.processingAt;
+    if (!existing || existing.status !== 'PROCESSING' || processingAt === undefined) {
+      return null;
+    }
+    if (Date.now() - processingAt < olderThanMs) {
+      return null;
+    }
+    return existing;
+  }
 }
 
 export class IdempotencyService {
@@ -79,8 +133,10 @@ export class IdempotencyService {
     fingerprint: string,
     operation: () => Promise<T>,
     restoreResult?: (result: T) => T,
+    recoveryMs?: number,
   ): Promise<T> {
-    return (await this.executeWithMeta(key, fingerprint, operation, restoreResult)).value;
+    return (await this.executeWithMeta(key, fingerprint, operation, restoreResult, recoveryMs))
+      .value;
   }
 
   async executeWithMeta<T>(
@@ -88,6 +144,7 @@ export class IdempotencyService {
     fingerprint: string,
     operation: () => Promise<T>,
     restoreResult?: (result: T) => T,
+    recoveryMs?: number,
   ): Promise<IdempotencyExecutionResult<T>> {
     const normalizedKey = key.trim();
     if (!normalizedKey) {
@@ -97,6 +154,18 @@ export class IdempotencyService {
     const storageKey = `backbet:idempotency:${normalizedKey}`;
     const existing = await this.store.get<T>(storageKey);
     if (existing) {
+      if (existing.status === 'PROCESSING' && recoveryMs && recoveryMs > 0) {
+        const recovered = await this.tryRecover(storageKey, recoveryMs);
+        if (recovered === 'recovered') {
+          return this.runAndPersist(
+            storageKey,
+            normalizedKey,
+            fingerprint,
+            operation,
+            'recovered',
+          );
+        }
+      }
       idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'replay' });
       return this.resolveExistingMeta(storageKey, existing, fingerprint, restoreResult);
     }
@@ -107,6 +176,18 @@ export class IdempotencyService {
       this.ttlSeconds,
     );
     if (!claimed) {
+      if (recoveryMs && recoveryMs > 0) {
+        const recovered = await this.tryRecover(storageKey, recoveryMs);
+        if (recovered === 'recovered') {
+          return this.runAndPersist(
+            storageKey,
+            normalizedKey,
+            fingerprint,
+            operation,
+            'recovered',
+          );
+        }
+      }
       idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'conflict' });
       const concurrent = await this.store.get<T>(storageKey);
       if (concurrent) {
@@ -115,8 +196,35 @@ export class IdempotencyService {
       throw new AppError('SERVICE_UNAVAILABLE', 'Não foi possível reservar a operação', 503);
     }
 
-    idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'claimed' });
+    return this.runAndPersist(storageKey, normalizedKey, fingerprint, operation, 'claimed');
+  }
 
+  private async tryRecover<T>(
+    storageKey: string,
+    recoveryMs: number,
+  ): Promise<'recovered' | 'not-stale' | 'unsupported'> {
+    const store = this.store;
+    if (typeof store.reclaimStaleProcessing !== 'function') {
+      return 'unsupported';
+    }
+    const record = await store.reclaimStaleProcessing<T>(storageKey, recoveryMs);
+    if (!record) {
+      return 'not-stale';
+    }
+    return 'recovered';
+  }
+
+  private async runAndPersist<T>(
+    storageKey: string,
+    normalizedKey: string,
+    fingerprint: string,
+    operation: () => Promise<T>,
+    claimResult: 'claimed' | 'recovered',
+  ): Promise<IdempotencyExecutionResult<T>> {
+    idempotencyClaimCounter.inc({
+      operation: this.operationFromKey(normalizedKey),
+      result: claimResult,
+    });
     try {
       const result = await operation();
       await this.store.set(storageKey, { fingerprint, status: 'COMPLETED', result }, this.ttlSeconds);

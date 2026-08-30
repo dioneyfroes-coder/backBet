@@ -1,7 +1,10 @@
 import { CreditPackageService } from '@/core/finance/domain/services/CreditPackageService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import { executeWithWalletErrorMapping } from '@/core/finance/application/errors/WalletErrorMapper';
-import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import {
+  IdempotencyService,
+  IDEMPOTENCY_PROCESSING_RECOVERY_MS,
+} from '@/shared/services/IdempotencyService';
 import { CreditPackage } from '@/core/finance/domain/entities/CreditPackage';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
 
@@ -52,6 +55,7 @@ export class PurchaseCreditPackage {
         ),
         wallet: new Wallet(raw.wallet.userId, raw.wallet.currency),
       }),
+      IDEMPOTENCY_PROCESSING_RECOVERY_MS,
     );
   }
 }

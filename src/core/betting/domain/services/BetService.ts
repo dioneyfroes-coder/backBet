@@ -74,6 +74,7 @@ export class BetService {
         userId: input.userId,
         eventId: input.eventId,
         marketId: input.marketId,
+        oddId: input.oddId,
         amount: input.amount,
         currency: wallet.currency ?? 'BRL',
         odds: odd,

@@ -1,8 +1,8 @@
 // src/core/betting/infra/repositories/EventRepository.ts
 import { IEventRepository } from '../../domain/repositories/IEventRepository';
-import { Event, Market } from '../../domain/entities/Event';
-import { EventStatus, MarketStatus } from '../../types/bet.types';
-import { Odds } from '@core/odds/domain/value-objects/Odds';
+import { Event } from '../../domain/entities/Event';
+import { EventStatus } from '../../types/bet.types';
+import { createSampleEvents } from '../../domain/seed/sampleEvents';
 
 type EventFilter = {
   status?: EventStatus;
@@ -15,7 +15,7 @@ export class EventRepository implements IEventRepository {
   private events: Event[] = [];
 
   constructor() {
-    this.seedSampleEvents();
+    this.events = createSampleEvents();
   }
 
   async create(event: Event): Promise<void> {
@@ -81,120 +81,5 @@ export class EventRepository implements IEventRepository {
     const initialLength = this.events.length;
     this.events = this.events.filter((e) => e.id !== id);
     return this.events.length < initialLength;
-  }
-
-  private seedSampleEvents(): void {
-    if (this.events.length > 0) {
-      return;
-    }
-
-    const now = Date.now();
-    const buildMarkets = (
-      seed: Array<{
-        id: string;
-        name: string;
-        status: MarketStatus;
-        odds: Array<{ id: string; value: number }>;
-      }>,
-    ) => {
-      return new Map(
-        seed.map((market) => [
-          market.id,
-          new Market(
-            market.id,
-            market.name,
-            market.status,
-            new Map(market.odds.map((odd) => [odd.id, new Odds(odd.value)])),
-          ),
-        ]),
-      );
-    };
-
-    const seeds: Array<{
-      id: string;
-      name: string;
-      startInMinutes: number;
-      status: EventStatus;
-      category: string;
-      participants: string[];
-      markets: Array<{
-        id: string;
-        name: string;
-        status: MarketStatus;
-        odds: Array<{ id: string; value: number }>;
-      }>;
-    }> = [
-      {
-        id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
-        name: 'FC Tech vs Dev United',
-        startInMinutes: 90,
-        status: 'SCHEDULED',
-        category: 'Football',
-        participants: ['FC Tech', 'Dev United'],
-        markets: [
-          {
-            id: 'mkt-1x2',
-            name: 'Resultado Final',
-            status: 'OPEN',
-            odds: [
-              { id: 'home', value: 1.9 },
-              { id: 'draw', value: 3.1 },
-              { id: 'away', value: 3.6 },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'a1b2c3d4-0000-4111-8222-333344445555',
-        name: 'Data Lakers vs AI Warriors',
-        startInMinutes: 240,
-        status: 'SCHEDULED',
-        category: 'Basketball',
-        participants: ['Data Lakers', 'AI Warriors'],
-        markets: [
-          {
-            id: 'mkt-winner',
-            name: 'Vencedor',
-            status: 'OPEN',
-            odds: [
-              { id: 'lakers', value: 1.8 },
-              { id: 'warriors', value: 2.0 },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'f6e5d4c3-0000-4222-8333-444455556666',
-        name: 'Open Code Finals',
-        startInMinutes: -60,
-        status: 'LIVE',
-        category: 'Tennis',
-        participants: ['Ada Lovelace', 'Grace Hopper'],
-        markets: [
-          {
-            id: 'mkt-match',
-            name: 'Vencedor da Partida',
-            status: 'OPEN',
-            odds: [
-              { id: 'ada', value: 1.7 },
-              { id: 'grace', value: 2.2 },
-            ],
-          },
-        ],
-      },
-    ];
-
-    this.events = seeds.map(
-      (seed) =>
-        new Event(
-          seed.id,
-          seed.name,
-          new Date(now + seed.startInMinutes * 60 * 1000),
-          seed.status,
-          seed.category,
-          seed.participants,
-          buildMarkets(seed.markets),
-        ),
-    );
   }
 }

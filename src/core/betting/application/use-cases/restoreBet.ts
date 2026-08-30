@@ -19,5 +19,7 @@ export function restoreBet(raw: unknown): Bet {
     new Date(r.createdAt),
     r.resolvedAt ? new Date(r.resolvedAt) : undefined,
     r.cancellationReason,
+    r.version ?? 1,
+    r.oddId ?? '',
   );
 }

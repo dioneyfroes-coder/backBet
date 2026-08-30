@@ -8,6 +8,7 @@ export type CreatePendingBetInput = {
   userId: string;
   eventId: string;
   marketId: string;
+  oddId?: string;
   amount: number;
   currency: string;
   odds: Odds;
@@ -21,6 +22,7 @@ export class BetFactory {
     userId,
     eventId,
     marketId,
+    oddId = '',
     amount,
     currency,
     odds,
@@ -43,6 +45,8 @@ export class BetFactory {
       createdAt,
       new Date(0),
       '',
+      1,
+      oddId,
     );
   }
 }

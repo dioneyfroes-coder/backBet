@@ -115,6 +115,25 @@ describe('BetService', () => {
       expect(bet.status).toBe('PENDING');
     });
 
+    it('cria a aposta com o oddId selecionado', async () => {
+      eventRepository.findById.mockResolvedValue(makeEvent());
+      walletService.withdraw.mockResolvedValue({ currency: 'BRL', userId: 'user-1' });
+
+      const bet = await service.placeBet({
+        userId: 'user-1',
+        eventId: 'event-1',
+        marketId: 'market-a',
+        oddId: 'odd-a',
+        amount: 100,
+        type: 'SINGLE',
+      });
+
+      const createdBet = betRepository.create.mock.calls[0][0] as Bet;
+      expect(createdBet.oddId).toBe('odd-a');
+      expect(bet.oddId).toBe('odd-a');
+      expect(bet.toJSON()).toMatchObject({ oddId: 'odd-a' });
+    });
+
     it('throws when event is missing or closed', async () => {
       eventRepository.findById.mockResolvedValue(null);
       await expect(
