@@ -1,5 +1,8 @@
 #!/usr/bin/env tsx
-import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
+import {
+  startWithdrawalWorker,
+  startWithdrawalRecovery,
+} from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import {
@@ -30,9 +33,14 @@ async function main() {
 
     console.log('Starting Withdrawal worker...');
     const queue = startWithdrawalWorker(withdrawalRequestService);
+    const recovery = startWithdrawalRecovery({
+      repository: withdrawalRequestRepository,
+      service: withdrawalRequestService,
+    });
 
     process.on('SIGINT', async () => {
       console.log('Shutting down Withdrawal worker...');
+      recovery.stop();
       try {
         await queue.close();
       } catch (err) {

@@ -6,4 +6,5 @@ export interface IWithdrawalRequestRepository {
   findById(id: string): Promise<WithdrawalRequest | null>;
   findByUserId(userId: string): Promise<WithdrawalRequest[]>;
   listPending(limit?: number, offset?: number): Promise<WithdrawalRequest[]>;
+  listStuckProcessing(processingBefore: Date, limit?: number): Promise<WithdrawalRequest[]>;
 }

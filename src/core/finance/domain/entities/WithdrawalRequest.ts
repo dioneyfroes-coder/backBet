@@ -40,6 +40,7 @@ export class WithdrawalRequest {
     public processedAt?: Date,
     public readonly notes?: string,
     public approvalLogs: ApprovalLog[] = [],
+    public processingAt?: Date,
   ) {
     if (amount <= 0) {
       throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
@@ -79,6 +80,9 @@ export class WithdrawalRequest {
 
   markProcessing(): void {
     this.transitionTo('PROCESSING', ['APPROVED']);
+    // Marca quando o processamento iniciou (mantém o primeiro timestamp caso o
+    // estado seja re-confirmado) para permitir recuperação de PROCESSING preso.
+    this.processingAt = this.processingAt ?? new Date();
   }
 
   completePayout(): void {
@@ -106,6 +110,7 @@ export class WithdrawalRequest {
       status: this.status,
       requestedAt: this.requestedAt,
       processedAt: this.processedAt,
+      processingAt: this.processingAt,
       notes: this.notes,
       approvalLogs: this.approvalLogs,
     };

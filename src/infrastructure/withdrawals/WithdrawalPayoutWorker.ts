@@ -8,6 +8,7 @@ import {
 import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithdrawalQueue';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 import type { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
+import type { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 
@@ -111,6 +112,183 @@ export async function processWithdrawalPayload(
     JSON.stringify(payload),
     () => processWithdrawalPayloadOnce(payload, paymentAdapter, service),
   );
+}
+
+export type WithdrawalRecoveryOutcome = 'paid' | 'failed' | 'unknown' | 'error';
+
+/**
+ * Recupera um withdrawal preso em PROCESSING CONSULTANDO o PSP — nunca re-executa
+ * o pagamento. O resultado decide:
+ *  - PAID   -> completa o payout (débito do locked) uma única vez;
+ *  - FAILED -> devolve o valor ao saldo e marca FAILED;
+ *  - outro  -> permanece PROCESSING para uma nova checagem depois.
+ */
+export async function recoverWithdrawalProcessing(
+  payload: WithdrawalPayoutPayload,
+  paymentAdapter?: IPaymentPort,
+  service?: WithdrawalRequestService,
+): Promise<WithdrawalRecoveryOutcome> {
+  const adapter = paymentAdapter ?? createPaymentAdapter();
+  if (typeof adapter.getWithdrawalStatus !== 'function' || !service) {
+    return 'unknown';
+  }
+
+  let info;
+  try {
+    info = await adapter.getWithdrawalStatus(payload.requestId);
+  } catch (err) {
+    writeStructuredLog({
+      event: 'withdrawal_recovery_status_query_failed',
+      requestId: payload.requestId,
+      err,
+    });
+    return 'error';
+  }
+
+  if (info.status === 'PAID') {
+    await idempotencyService.execute(
+      `withdrawal-recover-paid:${payload.requestId}`,
+      JSON.stringify(payload),
+      async () => {
+        await service.completePayout(payload.requestId);
+        return 'paid';
+      },
+    );
+    return 'paid';
+  }
+
+  if (info.status === 'FAILED') {
+    await idempotencyService.execute(
+      `withdrawal-recover-failed:${payload.requestId}`,
+      JSON.stringify(payload),
+      async () => {
+        await service.failPayout(payload.requestId);
+        return 'failed';
+      },
+    );
+    return 'failed';
+  }
+
+  writeStructuredLog({
+    event: 'withdrawal_recovery_pending',
+    requestId: payload.requestId,
+    status: info.status,
+  });
+  return 'unknown';
+}
+
+/**
+ * Varre withdrawals em PROCESSING há mais de `minProcessingAgeMs` e — para cada
+ * um — consulta o PSP em vez de refazer o pagamento. Barra uma operação por
+ * vez; falha de item é logada e segue para o próximo.
+ */
+export async function runWithdrawalRecovery(options: {
+  repository: IWithdrawalRequestRepository;
+  service: WithdrawalRequestService;
+  paymentAdapter?: IPaymentPort;
+  minProcessingAgeMs?: number;
+  limit?: number;
+  now?: Date;
+}): Promise<{ scanned: number; paid: number; failed: number; unknown: number; errors: number }> {
+  const {
+    repository,
+    service,
+    paymentAdapter,
+    minProcessingAgeMs = 5 * 60 * 1000,
+    limit = 50,
+    now = new Date(),
+  } = options;
+
+  const processingBefore = new Date(now.getTime() - minProcessingAgeMs);
+  const stuck = await repository.listStuckProcessing(processingBefore, limit);
+
+  const summary = { scanned: stuck.length, paid: 0, failed: 0, unknown: 0, errors: 0 };
+  for (const request of stuck) {
+    const payload: WithdrawalPayoutPayload = {
+      requestId: request.id,
+      userId: request.userId,
+      amount: request.amount,
+      currency: request.currency,
+    };
+    try {
+      const outcome = await recoverWithdrawalProcessing(payload, paymentAdapter, service);
+      if (outcome === 'paid') summary.paid += 1;
+      else if (outcome === 'failed') summary.failed += 1;
+      else if (outcome === 'unknown') summary.unknown += 1;
+      else summary.errors += 1;
+    } catch (err) {
+      summary.errors += 1;
+      writeStructuredLog({
+        event: 'withdrawal_recovery_failed',
+        requestId: request.id,
+        err,
+      });
+    }
+  }
+
+  writeStructuredLog({
+    event: 'withdrawal_recovery_run',
+    scanned: summary.scanned,
+    paid: summary.paid,
+    failed: summary.failed,
+    unknown: summary.unknown,
+    errors: summary.errors,
+  });
+  return summary;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const raw = Number(value);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
+
+/**
+ * Scheduler periódico para recuperar withdrawals presos em PROCESSING (worker
+ * morto, timeout do provedor etc). Consulta o PSP — nunca refaz o pagamento.
+ */
+export function startWithdrawalRecovery(options: {
+  repository: IWithdrawalRequestRepository;
+  service: WithdrawalRequestService;
+  paymentAdapter?: IPaymentPort;
+  intervalMs?: number;
+  minProcessingAgeMs?: number;
+  limit?: number;
+}): { stop(): void } {
+  const {
+    repository,
+    service,
+    paymentAdapter,
+    intervalMs = parsePositiveInt(process.env.WITHDRAWAL_RECOVERY_INTERVAL_MS, 5 * 60 * 1000),
+    minProcessingAgeMs = parsePositiveInt(
+      process.env.WITHDRAWAL_RECOVERY_MIN_AGE_MS,
+      5 * 60 * 1000,
+    ),
+    limit = 50,
+  } = options;
+
+  let running = false;
+  const tick = async (): Promise<void> => {
+    if (running) {
+      return;
+    }
+    running = true;
+    try {
+      await runWithdrawalRecovery({ repository, service, paymentAdapter, minProcessingAgeMs, limit });
+    } catch (err) {
+      writeStructuredLog({ event: 'withdrawal_recovery_scan_failed', err });
+    } finally {
+      running = false;
+    }
+  };
+
+  const timer = setInterval(() => {
+    void tick();
+  }, intervalMs);
+  timer.unref();
+
+  void tick();
+
+  return { stop() { clearInterval(timer); } };
 }
 
 export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQueue {

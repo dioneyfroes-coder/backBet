@@ -31,4 +31,14 @@ export class WithdrawalRequestRepository implements IWithdrawalRequestRepository
     );
     return pending.slice(offset || 0, (offset || 0) + (limit || pending.length));
   }
+
+  async listStuckProcessing(processingBefore: Date, limit?: number): Promise<WithdrawalRequest[]> {
+    const stuck = this.requests.filter(
+      (r) =>
+        r.status === 'PROCESSING' &&
+        r.processingAt !== undefined &&
+        r.processingAt < processingBefore,
+    );
+    return stuck.slice(0, limit ?? stuck.length);
+  }
 }

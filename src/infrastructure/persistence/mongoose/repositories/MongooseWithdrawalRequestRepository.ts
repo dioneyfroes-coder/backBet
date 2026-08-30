@@ -17,6 +17,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
       doc.processedAt,
       doc.notes,
       doc.approvalLogs,
+      doc.processingAt,
     );
   }
 
@@ -29,6 +30,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
       status: request.status,
       requestedAt: request.requestedAt,
       processedAt: request.processedAt,
+      processingAt: request.processingAt,
       notes: request.notes,
       approvalLogs: request.approvalLogs,
     });
@@ -42,6 +44,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
       {
         status: request.status,
         processedAt: request.processedAt,
+        processingAt: request.processingAt,
         approvalLogs: request.approvalLogs,
       },
       { new: true },
@@ -77,6 +80,17 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     })
       .sort({ requestedAt: -1 })
       .skip(offset || 0)
+      .limit(limit || 20)
+      .lean<IWithdrawalRequestDocument[]>();
+    return docs.map((doc) => this.toDomain(doc as IWithdrawalRequestDocument));
+  }
+
+  async listStuckProcessing(processingBefore: Date, limit?: number): Promise<WithdrawalRequest[]> {
+    const docs = await WithdrawalRequestModel.find({
+      status: 'PROCESSING',
+      processingAt: { $lt: processingBefore },
+    })
+      .sort({ processingAt: 1 })
       .limit(limit || 20)
       .lean<IWithdrawalRequestDocument[]>();
     return docs.map((doc) => this.toDomain(doc as IWithdrawalRequestDocument));

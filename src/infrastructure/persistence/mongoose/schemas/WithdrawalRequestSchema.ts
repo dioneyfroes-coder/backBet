@@ -8,9 +8,10 @@ export interface IWithdrawalRequestDocument extends Document {
   amountCents: number;
   currency: Currency;
   status: WithdrawalStatus;
-  requestedAt: Date;
-  processedAt?: Date;
-  notes?: string;
+requestedAt: Date;
+    processedAt?: Date;
+    processingAt?: Date;
+    notes?: string;
   approvalLogs: Array<{
     adminId: string;
     action: ApprovalAction;
@@ -63,6 +64,7 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
       default: Date.now,
     },
     processedAt: Date,
+    processingAt: Date,
     notes: String,
     approvalLogs: [
       {
