@@ -1,0 +1,144 @@
+# Invariantes Financeiros (Fase 34)
+
+Especificação formal das regras financeiras que **nunca podem ser violadas** no
+BackBet. Cada invariante lista:
+
+- **Enunciado** — a regra formal;
+- **Onde é garantido** — o ponto do código que impede a violação;
+- **Onde é testado** — a suite que prova a regra.
+
+Suite principal: `src/core/finance/domain/services/__tests__/FinancialInvariants.test.ts`.
+
+---
+
+## FI-01 — Saldo nunca é negativo
+
+> Para qualquer usuário e a qualquer momento, `Wallet.balanceCents >= 0`.
+
+**Garantido por:** `Wallet.withdraw` / `Wallet.lock` rejeitam débito acima do
+saldo (`WALLET_INSUFFICIENT_FUNDS`) antes de tocar no saldo
+(`src/core/finance/domain/entities/Wallet.ts:62-88`); `Money.subtract` rejeita
+resultado negativo (`Money.ts:113-124`); controle de versão otimista evita
+duplicação de débitos concorrentes (`WalletRepository.ts`).
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-01), `WalletConcurrency.test.ts:126-149`
+(100 saques concorrentes nunca produzem saldo observado negativo).
+
+## FI-02 — Saldo bloqueado nunca é negativo
+
+> Para qualquer usuário e a qualquer momento, `Wallet.lockedBalanceCents >= 0`.
+
+**Garantido por:** `Wallet.unlock` / `Wallet.withdrawLocked` rejeitam valores
+acima do bloqueado (`WALLET_LOCKED_BALANCE_EXCEEDED` / `WALLET_INSUFFICIENT_LOCKED_FUNDS`,
+`Wallet.ts:91-118`).
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-02), `WalletService.extra.test.ts`.
+
+## FI-03 — Exposição de risco nunca é negativa
+
+> Para qualquer usuário/evento/mercado e a qualquer momento,
+> `RiskProfile.exposureCents >= 0`.
+
+**Garantido por:** `RiskProfile.decreaseExposure` satura em `0` (nunca subtrrai
+abaixo de zero — `src/core/risk/domain/entities/RiskProfile.ts:41-48`); reservas
+atômicas só aumentam exposição (`RiskService.reserveExposure`,
+`RiskService.ts:199-214`); `Money.subtract` rejeita resultado negativo.
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-03).
+
+## FI-04 — Um saque nunca paga duas vezes
+
+> Para um dado `withdrawalId`, no máximo uma operação de débito definitivo
+> (`WITHDRAWAL_COMPLETED`) e um crédito ao titular podem ocorrer em todo o
+> ciclo de vida do pedido — independentemente de retry do worker ou webhook
+> duplicado.
+
+**Garantido por:**
+1. Máquina de estados: `completePayout()` só vale a partir de `PROCESSING` e leva
+   a `COMPLETED` (estado terminal). Qualquer segunda tentativa dispara `CONFLICT`
+   (`WithdrawalRequest.ts:49-98`);
+2. Idempotência no nível do ledger: o débito usa
+   `transactionId = WITHDRAWAL_COMPLETED:<withdrawalId>` e, se já aplicado, não
+   muta saldo de novo (`WalletService.ts:117-142`);
+3. O dinheiro fica representado como `lockedBalance` durante todo o processamento
+   (`WITHDRAWAL_HOLD`), nunca some nem é debitado antes da confirmação do payout.
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-04).
+
+## FI-05 — Uma aposta nunca é liquidada duas vezes
+
+> Para um dado `betId`, `resolve` só pode transicionar `PENDING → WON` ou
+> `PENDING → LOST` uma única vez. Tentativas repetidas de liquidação são rejeitadas
+> e não geram movimento financeiro novo.
+
+**Garantido por:** `Bet.resolve` valida `status === PENDING` antes de qualquer
+mutação (`src/core/betting/domain/entities/Bet.ts:67-77` → `BET_NOT_PENDING`).
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-05).
+
+## FI-06 — Um `transactionId` nunca é reutilizado para movimentos diferentes
+
+> Dois movimentos financeiros distintos nunca compartilham o mesmo
+> `transactionId`. O id é determinístico para uma operação de negócio
+> (`<type>:<referenceId>`), de modo que o **replay da mesma operação é
+> idempotente** e operações diferentes produzem ids diferentes.
+
+**Garantido por:** esquema de composição `type:referenceId`
+(`WalletService.ts:117-122`); `randomUUID()` quando não há referência; conjunto
+append-only de `LedgerEntry` com `transactionId` único
+(`LedgerEntry.ts`, `ILedgerRepository.exists`).
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-06), `WalletService.idempotency.test.ts`.
+
+## FI-07 — Uma Idempotency-Key não muda de operação
+
+> Se uma `Idempotency-Key` foi usada para uma operação com certo fingerprint, a
+> mesma key não pode ser reutilizada para uma operação com payload/fingerprint
+> diferente.
+
+**Garantido por:** `IdempotencyService.resolveExistingMeta` compara fingerprints e
+responde `CONFLICT (409)` em divergência (`src/shared/services/IdempotencyService.ts:138-159`).
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-07), `IdempotencyService.test.ts`.
+
+## FI-08 — WIN gera exatamente um crédito
+
+> Se uma aposta é liquidada como `WON`, o usuário recebe exatamente um movimento
+> `BET_WIN` no valor de `potentialReturn`. Um retry da liquidação não duplica o
+> crédito.
+
+**Garantido por:** fluxo único de crédito em `BetService.resolveBet`
+(`BetService.ts:185-200`); guarda de idempotência do ledger para
+`BET_WIN:<betId>`; estado `WON` terminal que bloqueia nova liquidação.
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-08), `Settlement.integration.test.ts`.
+
+## FI-09 — CANCEL gera exatamente um reembolso
+
+> Se uma aposta é cancelada, o usuário recebe exatamente um movimento `BET_REFUND`
+> no valor da stake. Retry não duplica o reembolso.
+
+**Garantido por:** fluxo único de reembolso em `BetService.cancelBet`
+(`BetService.ts:150-163`); guarda de idempotência do ledger para
+`BET_REFUND:<betId>`; estado `CANCELED` terminal.
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-09), `WalletService.idempotency.test.ts`.
+
+## FI-10 — LOSS não gera prêmio
+
+> Se uma aposta é liquidada como `LOST`, nenhum crédito `BET_WIN` é gerado e o
+> saldo do usuário permanece apenas debatido da stake.
+
+**Garantido por:** ramo `if (input.result === 'WON')` exclusivo em
+`BetService.resolveBet` (`BetService.ts:185-200`) — LOST não passa pelo depósito.
+
+**Testado em:** `FinancialInvariants.test.ts` (FI-10).
+
+---
+
+## Como ler os testes
+
+Cada `describe('FI-0X ...')` em `FinancialInvariants.test.ts` mapeia 1:1 um
+invariante desta página. A suite é pura de domínio (repositórios in-memory), não
+exige Mongo/Redis e roda em milissegundos — serve também como gate rápido:
+`npx jest FinancialInvariants`.
