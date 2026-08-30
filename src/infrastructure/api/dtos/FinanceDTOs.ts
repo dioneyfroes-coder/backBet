@@ -1,11 +1,16 @@
 import { z } from 'zod';
+import { hasAtMostTwoDecimalPlaces } from './WalletDTOs';
 
 export const CreditPackagePurchaseDTO = z.object({
   packageId: z.string().nonempty(),
 });
 
 export const CreateWithdrawalRequestDTO = z.object({
-  amount: z.number().positive().min(0.01),
+  amount: z
+    .number()
+    .positive()
+    .min(0.01)
+    .refine(hasAtMostTwoDecimalPlaces, 'O valor deve ter no máximo 2 casas decimais'),
   currency: z.enum(['BRL', 'USD', 'EUR']),
   notes: z.string().optional(),
   password: z.string().optional(),

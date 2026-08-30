@@ -1,5 +1,8 @@
 import { WithdrawalRequest } from '@/core/finance/domain/entities/WithdrawalRequest';
-import { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import {
+  IWithdrawalRequestRepository,
+  WithdrawalRequestRepositoryOptions,
+} from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
 import {
   IWithdrawalRequestDocument,
   WithdrawalRequestModel,
@@ -21,21 +24,37 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     );
   }
 
-  async create(request: WithdrawalRequest): Promise<WithdrawalRequest> {
-    const doc = await WithdrawalRequestModel.create({
-      requestId: request.id,
-      userId: request.userId,
-      amountCents: Math.round(request.amount * 100),
-      currency: request.currency,
-      status: request.status,
-      requestedAt: request.requestedAt,
-      processedAt: request.processedAt,
-      processingAt: request.processingAt,
-      notes: request.notes,
-      approvalLogs: request.approvalLogs,
-    });
+  async create(
+    request: WithdrawalRequest,
+    options: WithdrawalRequestRepositoryOptions = {},
+  ): Promise<WithdrawalRequest> {
+    const created = await WithdrawalRequestModel.create(
+      {
+        requestId: request.id,
+        userId: request.userId,
+        amountCents: Math.round(request.amount * 100),
+        currency: request.currency,
+        status: request.status,
+        requestedAt: request.requestedAt,
+        processedAt: request.processedAt,
+        processingAt: request.processingAt,
+        notes: request.notes,
+        approvalLogs: request.approvalLogs,
+      },
+      { session: options.session as never },
+    );
+    const doc = (Array.isArray(created) ? created[0] : created) as unknown as IWithdrawalRequestDocument;
 
-    return this.toDomain(doc as IWithdrawalRequestDocument);
+    return this.toDomain(doc);
+  }
+
+  async withTransaction<T>(work: (session: unknown) => Promise<T>): Promise<T> {
+    const session = await WithdrawalRequestModel.startSession();
+    try {
+      return await session.withTransaction(() => work(session));
+    } finally {
+      await session.endSession();
+    }
   }
 
   async update(request: WithdrawalRequest): Promise<WithdrawalRequest> {

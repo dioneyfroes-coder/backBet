@@ -23,9 +23,19 @@ export class WithdrawalRequestService {
     amount: number,
     currency: Currency,
     notes?: string,
+    requestId?: string,
   ): Promise<WithdrawalRequest> {
     if (amount <= 0) {
       throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    }
+
+    const id = requestId ?? randomUUID();
+
+    if (requestId) {
+      const existing = await this.withdrawalRequestRepository.findById(id);
+      if (existing) {
+        return existing;
+      }
     }
 
     const wallet = await this.walletService.findByUserId(userId);
@@ -33,20 +43,12 @@ export class WithdrawalRequestService {
       throw new AppError('NOT_FOUND', 'Wallet not found', 404);
     }
 
-    if (wallet.balance < amount) {
+    if (wallet.balanceCents < Math.round(amount * 100)) {
       throw new AppError('BAD_REQUEST', 'Saldo insuficiente', 400);
     }
 
-    const requestId = randomUUID();
-
-    await this.walletService.lock(userId, amount, {
-      type: 'WITHDRAWAL_HOLD',
-      referenceId: requestId,
-      source: 'WITHDRAWAL',
-    });
-
     const request = new WithdrawalRequest(
-      requestId,
+      id,
       userId,
       amount,
       currency,
@@ -56,8 +58,25 @@ export class WithdrawalRequestService {
       notes,
     );
 
+    // Lock + persistência da WithdrawalRequest rodam na MESMA transação quando o
+    // repository suporta (Mongo): crash no meio reverte tudo, sem hold órfão.
+    const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
+      const context = {
+        type: 'WITHDRAWAL_HOLD',
+        referenceId: request.id,
+        source: 'WITHDRAWAL',
+      } as const;
+      if (session) {
+        await this.walletService.lock(userId, amount, context, { session });
+        return this.withdrawalRequestRepository.create(request, { session });
+      }
+      await this.walletService.lock(userId, amount, context);
+      return this.withdrawalRequestRepository.create(request);
+    };
+
     try {
-      const created = await this.withdrawalRequestRepository.create(request);
+      const runner = this.withdrawalRequestRepository.withTransaction;
+      const created = runner ? await runner(persist) : await persist(undefined);
       try {
         withdrawalRequestCreatedCounter.inc();
       } catch (e) {
@@ -65,19 +84,22 @@ export class WithdrawalRequestService {
       }
       return created;
     } catch (err) {
-      // Persistence failed, ensure we unlock the amount so it doesn't stay blocked
-      try {
-        await this.walletService.unlock(userId, amount, {
-          type: 'WITHDRAWAL_REVERSED',
-          referenceId: requestId,
-          source: 'WITHDRAWAL',
-        });
-      } catch (unlockErr) {
-        console.error('Failed to unlock wallet after withdrawal request persistence failure', {
-          userId,
-          amount,
-          error: unlockErr,
-        });
+      // Com transação, lock e request já foram revertidos juntos (nada a desfazer).
+      // Sem transação, o lock já commitou e precisa de compensação explícita.
+      if (!this.withdrawalRequestRepository.withTransaction) {
+        try {
+          await this.walletService.unlock(userId, amount, {
+            type: 'WITHDRAWAL_REVERSED',
+            referenceId: request.id,
+            source: 'WITHDRAWAL',
+          });
+        } catch (unlockErr) {
+          console.error('Failed to unlock wallet after withdrawal request persistence failure', {
+            userId,
+            amount,
+            error: unlockErr,
+          });
+        }
       }
       throw err;
     }

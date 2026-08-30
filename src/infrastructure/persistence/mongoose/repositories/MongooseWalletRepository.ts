@@ -88,10 +88,10 @@ export class MongooseWalletRepository implements IWalletRepository {
         'code' in error &&
         (error as { code?: number }).code === 11000
       ) {
-        throw new AppError('Uma carteira para este usuário já existe', 'CONFLICT', 409);
+        throw new AppError('CONFLICT', 'Uma carteira para este usuário já existe', 409);
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao salvar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar carteira', 500, {
         originalError,
       });
     }
@@ -111,7 +111,7 @@ export class MongooseWalletRepository implements IWalletRepository {
       return this.mapToDomain(this.normalizeWalletRecord(walletData));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar carteira', 500, {
         originalError,
       });
     }
@@ -146,7 +146,7 @@ export class MongooseWalletRepository implements IWalletRepository {
       if (!result) {
         const existing = await WalletModel.exists({ userId: sanitizeUserId(wallet.userId) });
         if (!existing) {
-          throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
+throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
         }
         optimisticLockConflictCounter.inc({ resource: 'wallet' });
         throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar carteira', 409, {
@@ -160,7 +160,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         throw error;
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao atualizar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao atualizar carteira', 500, {
         originalError,
       });
     }
@@ -185,7 +185,7 @@ export class MongooseWalletRepository implements IWalletRepository {
       await WalletModel.findOneAndDelete({ userId: sanitizeUserId(userId) });
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao deletar carteira', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao deletar carteira', 500, {
         originalError,
       });
     }
@@ -202,7 +202,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         userId: safeUserId,
       }).lean<WalletRecordRaw | null>();
       if (!wallet) {
-        throw new AppError('Carteira não encontrada', 'NOT_FOUND', 404);
+        throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
       }
 
       const transactions = wallet.transactions ?? [];
@@ -228,7 +228,7 @@ export class MongooseWalletRepository implements IWalletRepository {
         throw error;
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar histórico de transações', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar histórico de transações', 500, {
         originalError,
       });
     }

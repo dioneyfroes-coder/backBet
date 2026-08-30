@@ -39,7 +39,7 @@ export class MongooseLedgerRepository implements ILedgerRepository {
       return entry;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao registrar entrada de ledger', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao registrar entrada de ledger', 500, {
         originalError,
       });
     }

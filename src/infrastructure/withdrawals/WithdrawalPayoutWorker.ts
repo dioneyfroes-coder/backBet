@@ -9,6 +9,7 @@ import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithd
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 import type { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import type { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 
@@ -47,7 +48,7 @@ export async function processWithdrawalPayloadOnce(
     res = await adapter.payWithdrawal(
       payload.requestId,
       payload.userId,
-      payload.amount,
+      new Money(payload.amount, payload.currency).amount,
       payload.currency,
     );
   } catch (err) {

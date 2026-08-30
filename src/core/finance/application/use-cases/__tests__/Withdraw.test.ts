@@ -62,4 +62,26 @@ describe('Withdraw use case', () => {
     expect(result.pixPayout.payoutId).toBe('payout-1');
     expect(result.pixPayout.status).toBe('COMPLETED');
   });
+
+  it('rejects sub-cent precision via Money BEFORE contacting the PSP', async () => {
+    const { walletService, pixProvider } = buildMocks();
+    pixProvider.initiatePayout.mockResolvedValue({
+      payoutId: 'payout-x',
+      reference: 'ref',
+      status: 'COMPLETED' as const,
+      provider: 'mock',
+      processedAt: new Date(),
+    });
+
+    const useCase = new Withdraw(
+      walletService as unknown as WalletService,
+      pixProvider as unknown as PixProviderPort,
+    );
+
+    await expect(
+      useCase.execute('user-1', 0.30000000000000004, 'BRL' as Currency, 'user@pix'),
+    ).rejects.toThrow();
+    expect(pixProvider.initiatePayout).not.toHaveBeenCalled();
+    expect(walletService.withdraw).not.toHaveBeenCalled();
+  });
 });

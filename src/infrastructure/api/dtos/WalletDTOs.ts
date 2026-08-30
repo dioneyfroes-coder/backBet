@@ -5,12 +5,22 @@ const { minDeposit, minWithdraw } = appConfig.wallet.limits;
 const depositMinMessage = `Depósito mínimo: ${minDeposit} BRL`;
 const withdrawMinMessage = `Saque mínimo: ${minWithdraw} BRL`;
 
+export function hasAtMostTwoDecimalPlaces(value: number): boolean {
+  const plain = value.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 20 });
+  const dotIndex = plain.indexOf('.');
+  return dotIndex === -1 || plain.length - dotIndex - 1 <= 2;
+}
+
 /**
  * DTO para depósito na carteira
  * Valida: amount (número positivo), currency (moeda)
  */
 export const DepositDTO = z.object({
-  amount: z.number().positive().min(minDeposit, depositMinMessage),
+  amount: z
+    .number()
+    .positive()
+    .min(minDeposit, depositMinMessage)
+    .refine(hasAtMostTwoDecimalPlaces, 'O valor deve ter no máximo 2 casas decimais'),
   currency: z.enum(['BRL', 'USD', 'EUR']).default('BRL'),
   description: z.string().optional(),
 });
@@ -22,7 +32,11 @@ export type DepositDTOType = z.infer<typeof DepositDTO>;
  * Valida: amount (número positivo), currency (moeda)
  */
 export const WithdrawDTO = z.object({
-  amount: z.number().positive().min(minWithdraw, withdrawMinMessage),
+  amount: z
+    .number()
+    .positive()
+    .min(minWithdraw, withdrawMinMessage)
+    .refine(hasAtMostTwoDecimalPlaces, 'O valor deve ter no máximo 2 casas decimais'),
   currency: z.enum(['BRL', 'USD', 'EUR']).default('BRL'),
   description: z.string().optional(),
   pixKey: z.string().min(5, 'Chave Pix inválida').optional(),

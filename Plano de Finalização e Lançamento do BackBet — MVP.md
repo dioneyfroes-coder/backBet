@@ -1,684 +1,465 @@
-Fase 0 — Preparação
+Fase 1 — Corrigir o que ainda foi identificado
+1. Corrigir AppError no MongooseEventRepository
 
-Antes de alterar código:
+Prioridade: P0 — pequeno e direto
 
-git checkout -b fix/production-integrity
-npm ci
-npm run typecheck
-npm test
+Problema:
 
-Se os testes atuais passarem, salve esse estado como referência.
+new AppError(
+    'Erro ao buscar evento',
+    'INTERNAL_SERVER_ERROR',
+    500
+)
 
+O construtor espera:
 
-Fase 1 — Persistência dos Events
-Problema
+AppError(code, message, statusCode)
+Fazer
 
-Atualmente:
+Corrigir apenas as chamadas desse repository.
 
-EventRepository
-└── eventos em memória
-
-enquanto:
-
-Bet
-└── eventId
-
-fica persistido no Mongo.
-
-Se reiniciar o container:
-
-Bet continua existindo
-Event desaparece
-Objetivo
-
-Criar:
-
-MongooseEventRepository
-
-seguindo o mesmo padrão dos outros repositories.
-
-Passos
-
-1. Criar schema Mongo
-
-Algo conceitualmente semelhante a:
-
-Event
-├── id
-├── name
-├── sport
-├── status
-├── startsAt
-├── markets[]
-├── createdAt
-└── updatedAt
-
-Se o projeto já possui Market/Odd separados, respeitar a modelagem existente em vez de inventar outra.
-
-2. Implementar interface
-
-O novo repository deve implementar exatamente a interface usada pelo domínio:
-
-findById()
-findAll()
-create()
-update()
-delete()
-...
-
-somente os métodos realmente necessários.
-
-3. Alterar o factory
-
-Onde hoje existe algo equivalente a:
-
-new EventRepository()
-
-quando:
-
-USE_MONGOOSE_PERSISTENCE=true
-
-usar:
-
-MongooseEventRepository
-
-4. Manter InMemoryEventRepository
-
-Ele continua existindo para:
-
-unit tests
-
-Não substitua tudo por Mongo.
-
-Testes obrigatórios
-create event
-→ Mongo
-
-find event
-→ Mongo
-
-restart repository
-→ event continua existindo
-
-create bet
-→ eventId aponta para event persistido
-Critério de conclusão
-
-Não pode existir mais este cenário:
-
-USE_MONGOOSE_PERSISTENCE=true
-+
-EventRepository em memória
-Fase 2 — Settlement administrativo transacional
-
-Esse é um dos mais importantes.
-
-Problema
-
-Fluxo normal:
-
-BetService
-   ↓
-transactionRunner
-   ↓
-Mongo transaction
-
-Mas o admin cria outro BetService sem transaction runner.
-
-Objetivo
-
-Fazer:
-
-POST /admin/bets/:id/settle
-
-usar exatamente a mesma garantia transacional do fluxo normal.
-
-Passos
-
-1. Identificar a composição atual
-
-Localizar:
-
-adminRoutes
-BetService
-WalletService
-RiskService
-BetRepository
-transactionRunner
-
-2. Não criar um segundo mecanismo de transação.
-
-Reutilizar o existente.
-
-Algo conceitualmente:
-
-const betService = new BetService(
-    betRepository,
-    eventRepository,
-    walletService,
-    riskService,
-    transactionRunner
-);
-
-ou adaptar a factory/container que já existe.
-
-3. Verificar o fluxo inteiro de settlement
-
-Tem que ser:
-
-BEGIN TRANSACTION
-
-Bet → resolved
-Risk → released
-Wallet → credited
-Ledger → appended
-
-COMMIT
-
-Se qualquer etapa falhar:
-
-ROLLBACK
-Teste crítico
-
-Forçar falha artificial depois de alterar uma das entidades:
-
-Bet atualizado
-↓
-erro proposital
-↓
-ROLLBACK
-
-Depois verificar:
-
-Bet = estado original
-Wallet = estado original
-Risk = estado original
-Ledger = estado original
-
-Esse teste vale mais que dez testes felizes.
-
-Fase 3 — Wallet + Ledger atomicamente
-
-Aqui eu faria uma pequena mudança arquitetural, mas sem refatoração geral.
-
-Problema atual
-
-Existe a possibilidade de:
-
-Wallet UPDATE
-↓
-Ledger falha
-↓
-erro apenas registrado
-
-Isso pode gerar:
-
-Wallet ≠ Ledger
-
-Em sistema financeiro, isso não é aceitável.
-
-Solução
-
-A operação financeira deve ser uma unidade:
-
-Transaction
-│
-├── Wallet mutation
-│
-└── Ledger entry
-Passo 1
-
-Localizar todas as operações que modificam saldo:
-
-deposit
-bet
-cancel
-settlement
-withdrawal
-refund
-
-Faça uma tabela durante a implementação:
-
-Operação	Wallet	Ledger	Risk	Transaction
-Deposit	✓	✓	-	✓
-Bet	✓	✓	✓	✓
-Cancel	✓	✓	✓	✓
-Win	✓	✓	✓	✓
-Withdrawal	✓	✓	-	✓
-
-Não avance enquanto alguma operação financeira importante estiver fora desse mapa.
-
-Passo 2
-
-Fazer o appendLedger() participar da mesma sessão Mongo.
-
-Conceitualmente:
-
-session.withTransaction(async () => {
-    await wallet.update(..., { session });
-    await ledger.insert(..., { session });
-});
-Passo 3
-
-Remover o comportamento:
-
-catch(error) {
-    log(error);
-}
-
-para operações que fazem parte da transação.
-
-O correto é:
-
-catch(error) {
-    throw error;
-}
-
-A infraestrutura registra o erro, mas a operação financeira deve falhar.
-
+Não fazer
+refatorar AppError;
+alterar tratamento global de erros;
+mudar controllers;
+reorganizar repositories;
+criar nova hierarquia de exceções.
 Teste
+
+Verificar que uma falha do repository retorna:
+
+code = INTERNAL_SERVER_ERROR
+message = mensagem correta
+status = 500
+Fase 2 — Verificar a janela de crash do Withdrawal
+
+Prioridade: P0/P1
+
+Cenário identificado:
+
+Wallet lock
+    ↓
+processo morre
+    ↓
+WithdrawalRequest ainda não foi criado
+
+Resultado potencial:
+
+saldo bloqueado
++
+withdrawal inexistente
+Primeiro passo
+
+Não implementar solução imediatamente.
+
+Pedir à IA:
+
+Analise exclusivamente o fluxo de criação de withdrawal e determine se existe
+uma janela de inconsistência entre o bloqueio da wallet e a criação da
+WithdrawalRequest em caso de crash abrupto do processo.
+
+Não altere código.
+
+Mostre:
+1. sequência exata das operações;
+2. estado possível da wallet;
+3. estado possível do withdrawal;
+4. se o mecanismo atual já permite recuperação;
+5. testes existentes que cobrem o cenário.
+
+Só depois decidir.
+
+Se realmente existir uma lacuna
+
+Implementar a menor solução possível, preferencialmente reaproveitando mecanismos já existentes.
+
+Não criar uma nova arquitetura de recovery.
+
+Teste obrigatório
 
 Simular:
 
-Wallet update
-✓
+lock
+↓
+crash
+↓
+restart
+↓
+recovery
 
-Ledger insert
-✗
+e verificar:
+
+wallet
+withdrawal
+ledger
+Fase 3 — Auditoria rápida de consistência financeira
+
+Prioridade: P0
+
+Não é para reescrever nada.
+
+É uma auditoria.
+
+Faça a IA procurar:
+
+balance
+balanceCents
+amount
+amountCents
+payout
+potentialReturn
+odds
+exposure
+
+e também:
+
+parseFloat
+Number(...)
+toFixed(...)
+Objetivo
+
+Encontrar somente situações onde:
+
+dinheiro ou cálculo financeiro crítico esteja sendo tratado incorretamente como ponto flutuante.
+
+Regra
+
+Se encontrar algo suspeito:
+
+NÃO CORRIGIR AUTOMATICAMENTE
+
+gerar relatório:
+
+arquivo
+linha
+problema
+risco
+correção mínima sugerida
+
+Você decide depois.
+
+Isso impede uma busca genérica da IA de virar uma refatoração em massa.
+
+Fase 4 — Validar os quatro pilares que já foram corrigidos
+
+Aqui não é para alterar código. É para provar que continuam funcionando.
+
+A. Event persistence
+
+Validar:
+
+create
+↓
+Mongo
+↓
+restart/reconnect
+↓
+find
+
+O evento precisa continuar existindo.
+
+B. Settlement transacional
+
+Forçar:
+
+Bet update
+↓
+erro proposital
+
+Resultado esperado:
+
+Bet      rollback
+Risk     rollback
+Wallet   rollback
+Ledger   rollback
+C. Wallet + Ledger
+
+Forçar:
+
+Wallet mutation
+↓
+Ledger failure
 
 Resultado:
+
 Wallet rollback
 Ledger rollback
 
-Depois:
+Nunca:
 
-Wallet = original
-Ledger = original
-Fase 4 — Corrigir oddId
+Wallet alterada
+Ledger ausente
+D. Idempotência
 
-Esse é simples e deve ser feito junto com os anteriores.
+Testar:
 
-No MongooseBetRepository.create() você encontrou:
+mesma request
+× várias vezes
 
-oddId: bet.id
+Resultado:
 
-Isso aparentemente está incorreto.
+1 operação real
++
+replays
 
-Objetivo
+E:
 
-Garantir:
-
-Bet
-├── eventId
-├── marketId
-├── oddId
-└── odds
-
-com:
-
-oddId = ID da odd selecionada
-Antes de alterar
-
-Trace a origem:
-
-API request
- ↓
-BetService
- ↓
-domain Bet
- ↓
-repository
-
-Confirme qual propriedade contém o oddId.
-
-Depois corrija o mapping.
-
-Teste
-
-Criar uma aposta:
-
-oddId = "odd-123"
-
-Consultar Mongo:
-
-oddId = "odd-123"
-
-e não:
-
-oddId = bet.id
-Fase 5 — Idempotência Mongo
-
-Isso não precisa bloquear seu primeiro boot, mas eu faria antes de chamar o sistema de "MVP fechado".
-
-Problema 1 — TTL
-
-Você documenta:
-
-24h
-
-mas precisa garantir isso no Mongo.
-
-Criar índice TTL sobre:
-
-createdAt
-
-com:
-
-expireAfterSeconds: 86400
-
-ou valor configurável.
-
-Problema 2 — PROCESSING preso
-
-Cenário:
-
-request
- ↓
-PROCESSING
- ↓
-container morre
-
-Quando voltar:
-
-PROCESSING
-
-não pode ficar eterno.
-
-Solução
-
-Adicionar algo como:
-
-processingAt
-
-e considerar a operação abandonada após determinado período.
-
-Por exemplo:
-
-PROCESSING > 5 min
-
-pode ser recuperado/reprocessado conforme a natureza da operação.
-
-Não use automaticamente a mesma estratégia para todas as operações financeiras. Para operações críticas, a chave deve continuar vinculada a uma operação realmente idempotente.
-
-Fase 6 — Withdrawal / PSP
-
-Aqui eu não tentaria resolver tudo agora.
-
-O objetivo do MVP é garantir que o adapter permita recuperação.
-
-Fluxo ideal:
-
-Withdrawal
-   ↓
-PSP request
-   ↓
-PSP idempotency key
-   ↓
-PROCESSING
-
-Se o worker morrer:
-
-PROCESSING
-   ↓
-consult PSP
-   ↓
-PAID / FAILED / UNKNOWN
-Não faça
 PROCESSING
 ↓
-retry cego
+processo morto
 ↓
-novo pagamento
-Faça
-PROCESSING
+timeout
 ↓
-consultar status externo
-↓
-decidir
+recovery
+Fase 5 — Testes locais completos
 
-O MockPaymentAdapter deve simular isso nos testes.
-
-Fase 7 — Auditoria final de dinheiro
-
-Depois das correções, faça uma busca no código por:
-
-balance
-amount
-odds
-return
-payout
-exposure
-
-e procure operações usando:
-
-number
-float
-parseFloat
-
-Não precisa eliminar number do projeto inteiro.
-
-A questão é:
-
-nenhum valor monetário persistente ou cálculo financeiro crítico deve depender de floating point.
-
-Fase 8 — Testes antes do Ubuntu
-
-Depois dos patches:
+Depois das correções:
 
 npm ci
 npm run typecheck
 npm test
-npm run test:integration
-npm run test:failure
-npm run test:load
 
-Se algum script não existir, não invente outro imediatamente. Verifique os scripts reais do package.json.
+Depois os testes de:
 
-Depois:
+integration
+failure
+load
+security
+
+Use os scripts que realmente existem no package.json.
+
+Regra para IA
+
+Se um teste falhar:
+
+NÃO corrigir imediatamente tudo que parece relacionado.
+
+Primeiro:
+
+1. reproduzir
+2. identificar causa
+3. corrigir mínimo
+4. testar novamente
+Fase 6 — Docker
+
+Antes de Ubuntu:
 
 docker compose config
 docker compose build
-
-Se estiver tudo certo:
-
 docker compose up
-Fase 9 — Teste nos dois notebooks
 
-Sua arquitetura:
+Verificar:
 
-Notebook 1
+API
+Redis
+Workers
+Mongo connection
+health
+readiness
+
+Não alterar Dockerfile ou compose simplesmente porque alguma IA acha que a configuração poderia ser "melhor".
+
+Primeiro faça funcionar.
+
+Depois, melhorias ficam para outro ciclo.
+
+Fase 7 — Server 02: MongoDB
+
+Seu notebook dedicado ao Mongo:
+
 Ubuntu Server
+    ↓
 Docker
-│
-├── BackBet API
-├── Redis
-├── Workers
-└── observabilidade
-        │
-        │ LAN
-        ▼
-Notebook 2
-Ubuntu Server
-Docker
-│
-└── MongoDB replica set
-Primeiro
+    ↓
+MongoDB
+    ↓
+replica set
+    ↓
+PRIMARY
 
-Mongo isoladamente.
+Testar do Server 01:
 
-Depois
+connection
+authentication
+replica set
+transactions
 
-API conectando ao Mongo remoto.
+O objetivo não é HA.
 
-Depois
+É provar:
 
-Redis.
+o BackBet consegue usar transações Mongo remotamente no ambiente planejado.
 
-Depois
+Fase 8 — Server 01: BackBet
 
-Workers.
+Subir:
 
-Finalmente
+BackBet API
+Redis
+Workers
 
-Sistema inteiro.
+Configurar:
 
-Não coloque tudo para subir de uma vez e depois tentar descobrir qual container virou uma batata.
+Mongo URI → Server 02
+Redis → Server 01
 
-Fase 10 — Teste financeiro end-to-end
+Validar:
 
-Execute exatamente:
+health
+readiness
+logs
+workers
+database connection
+Fase 9 — Teste end-to-end
+
+Executar o fluxo:
 
 Usuário
- ↓
-deposit
- ↓
-wallet
- ↓
-event
- ↓
-market
- ↓
-odd
- ↓
-bet
- ↓
-risk
- ↓
-settlement
- ↓
-wallet
- ↓
-ledger
- ↓
-withdrawal
- ↓
-worker
- ↓
-PSP mock
- ↓
-ledger
+  ↓
+Login
+  ↓
+Depósito
+  ↓
+Wallet
+  ↓
+Evento
+  ↓
+Aposta
+  ↓
+Risk
+  ↓
+Settlement
+  ↓
+Wallet
+  ↓
+Ledger
+  ↓
+Withdrawal
+  ↓
+Worker
+  ↓
+PSP Mock
+  ↓
+Ledger
 
-Depois consulte diretamente Mongo:
-
-users
-wallets
-bets
-events
-risk/exposure
-ledger
-withdrawals
-idempotency
-audit
-treasury
+Depois conferir diretamente no Mongo.
 
 A regra é:
 
-o estado de todas as entidades precisa contar a mesma história.
-
-Fase 11 — Testes de falha
-
-Depois do caminho feliz:
-
-Aposta
-request duplicado
-request concorrente
-Mongo indisponível
-Redis indisponível
-Settlement
-settlement duplicado
-falha depois do Bet update
-falha depois do Wallet update
-falha no Ledger
+Wallet
+Ledger
+Bet
+Risk
 Withdrawal
-worker morto
-PSP timeout
-PSP retorna UNKNOWN
-request duplicado
+Treasury
+
+precisam contar a mesma história.
+
+Fase 10 — Testes de desastre controlado
+
+Aqui começa a parte realmente útil do ambiente separado.
+
+API
+processo reiniciado
+container reiniciado
+Worker
+worker morto durante withdrawal
+worker reiniciado
 Mongo
-restart
-connection loss
-replica set restart
-Fase 12 — Congelamento
+Mongo parado
+Mongo iniciado
+Redis
+Redis parado
+Redis iniciado
+Concorrência
+100 apostas simultâneas
+Idempotência
+100 requests
+mesma Idempotency-Key
+Settlement
+settle
+settle
+settle
 
-Quando tudo passar:
+Tudo isso sem modificar código inicialmente.
 
-v1.0-MVP
+O objetivo é descobrir bugs reais, não bugs imaginados.
 
-e não adicionar mais funcionalidades.
+Fase 11 — Correção baseada nos testes
 
-A partir daí:
+Depois dos testes, classifique cada falha:
 
-BUG encontrado
-   ↓
-reproduzir
-   ↓
-teste
-   ↓
-corrigir
-   ↓
-teste
+Tipo	Ação
+Bug real	Corrigir
+Configuração	Corrigir configuração
+Ambiente	Corrigir ambiente
+Teste incorreto	Corrigir teste
+Melhoria futura	Registrar
+Refatoração estética	Ignorar
 
-Não:
+A IA só deve atuar nos dois primeiros, e mesmo assim com alterações pequenas.
 
-"Já que estamos aqui, vamos melhorar a arquitetura..."
+Fase 12 — Congelar o MVP
 
-Esse é o buraco negro clássico de projeto com IA.
+Quando:
 
-Ordem exata que eu seguiria
-01. MongooseEventRepository
-        ↓
-02. Settlement administrativo transacional
-        ↓
-03. Wallet + Ledger atomicidade
-        ↓
-04. Corrigir oddId
-        ↓
-05. Idempotência TTL
-        ↓
-06. Recuperação de PROCESSING
-        ↓
-07. Revisar withdrawal/PSP
-        ↓
-08. typecheck + unit tests
-        ↓
-09. integration tests
-        ↓
-10. Docker build
-        ↓
-11. Ubuntu Server #2 / Mongo
-        ↓
-12. Ubuntu Server #1 / BackBet
-        ↓
-13. E2E financeiro
-        ↓
-14. testes de concorrência
-        ↓
-15. testes de falha
-        ↓
-16. congelar MVP
-Prioridade
+typecheck ✓
+unit ✓
+integration ✓
+failure ✓
+Docker ✓
+Mongo remoto ✓
+Redis ✓
+E2E ✓
+concurrency ✓
+recovery ✓
 
-P0 — fazer antes do servidor:
+faça:
 
-Event persistente
-Settlement administrativo transacional
-Wallet + Ledger atômicos
-oddId
+git tag v1.0.0-mvp
 
-P1 — fazer antes de dinheiro real:
+e considere o núcleo congelado.
 
-TTL/lease de idempotência
-recuperação de withdrawals
-testes de recuperação após crash
-reconciliação financeira
+A partir daí, qualquer mudança deve responder a uma destas perguntas:
 
-P2 — depois do MVP:
+Existe bug?
 
-PSP real
-ingestão esportiva real
-HA Mongo
-escalabilidade horizontal
-frontend administrativo completo
-melhorias de observabilidade
+Existe requisito faltando?
 
-O objetivo agora não é transformar o BackBet em uma Bet365 de garagem. É provar que o núcleo financeiro permanece consistente quando o sistema é executado de verdade.
+Existe risco comprovado?
+
+Se a resposta for "não, mas poderia ficar mais bonito", não mexa.
+
+Ordem final
+P0
+├── AppError EventRepository
+├── verificar withdrawal crash window
+└── auditoria de valores monetários
+
+P0 — validação
+├── Event persistence
+├── Settlement transaction
+├── Wallet + Ledger atomicity
+└── Idempotency recovery
+
+P1 — ambiente
+├── typecheck/tests
+├── Docker
+├── Mongo Server 02
+├── BackBet Server 01
+└── conexão entre servidores
+
+P1 — validação real
+├── E2E financeiro
+├── concorrência
+├── restart
+├── crash recovery
+├── Mongo failure
+└── Redis failure
+
+FINAL
+└── corrigir apenas falhas encontradas
+    ↓
+    v1.0.0-MVP
+    ↓
+    congelar

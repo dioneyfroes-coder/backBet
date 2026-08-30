@@ -35,10 +35,10 @@ export class MongooseUserRepository implements IUserRepository {
         'keyPattern' in error
       ) {
         const field = Object.keys((error as { keyPattern: Record<string, unknown> }).keyPattern)[0];
-        throw new AppError(`Um usuário com este ${field} já existe`, 'CONFLICT', 409, { field });
+        throw new AppError('CONFLICT', `Um usuário com este ${field} já existe`, 409, { field });
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao salvar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar usuário', 500, {
         originalError,
       });
     }
@@ -53,7 +53,7 @@ export class MongooseUserRepository implements IUserRepository {
       return this.mapToDomain(userData);
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar usuário', 500, {
         originalError,
       });
     }
@@ -68,7 +68,7 @@ export class MongooseUserRepository implements IUserRepository {
       return this.mapToDomain(userData);
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar usuário por email', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar usuário por email', 500, {
         originalError,
       });
     }
@@ -81,7 +81,7 @@ export class MongooseUserRepository implements IUserRepository {
       return docs.map((doc) => this.mapToDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar usuários por chave Pix', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar usuários por chave Pix', 500, {
         originalError,
       });
     }
@@ -111,14 +111,14 @@ export class MongooseUserRepository implements IUserRepository {
 
       const result = await UserModel.findByIdAndUpdate(user.id, userData, { new: true });
       if (!result) {
-        throw new AppError('Usuário não encontrado', 'NOT_FOUND', 404);
+        throw new AppError('NOT_FOUND', 'Usuário não encontrado', 404);
       }
     } catch (error: unknown) {
       if (error instanceof AppError) {
         throw error;
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao atualizar usuário', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao atualizar usuário', 500, {
         originalError,
       });
     }

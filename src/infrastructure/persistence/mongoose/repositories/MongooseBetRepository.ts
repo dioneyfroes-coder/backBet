@@ -36,7 +36,7 @@ export class MongooseBetRepository implements IBetRepository {
       await newBet.save({ session: options.session as never });
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao criar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao criar aposta', 500, {
         originalError,
       });
     }
@@ -70,7 +70,7 @@ export class MongooseBetRepository implements IBetRepository {
       if (!result) {
         const existing = await BetModel.exists({ _id: bet.id });
         if (!existing) {
-          throw new AppError('Aposta não encontrada', 'NOT_FOUND', 404);
+          throw new AppError('NOT_FOUND', 'Aposta não encontrada', 404);
         }
         throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar aposta', 409, {
           betId: bet.id,
@@ -82,7 +82,7 @@ export class MongooseBetRepository implements IBetRepository {
         throw error;
       }
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao atualizar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao atualizar aposta', 500, {
         originalError,
       });
     }
@@ -99,7 +99,7 @@ export class MongooseBetRepository implements IBetRepository {
       return this.mapToDomain(this.normalizeBetRecord(betData));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar aposta', 500, {
         originalError,
       });
     }
@@ -111,7 +111,7 @@ export class MongooseBetRepository implements IBetRepository {
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar apostas do usuário', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do usuário', 500, {
         originalError,
       });
     }
@@ -123,7 +123,7 @@ export class MongooseBetRepository implements IBetRepository {
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar apostas do evento', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do evento', 500, {
         originalError,
       });
     }
@@ -135,7 +135,7 @@ export class MongooseBetRepository implements IBetRepository {
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar apostas do mercado', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do mercado', 500, {
         originalError,
       });
     }
@@ -147,7 +147,7 @@ export class MongooseBetRepository implements IBetRepository {
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar apostas por status', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas por status', 500, {
         originalError,
       });
     }
@@ -168,7 +168,7 @@ export class MongooseBetRepository implements IBetRepository {
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao listar apostas', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao listar apostas', 500, {
         originalError,
       });
     }
@@ -180,7 +180,7 @@ export class MongooseBetRepository implements IBetRepository {
       return !!bet;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao verificar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao verificar aposta', 500, {
         originalError,
       });
     }
@@ -192,7 +192,7 @@ export class MongooseBetRepository implements IBetRepository {
       return !!result;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao deletar aposta', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao deletar aposta', 500, {
         originalError,
       });
     }

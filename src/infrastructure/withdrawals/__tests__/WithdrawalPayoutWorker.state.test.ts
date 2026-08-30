@@ -1,4 +1,4 @@
-import { processWithdrawalPayload } from '../WithdrawalPayoutWorker';
+import { processWithdrawalPayload, processWithdrawalPayloadOnce } from '../WithdrawalPayoutWorker';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 
@@ -51,5 +51,21 @@ describe('WithdrawalPayoutWorker state transitions', () => {
       processWithdrawalPayload(payload, adapter as IPaymentPort, service as WithdrawalRequestService),
     ).resolves.toBeUndefined();
     expect(adapter.payWithdrawal).toHaveBeenCalledTimes(1);
+  });
+
+  it('normaliza o valor via Money antes de chamar o adapter (sub-cent é recusado)', async () => {
+    adapter.payWithdrawal.mockResolvedValue({ success: true, transactionId: 'tx-3' });
+    const payload = {
+      requestId: 'req-float-1',
+      userId: 'user-1',
+      amount: 0.30000000000000004,
+      currency: 'BRL',
+    } as any;
+
+    await expect(
+      processWithdrawalPayloadOnce(payload, adapter as IPaymentPort, service as WithdrawalRequestService),
+    ).rejects.toThrow();
+    expect(adapter.payWithdrawal).not.toHaveBeenCalled();
+    expect(service.completePayout).not.toHaveBeenCalled();
   });
 });

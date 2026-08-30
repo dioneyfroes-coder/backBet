@@ -53,7 +53,7 @@ class InterruptibleWalletRepository implements IWalletRepository {
 
   private guard(): void {
     if (this.interrupted) {
-      throw new AppError('Serviço indisponível', 'SERVICE_UNAVAILABLE', 503, {
+      throw new AppError('SERVICE_UNAVAILABLE', 'Serviço indisponível', 503, {
         originalError: 'MongoNetworkError (simulado)',
       });
     }
@@ -101,7 +101,7 @@ class FaultingIdempotencyStore implements IdempotencyStore {
 
   private guard(): void {
     if (this.down) {
-      throw new AppError('Redis indisponível', 'SERVICE_UNAVAILABLE', 503, {
+      throw new AppError('SERVICE_UNAVAILABLE', 'Redis indisponível', 503, {
         originalError: 'ECONNREFUSED (simulado)',
       });
     }

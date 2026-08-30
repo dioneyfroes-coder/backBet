@@ -93,6 +93,12 @@ describe('WithdrawalRequest entity', () => {
     expect(() => buildRequest(-5)).toThrow(AppError);
   });
 
+  it('rejects amounts with more than 2 decimal places', () => {
+    expect(() => buildRequest(0.299)).toThrow('at most 2 decimal places');
+    expect(() => buildRequest(100.45)).not.toThrow();
+    expect(() => buildRequest(10.5)).not.toThrow();
+  });
+
   it('exposes a DTO reflecting the current status', () => {
     const request = buildRequest();
     request.validateBy('admin');

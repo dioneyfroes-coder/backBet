@@ -28,7 +28,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       return this.mapToDomain(record);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar tesouraria', 'INTERNAL_SERVER_ERROR', 500, { message });
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar tesouraria', 500, { message });
     }
   }
 
@@ -45,7 +45,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       return wallet;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao salvar tesouraria', 'INTERNAL_SERVER_ERROR', 500, { message });
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar tesouraria', 500, { message });
     }
   }
 
@@ -69,7 +69,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       if (!result) {
         const existing = await HouseTreasuryModel.exists({ walletId: wallet.id });
         if (!existing) {
-          throw new AppError('Tesouraria não encontrada', 'NOT_FOUND', 404);
+          throw new AppError('NOT_FOUND', 'Tesouraria não encontrada', 404);
         }
         optimisticLockConflictCounter.inc({ resource: 'house_treasury' });
         throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar tesouraria', 409, {
@@ -83,7 +83,7 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
         throw error;
       }
       const message = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao atualizar tesouraria', 'INTERNAL_SERVER_ERROR', 500, { message });
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao atualizar tesouraria', 500, { message });
     }
   }
 

@@ -63,7 +63,7 @@ export class MongooseEventRepository implements IEventRepository {
       return doc ? this.toDomain(doc) : null;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar evento', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar evento', 500, {
         originalError,
       });
     }
@@ -76,7 +76,7 @@ export class MongooseEventRepository implements IEventRepository {
       return docs.map((doc) => this.toDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar eventos por status', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar eventos por status', 500, {
         originalError,
       });
     }
@@ -92,7 +92,7 @@ export class MongooseEventRepository implements IEventRepository {
         .map((doc) => this.toDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar eventos por categoria', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar eventos por categoria', 500, {
         originalError,
       });
     }
@@ -112,7 +112,7 @@ export class MongooseEventRepository implements IEventRepository {
       return docs.map((doc) => this.toDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao buscar próximos eventos', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar próximos eventos', 500, {
         originalError,
       });
     }
@@ -134,7 +134,7 @@ export class MongooseEventRepository implements IEventRepository {
       return docs.map((doc) => this.toDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao listar eventos', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao listar eventos', 500, {
         originalError,
       });
     }
@@ -146,7 +146,7 @@ export class MongooseEventRepository implements IEventRepository {
       return Boolean(await EventModel.exists({ id }));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao verificar evento', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao verificar evento', 500, {
         originalError,
       });
     }
@@ -158,7 +158,7 @@ export class MongooseEventRepository implements IEventRepository {
       return !!result;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao deletar evento', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao deletar evento', 500, {
         originalError,
       });
     }
@@ -204,7 +204,7 @@ export class MongooseEventRepository implements IEventRepository {
       );
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('Erro ao semear eventos', 'INTERNAL_SERVER_ERROR', 500, {
+      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao semear eventos', 500, {
         originalError,
       });
     }

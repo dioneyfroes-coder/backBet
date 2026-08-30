@@ -27,7 +27,7 @@ describe('WithdrawalRequestService', () => {
     service.processRequest(requestId, 'admin', 'APPROVED' as ApprovalAction, 'ok');
 
   it('creates a withdrawal request in REQUESTED and locks the amount', async () => {
-    const wallet = { balance: 500 } as any;
+    const wallet = { balance: 500, balanceCents: 50000 } as any;
     (walletService.findByUserId as jest.Mock).mockResolvedValue(wallet);
     (repository.create as jest.Mock).mockImplementation((req: WithdrawalRequest) =>
       Promise.resolve(req),
@@ -46,7 +46,7 @@ describe('WithdrawalRequestService', () => {
   });
 
   it('throws when balance is insufficient', async () => {
-    const wallet = { balance: 50 } as any;
+    const wallet = { balance: 50, balanceCents: 5000 } as any;
     (walletService.findByUserId as jest.Mock).mockResolvedValue(wallet);
     const service = new WithdrawalRequestService(repository, walletService);
 
@@ -54,6 +54,27 @@ describe('WithdrawalRequestService', () => {
       'Saldo insuficiente',
     );
     expect(walletService.lock).not.toHaveBeenCalled();
+  });
+
+  it('checks the balance in cents (boundary exato entre centavos e reais)', async () => {
+    (walletService.findByUserId as jest.Mock).mockResolvedValue({ balance: 10, balanceCents: 1000 });
+    const service = new WithdrawalRequestService(repository, walletService);
+
+    await expect(
+      service.createRequest('user-1', 10.01, 'BRL' as Currency),
+    ).rejects.toThrow('Saldo insuficiente');
+    expect(walletService.lock).not.toHaveBeenCalled();
+
+    (walletService.findByUserId as jest.Mock).mockResolvedValue({
+      balance: 10,
+      balanceCents: 1001,
+    });
+    (repository.create as jest.Mock).mockImplementation((req: WithdrawalRequest) =>
+      Promise.resolve(req),
+    );
+    const request = await service.createRequest('user-1', 10.01, 'BRL' as Currency, 'ok');
+    expect(request.amount).toBe(10.01);
+    expect(walletService.lock).toHaveBeenCalled();
   });
 
   it('validates amount and wallet existence before creating request', async () => {

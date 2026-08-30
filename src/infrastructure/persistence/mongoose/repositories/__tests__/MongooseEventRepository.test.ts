@@ -61,6 +61,12 @@ const chain = (resolvedValue: unknown) => ({
   lean: jest.fn().mockResolvedValue(resolvedValue),
 });
 
+const rejectedChain = (error: Error) => ({
+  sort: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  lean: jest.fn().mockRejectedValue(error),
+});
+
 describe('MongooseEventRepository (mocked model)', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -197,5 +203,85 @@ describe('MongooseEventRepository (mocked model)', () => {
 
     expect(byStatus[0].name).toBe('FC Tech vs Dev United');
     expect(byCategory[0].category).toBe('Football');
+  });
+
+  describe('falha do banco vira AppError INTERNAL_SERVER_ERROR (code/message/status corretos)', () => {
+    const dbError = new Error('db down');
+
+    beforeEach(() => {
+      jest.spyOn(EventModel, 'estimatedDocumentCount').mockResolvedValue(5 as never);
+    });
+
+    it('findById', async () => {
+      jest.spyOn(EventModel, 'findOne').mockReturnValue({
+        lean: jest.fn().mockRejectedValue(dbError),
+      } as never);
+      const repo = new MongooseEventRepository();
+      await expect(repo.findById(FOOTBALL_EVENT)).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao buscar evento',
+        statusCode: 500,
+      });
+    });
+
+    it('findByStatus', async () => {
+      jest.spyOn(EventModel, 'find').mockReturnValue(rejectedChain(dbError) as never);
+      const repo = new MongooseEventRepository();
+      await expect(repo.findByStatus('SCHEDULED')).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao buscar eventos por status',
+        statusCode: 500,
+      });
+    });
+
+    it('findByCategory', async () => {
+      jest.spyOn(EventModel, 'find').mockReturnValue(rejectedChain(dbError) as never);
+      const repo = new MongooseEventRepository();
+      await expect(repo.findByCategory('football')).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao buscar eventos por categoria',
+        statusCode: 500,
+      });
+    });
+
+    it('findUpcoming', async () => {
+      jest.spyOn(EventModel, 'find').mockReturnValue(rejectedChain(dbError) as never);
+      const repo = new MongooseEventRepository();
+      await expect(repo.findUpcoming(5)).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao buscar próximos eventos',
+        statusCode: 500,
+      });
+    });
+
+    it('findAll', async () => {
+      jest.spyOn(EventModel, 'find').mockReturnValue(rejectedChain(dbError) as never);
+      const repo = new MongooseEventRepository();
+      await expect(repo.findAll()).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao listar eventos',
+        statusCode: 500,
+      });
+    });
+
+    it('exists', async () => {
+      jest.spyOn(EventModel, 'exists').mockRejectedValue(dbError);
+      const repo = new MongooseEventRepository();
+      await expect(repo.exists(FOOTBALL_EVENT)).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao verificar evento',
+        statusCode: 500,
+      });
+    });
+
+    it('delete', async () => {
+      jest.spyOn(EventModel, 'findOneAndDelete').mockRejectedValue(dbError);
+      const repo = new MongooseEventRepository();
+      await expect(repo.delete(FOOTBALL_EVENT)).rejects.toMatchObject({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Erro ao deletar evento',
+        statusCode: 500,
+      });
+    });
   });
 });

@@ -19,7 +19,7 @@ export class HouseTreasuryRepository implements IHouseTreasuryRepository {
   async update(wallet: HouseWallet): Promise<HouseWallet> {
     const current = this.store.get(wallet.id);
     if (!current) {
-      throw new AppError('Tesouraria não encontrada', 'NOT_FOUND', 404);
+      throw new AppError('NOT_FOUND', 'Tesouraria não encontrada', 404);
     }
     if (current.version !== wallet.version - 1) {
       optimisticLockConflictCounter.inc({ resource: 'house_treasury' });

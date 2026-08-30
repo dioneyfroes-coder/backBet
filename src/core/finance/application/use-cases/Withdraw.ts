@@ -4,6 +4,7 @@ import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
 import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
+import { Money } from '@/core/shared/domain/value-objects/Money';
 
 export class Withdraw {
   constructor(
@@ -46,16 +47,18 @@ export class Withdraw {
       );
     }
 
+    const normalizedAmount = new Money(amount, currency).amount;
+
     const payout = await this.pixProvider.initiatePayout({
       userId,
-      amount,
+      amount: normalizedAmount,
       currency,
       pixKey,
       description,
     });
 
     const wallet = await executeWithWalletErrorMapping(() =>
-      this.walletService.withdraw(userId, amount, {
+      this.walletService.withdraw(userId, normalizedAmount, {
         type: 'WITHDRAWAL_COMPLETED',
         source: 'PIX',
         referenceId: payout.payoutId,

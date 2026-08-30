@@ -126,7 +126,7 @@ describe('RequestWithdrawal', () => {
     );
   });
 
-  it('activates pending users after creating a withdrawal request', async () => {
+  it('activates pending users BEFORE creating a withdrawal request', async () => {
     const useCase = buildUseCase();
     userService.findById.mockResolvedValueOnce(
       new User(
@@ -152,6 +152,10 @@ describe('RequestWithdrawal', () => {
 
     expect(result).toBe(mockRequest);
     expect(userService.activateUser).toHaveBeenCalledWith('user-1');
+    const activateOrder = (userService.activateUser as jest.Mock).mock.invocationCallOrder[0];
+    const createOrder = (withdrawalRequestService.createRequest as jest.Mock).mock
+      .invocationCallOrder[0];
+    expect(activateOrder).toBeLessThan(createOrder);
   });
 
   it('skips activation when user is already verified', async () => {

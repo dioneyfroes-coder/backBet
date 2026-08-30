@@ -9,6 +9,7 @@ import { appConfig } from '@/shared/config/appConfig';
 import { AppError } from '@/shared/errors/AppError';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
 import { ComplianceService } from '@/core/compliance/domain/services/ComplianceService';
+import { createHash } from 'crypto';
 
 export class RequestWithdrawal {
   constructor(
@@ -51,6 +52,10 @@ export class RequestWithdrawal {
       }
     }
 
+    const deterministicId = idempotencyKey
+      ? createHash('sha256').update(`${userId}:${idempotencyKey}`).digest('hex')
+      : undefined;
+
     const operation = async () => {
       if (this.compliance) {
         await executeWithWalletErrorMapping(() =>
@@ -62,10 +67,10 @@ export class RequestWithdrawal {
           this.moneySecurity!.assertWithdrawalAllowed(userId, amount, user.pixKey),
         );
       }
-      const request = await executeWithWalletErrorMapping(() =>
-        this.withdrawalRequestService.createRequest(userId, amount, currency, notes),
-      );
       await this.verifyUserIfPending(user);
+      const request = await executeWithWalletErrorMapping(() =>
+        this.withdrawalRequestService.createRequest(userId, amount, currency, notes, deterministicId),
+      );
       return request;
     };
     if (!this.idempotency || !idempotencyKey) {

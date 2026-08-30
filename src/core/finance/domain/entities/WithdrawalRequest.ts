@@ -14,6 +14,15 @@ export type WithdrawalStatus =
 
 export type ApprovalAction = 'APPROVED' | 'REJECTED';
 
+function decimalPlaces(value: number): number {
+  const plain = value.toLocaleString('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 20,
+  });
+  const dotIndex = plain.indexOf('.');
+  return dotIndex === -1 ? 0 : plain.length - dotIndex - 1;
+}
+
 export interface ApprovalLog {
   adminId: string;
   action: ApprovalAction;
@@ -44,6 +53,9 @@ export class WithdrawalRequest {
   ) {
     if (amount <= 0) {
       throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
+    }
+    if (decimalPlaces(amount) > 2) {
+      throw new AppError('VALIDATION_ERROR', 'Amount must have at most 2 decimal places', 400);
     }
   }
 
