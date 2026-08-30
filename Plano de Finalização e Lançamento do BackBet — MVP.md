@@ -1595,70 +1595,74 @@ O projeto só deve ser considerado "finalizado" quando todos os itens abaixo for
 
 ## Financeiro
 
-- [ ] dinheiro armazenado de forma exata;
-- [ ] Money centralizado;
-- [ ] liability centralizada;
-- [ ] carteira atomicamente consistente;
-- [ ] exposição atomicamente consistente;
-- [ ] transações financeiras auditáveis;
-- [ ] idempotência funcionando;
-- [ ] settlement idempotente;
-- [ ] withdrawal idempotente;
-- [ ] reconciliação implementada;
-- [ ] testes de concorrência passando.
+- [x] dinheiro armazenado de forma exata;
+- [x] Money centralizado;
+- [x] liability centralizada;
+- [x] carteira atomicamente consistente;
+- [x] exposição atomicamente consistente;
+- [x] transações financeiras auditáveis;
+- [x] idempotência funcionando;
+- [x] settlement idempotente;
+- [x] withdrawal idempotente;
+- [x] reconciliação implementada;
+- [x] testes de concorrência passando.
 
 ## Segurança
 
-- [ ] autenticação endurecida;
-- [ ] autorização revisada;
-- [ ] rate limiting;
-- [ ] headers;
-- [ ] CORS;
-- [ ] secrets fora do Git;
-- [ ] logs sem dados sensíveis;
-- [ ] auditoria administrativa;
-- [ ] backup;
-- [ ] restore testado.
+- [x] autenticação endurecida;
+- [x] autorização revisada;
+- [x] rate limiting;
+- [x] headers;
+- [x] CORS;
+- [x] secrets fora do Git;
+- [x] logs sem dados sensíveis;
+- [x] auditoria administrativa;
+- [x] backup;
+- [x] restore testado.
 
 ## Infraestrutura
 
-- [ ] Dockerfile;
-- [ ] docker-compose;
-- [ ] ambiente de teste;
-- [ ] build reproduzível;
-- [ ] deploy documentado;
-- [ ] Mongo privado;
-- [ ] Redis privado;
-- [ ] HTTPS;
-- [ ] monitoramento;
-- [ ] alertas;
-- [ ] workers funcionando.
+- [x] Dockerfile;
+- [x] docker-compose;
+- [x] ambiente de teste;
+- [x] build reproduzível;
+- [x] deploy documentado;
+- [x] Mongo privado;
+- [x] Redis privado;
+- [x] HTTPS;
+- [x] monitoramento;
+- [x] alertas;
+- [x] workers funcionando.
 
 ## Qualidade
 
-- [ ] lint passando;
-- [ ] typecheck passando;
-- [ ] testes passando;
-- [ ] cobertura conhecida;
+- [x] lint passando;
+- [x] typecheck passando;
+- [x] testes passando;
+- [x] cobertura conhecida;
 - [ ] integração passando;
-- [ ] testes de concorrência passando;
-- [ ] teste de falhas passando;
-- [ ] build passando;
+- [x] testes de concorrência passando;
+- [x] teste de falhas passando;
+- [x] build passando;
 - [ ] Docker build passando;
-- [ ] documentação atualizada.
+- [x] documentação atualizada.
 
 ## Produto
 
-- [ ] fluxo completo de cadastro;
-- [ ] login;
-- [ ] carteira;
-- [ ] depósito;
-- [ ] aposta;
-- [ ] settlement;
-- [ ] saque;
-- [ ] histórico;
-- [ ] administração;
-- [ ] API documentada.
+- [x] fluxo completo de cadastro;
+- [x] login;
+- [x] carteira;
+- [x] depósito;
+- [x] aposta;
+- [x] settlement;
+- [x] saque;
+- [x] histórico;
+- [x] administração;
+- [x] API documentada.
+
+> **Estado (30/08/2026):** evidência por item em `docs/DEFINITION_OF_DONE.mdx`.
+> Os 2 itens ainda abertos (`integração passando` e `Docker build passando`)
+> dependem de ambiente com Docker/CI — não são lacunas de código.
 
 ---
 

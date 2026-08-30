@@ -118,9 +118,10 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 
 ## Status do projeto
 
-- **v1.0.0** consolidada: API versionada `/api/v1` (Fase 30) com contrato, envelope padronizado, paginação, idempotência e OpenAPI; testes unitários passando, suíte de integração reproduzível via Compose e smoke pós-build.
-- **Requisitos operacionais cobertos**: auditoria/retention, transmissão SIGAP/SPA, Docker/deploy, backup/recuperação, segredos e endurecimento de segurança.
-- **Pendências/roadmap**: tracing OTEL em staging, remoção do fallback in-memory em produção, eventos de domínio/outbox (`UserCreated`, `BetPlaced`, `FundsWithdrawn`) e webhooks Pix reais (provedor PIX ainda é mock).
+- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` (Fase 30) com contrato, envelope padronizado, paginação, idempotência e OpenAPI; suíte unitária com 784 testes, gate final `npm run check` verde e invariantes financeiros FI-01..FI-10 testados.
+- **Definition of Done (seção 41 do plano)**: 48/50 itens atendidos com evidência (`docs/DEFINITION_OF_DONE.mdx`); os 2 restantes exigem ambiente com Docker/CI. Aceite final do MVP: `docs/GO_NOGO_FINAL.mdx`.
+- **Requisitos operacionais cobertos**: auditoria/retention, transmissão SIGAP/SPA, Docker/deploy, backup/recuperação, segredos e endurecimento de segurança; auto-avaliação executável via `npm run security:assess` (`docs/CERTIFICACAO_PREPARACAO.mdx`).
+- **Pendências/roadmap**: build da imagem Docker e integração real (verificação em ambiente com Docker/CI), provedores reais W-01..W-05 (KYC/geolocalização/SIGAP/PSP) e certificação SPA — dependem de operador autorizado (projeto separado de compliance).
 
 ## Documentação relacionada
 
@@ -137,6 +138,8 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 **Testes & QA**: `docs/TESTING-ENV.mdx` · `docs/MATRIX-CENARIOS-CRITICOS.mdx`
 
 **Governança**: `docs/CONTRIBUTING.mdx` · `docs/CONTRIBUTORS.mdx` · `docs/LICENSE.mdx`
+
+**Conclusão do ciclo MVP**: `docs/DEFINITION_OF_DONE.mdx` (DoD, seção 41) · `docs/GO_NOGO_FINAL.mdx` (aceite final, seção 44) · `docs/COMERCIAL_ESTRATEGIA.mdx` (decisão de produto, Fase 36)
 
 **Guia rápido**: `docs/QUICKSTART.mdx`
 

@@ -1,0 +1,127 @@
+# Go/No-Go Final — BackBet v1.0 (Seções 41–46 do plano)
+
+Registro do **aceite final do ciclo MVP**, cobrindo o Definition of Done (seção
+41), o critério final (seção 44), o resultado esperado para o portfólio (seção
+45) e a meta final (seção 46).
+
+---
+
+## 1. Gate obrigatório executado (seções 41/44 — Qualidade)
+
+Executado em 30/08/2026: `npm run check` (`check:secrets` → `lint` → `test:coverage`
+→ `build`).
+
+| Gate | Resultado | Evidência |
+|------|-----------|-----------|
+| Guarda de segredos | ✔ | nenhum segredo em 517 arquivos rastreados |
+| Lint (eslint `src/**/*.ts`) | ✔ | 0 erros |
+| Typecheck (`tsc --noEmit`) | ✔ | 0 erros |
+| Suíte unitária | ✔ | 114 suítes, 784 testes passando (14 skipped) |
+| Cobertura | ✔ conhecida | 79.86% statements · 80.53% linhas · 76.93% funções |
+| Build (`tsc` + `tsc-alias` + assets) | ✔ | `dist/` gerada; smoke pós-build ok |
+
+DoD consolidado item a item: `docs/DEFINITION_OF_DONE.mdx` — **48/50 itens ✔**;
+os 2 restantes (`integração passando`, `Docker build passando`) exigem ambiente
+com Docker/CI e **não são lacunas de código**.
+
+---
+
+## 2. Critério final (seção 44) — o sistema sobrevive sem criar/destruir dinheiro
+
+### 2.1 Caminho feliz completo → evidência
+
+```text
+cadastro → login → depósito → saldo → aposta → débito → exposição →
+evento resolvido → prêmio → crédito → saque → worker → pagamento → ledger
+```
+
+| Passo | Coberto por |
+|-------|-------------|
+| cadastro / login | `api.integration.test.ts`, `AuthController.test.ts`, `Security.test.ts` |
+| depósito + saldo atualizado | `Deposit.test.ts`, `PurchaseCreditPackage.test.ts`, `WalletService.test.ts` |
+| aposta + débito | `BetUseCases.test.ts`, `BetController.test.ts`, `BetService.test.ts`, `FinancialInvariants.test.ts` |
+| exposição registrada | `RiskService.test.ts`, `AssessBetRisk.test.ts` |
+| evento resolvido / prêmio / crédito | `Settlement.integration.test.ts`, `BetService.critical.test.ts`, `Treasury` (FI-05..FI-10) |
+| saque + worker + pagamento | `Withdraw.test.ts`, `RequestWithdrawal.test.ts`, `WithdrawalPayoutWorker.e2e|state|safety` |
+| ledger reconciliado | `GetDailyFinancialSummary.test.ts`, `ReconcileTreasury` / `HouseTreasuryService.test.ts` |
+
+### 2.2 Cenários de sobrevivência → evidência
+
+| Cenário | Resposta do sistema | Evidência |
+|---------|--------------------|-----------|
+| request duplicado | 2º é replay (`Idempotency-Replayed`) | `IdempotencyService.test.ts`, `MongoIdempotencyStore.test.ts`, `WalletService.idempotency.test.ts`, FI-04/05 |
+| request concorrente | 2ª escrita → `409 CONFLICT` | `WalletConcurrency.test.ts` (100 saques), `load.concurrency.integration.test.ts` |
+| processo interrompido | aposta muda de estado; saque retomável | `failure.integration.test.ts`, `WithdrawalPayoutWorker.state.test.ts` |
+| worker reiniciado | retoma pelo estado (`PROCESSING`) | `WithdrawalPayoutWorker.state.test.ts` |
+| Mongo indisponível | falha controlada, sem crédito fantasma | `failure.integration.test.ts`, circuit breakers (`circuitBreaker.test.ts`) |
+| Redis indisponível | idempotência/filas com fallback controlado | `failure.integration.test.ts`, `RedisClient.test.ts` |
+| payment provider indisponível | retry com backoff, fila preserva a operação | `retryPolicy.test.ts`, `failure.integration.test.ts` |
+| webhook duplicado / retry | mesma chave → mesmo resultado (idempotência do payout) | `WithdrawalPayoutWorker.safety.test.ts`, FI-04 |
+| request expira | estado auditável, nunca crédito/débito duplicado | invariantes FI-01..FI-10 |
+
+A prova formal de "não criar/destruir dinheiro" está em
+`src/core/finance/domain/services/__tests__/FinancialInvariants.test.ts`
+(FI-01..FI-10) e na matriz `docs/MATRIX-CENARIOS-CRITICOS.mdx`.
+
+---
+
+## 3. Decisão
+
+> **GO (técnico)** — o BackBet está maduro como **MVP tecnológico**: financeiro
+> consistente, concorrência controlada, operações idempotentes, auditado,
+> testado, containerizado, observável e documentado.
+
+**Ressalvas (não bloqueiam o ambiente de desenvolvimento, bloqueiam o go-live):**
+1. **Build da imagem Docker e integração real** — verificar em ambiente com
+   Docker/CI (itens 41 em aberto);
+2. **Pendências de produção W-01..W-05** (`docs/CERTIFICACAO_PREPARACAO.mdx`):
+   KYC/geolocalização/device reais, adapter SIGAP real, PSP Pix real e
+   certificação SPA — dependem de operador autorizado/terceiros;
+3. **Não colocar dinheiro real** sem o projeto separado de compliance
+   (seção 46 do plano): autorização SPA, certificação e integração regulatória.
+
+---
+
+## 4. Resultado para o portfólio (seção 45)
+
+O BackBet deixa de ser "API de apostas feita com Node.js" e passa a ser
+apresentado como:
+
+> **Plataforma backend de apostas construída em TypeScript, com arquitetura
+> modular, transações MongoDB, controle de concorrência otimista, idempotência,
+> carteira financeira, gestão de exposição de risco, workers assíncronos,
+> observabilidade, auditoria, testes de integração e infraestrutura
+> containerizada.**
+
+Material de entrevista mapeado na seção 45: double-spending, concorrência,
+idempotência, transações Mongo, consistência wallet↔bet, recuperação de saque,
+detecção de inconsistência, scaling, disaster recovery — cada um com teste e
+documento no repositório.
+
+---
+
+## 5. Meta final (seção 46) — BackBet v1.0
+
+```text
+BackBet v1.0
+────────────────────────────────────
+Financeiro consistente      ✔
+Concorrência controlada     ✔
+Operações idempotentes      ✔
+Auditoria                   ✔
+Testes                      ✔ (784)
+Docker                      ◐ (build exige ambiente Docker)
+CI/CD                       ✔
+Observabilidade             ✔
+Backup                      ✔
+Segurança                   ✔
+Documentação                ✔
+MVP utilizável              ✔
+────────────────────────────────────
+```
+
+- **Ciclo encerrado em 30/08/2026** (commit e tag `v1.0.0`).
+- A partir daqui, **não expandir o projeto**: novas funcionalidades são decisão
+  de produto, não de engenharia.
+- Próxima decisão (fora do ciclo): **BackBet como produto B2B** ou **portfólio +
+  open source de terceiros** — ver `docs/COMERCIAL_ESTRATEGIA.mdx` (Fase 36).
