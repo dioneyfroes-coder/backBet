@@ -6,6 +6,9 @@
 # Backup dumps (dados de usuários — nunca commitar)
 /backups
 
+# Relatórios gerados por ferramentas (npm run security:assess)
+/reports
+
 # Logs
 logs
 *.log

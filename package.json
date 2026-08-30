@@ -20,6 +20,7 @@
     "test:infra:reset": "docker compose -f docker-compose.test.yml down -v && docker compose -f docker-compose.test.yml up -d --wait",
     "check": "npm run check:secrets && npm run lint && npm run test:coverage && npm run build",
     "check:secrets": "node scripts/check-secrets.cjs",
+    "security:assess": "node scripts/security-assess.cjs",
     "audit": "npm audit",
     "audit:prod": "npm audit --omit=dev",
     "audit:prod:critical": "npm audit --omit=dev --audit-level=critical",

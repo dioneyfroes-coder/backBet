@@ -1,0 +1,131 @@
+# Certificação e Preparação para Operação Real (Fase 35)
+
+Documento formal da Fase 35 — **Certificação e preparação para operação real**.
+Complementa `docs/SECURITY-OPS.mdx` (checklist pré-deploy, Fase 27) e
+`docs/SIGAP_CONFORMIDADE.mdx` (Fase 16) com a **matriz de controles que a SPA
+exige** ((UNINCORPORATED) — Secretaria de Prêmios e Apostas do Ministério da
+Fazenda) mapeados para **evidências objetivas no repositório**.
+
+O que pode ser feito **em desenvolvimento** sem operador autorizado, provedores
+externos ou certificação formal está aqui e é **verificável por máquina** via:
+
+```bash
+npm run security:assess
+```
+
+O script varre o repositório, confere cada controle contra a evidência (arquivo,
+configuração ou código) e escreve o relatório em
+`reports/security-assessment-<timestamp>.txt` (e `.json`). Sai com código 1 se
+algum controle **bloqueante** falhar — mesmo espírito do `npm run check:secrets`.
+
+---
+
+## Caminho da Fase 35 (do plano, linhas 1512–1538)
+
+```
+BackBet → security assessment → compliance assessment → certificação aplicável
+→ integração regulatória → operador autorizado → produção
+```
+
+Este documento cobre os **dois primeiros passos no que é possível em dev**
+(security assessment + compliance assessment), planta a evidência para a
+certificação e registra o que fica **bloqueado por ação externa**.
+
+---
+
+## Matriz de controles da SPA → evidência
+
+Legenda: **PASS** = controle implementado e evidenciado no repositório;
+**PEND** = pendência que exige terceiro/regulação (dívida de produção, não
+bloqueia o ambiente de dev).
+
+### A — Segurança de acesso (proteção contra acessos não autorizados)
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| A-01 | Autenticação obrigatória por JWT | PASS | `src/infrastructure/api/middleware/AuthMiddleware.ts` (JwtStrategy + `protectedRoute`) |
+| A-02 | Guarda de papel ADMIN em operações sensíveis | PASS | `requireAdminRole` em `adminRoutes.ts` e `financeRoutes.ts` |
+| A-03 | Hash de senha com custo 12 | PASS | `UserService.ts:30` (`bcrypt.hash(pass, 12)`), testado em `Security.test.ts:219` |
+| A-04 | Rate limiting global e por rota | PASS | `ApiServer.ts:136` + `middleware/routeRateLimiter.ts` |
+| A-05 | Headers de segurança (helmet) | PASS | `ApiServer.ts:101` |
+| A-06 | CORS restrito por allowlist | PASS | `ApiServer.ts:131` + `appConfig.cors.allowedOrigins` |
+| A-07 | Limite de payload no corpo | PASS | `ApiServer.ts:157` (`express.json({ limit: '10mb' })`) |
+| A-08 | Validação de entrada (Zod) | PASS | `BaseController.ts` + `dtos/*` |
+| A-09 | Nenhum segredo versionado (`check:secrets`) | PASS | `scripts/check-secrets.cjs` + gate no CI |
+
+### B — Auditoria, logs e retenção
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| B-01 | Eventos de auditoria persistidos | PASS | `AuditService.ts` + `AuditEventSchema.ts` |
+| B-02 | Retenção de auditoria ≥ 5 anos (default 1825 dias) | PASS | `appConfig.ts:341` (`AUDIT_RETENTION_DAYS=1825`) |
+| B-03 | Ledger financeiro append-only (`transactionId` único) | PASS | `LedgerEntrySchema.ts` (índice único) |
+| B-04 | Política de logs sem segredos | PASS | `docs/LOGS.mdx` + `docs/SECURITY-OPS.mdx` |
+
+### C — Continuidade de negócio (backups e recuperação)
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| C-01 | Backup automatizado (criar/restaurar) | PASS | `npm run backup:create` / `backup:restore` |
+| C-02 | Validação do backup após criação | PASS | `npm run backup:validate` |
+| C-03 | Teste de recuperação (drill) | PASS | `npm run backup:drill` |
+| C-04 | Runbook de DR com RPO/RTO | PASS | `docs/BACKUP_RECOVERY.mdx` |
+
+### D — Integridade financeira
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| D-01 | Dinheiro em centavos (sem float) | PASS | `WalletSchema`/`LedgerEntrySchema`/`BetSchema` (`*Cents`) |
+| D-02 | Invariantes financeiros testados | PASS | `FinancialInvariants.test.ts` (22 casos) + `docs/FINANCIAL_INVARIANTS.mdx` |
+| D-03 | Limites mín/máx de depósito/saque | PASS | `MoneySecurityService.ts` |
+| D-04 | Reconciliação financeira | PASS | `GetDailyFinancialSummary.ts` + `ReconcileTreasury.ts` |
+
+### E — Compliance modular (provedores plugáveis)
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| E-01 | Port de KYC | PASS | `src/core/compliance/domain/ports/IKycProviderPort.ts` + gate no `ComplianceService` |
+| E-02 | Port de geolocalização | PASS | `IGeolocationProviderPort.ts` |
+| E-03 | Port de integridade de dispositivo | PASS | `IDeviceIntegrityProviderPort.ts` |
+| E-04 | Módulo SIGAP (remessas regulatórias) | PASS | `src/core/sigap/*` + `SigapTransmissionJob.ts` + `docs/SIGAP_CONFORMIDADE.mdx` |
+| E-05 | Jogo responsável | PASS | `ResponsibleGamblingService.ts` + `ResponsibleGamblingProfileSchema.ts` |
+
+### F — Infraestrutura de produção
+
+| ID | Controle | Status | Evidência |
+|----|----------|--------|-----------|
+| F-01 | Imagem Docker + compose | PASS | `Dockerfile` + `docker-compose.yml` |
+| F-02 | Hardening do servidor | PASS | `deploy/harden-server.sh` (UFW, SSH por chave, unattended-upgrades) |
+| F-03 | TLS no reverse proxy | PASS | `deploy/proxy/Caddyfile` |
+| F-04 | Serviços internos sem porta pública | PASS | Compose (Redis interno; Mongo em host separado via `MONGODB_URI`) |
+| F-05 | CI com gates de segurança | PASS | `.github/workflows/ci.yml` (`check:secrets`, `typecheck`, `lint`, `audit:prod:critical`) |
+| F-06 | Observabilidade e alertas | PASS | `deploy/observability/*` (Prometheus, alertas, Grafana) |
+
+---
+
+## Dívidas que dependem de terceiros / regulação (PEND)
+
+Não bloqueiam o ambiente de desenvolvimento, mas são **pré-requisito para
+dinheiro real**:
+
+| ID | Pendência | Ação externa necessária |
+|----|-----------|--------------------------|
+| W-01 | Provedor real de KYC (biometria/prova de vida) | Contratação de parceiro de KYC autorizado |
+| W-02 | Geolocalização real (VPN/proxy) | Provedor de geolocalização/compliance |
+| W-03 | Adapter SIGAP real (mTLS/TLS 1.2, e-CNPJ, token) | Credenciais de operador autorizado + `SIGAP_ENABLED=true` |
+| W-04 | PSP/Pix real para depósitos/saques | Conta e credenciais de provedor de pagamentos |
+| W-05 | Certificação SPA / auditoria externa | Procurar operador autorizado + auditoria formal |
+
+---
+
+## Observações e próximos passos
+
+1. **Regenerar evidência**: a matriz acima é executável — rode
+   `npm run security:assess` a cada release. O relatório JSON pode ser anexado a
+   um processo de auditoria.
+2. **Certificação**: quando houver operador autorizado, repetir os passos 3 a 6
+   do plano (certificação aplicável, integração regulatória, operador
+   autorizado, produção) ligando o `security:assess` como artefato de entrada.
+3. **Não adiar para "depois"**: conforme o plano, certificação não é tratada
+   retroativamente com o sistema já movimentando dinheiro; os controles
+   bloqueantes acima são **gatilhos** — qualquer um falhando bloqueia o go-live.
