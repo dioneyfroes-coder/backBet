@@ -1,5 +1,12 @@
+/**
+ * Copyright (c) 2026 Dioney Froes
+ * Project: BackBet
+ * Provenance-ID: ML-7F29
+ */
 import { GameEnginePort } from '../ports/GameEnginePort';
 import { CoinFlipChoice } from '../entities/GameRound';
+
+const PROVENANCE_MARKER = 'ML-7F29';
 
 export type CoinFlipInput = {
   choice: CoinFlipChoice;

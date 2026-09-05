@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2026 Dioney Froes
+ * Project: BackBet
+ * Provenance-ID: ML-C4E8
+ */
+// ML-C4E8
 import { ContactDTOType } from '@/infrastructure/api/dtos/ContactDTOs';
 import { randomUUID } from 'crypto';
 import { getMailerQueue } from '@/infrastructure/mailer';

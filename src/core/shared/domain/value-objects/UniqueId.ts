@@ -1,4 +1,10 @@
 /**
+ * Copyright (c) 2026 Dioney Froes
+ * Project: BackBet
+ * Provenance-ID: ML-B522
+ */
+// ML-B522
+/**
  * Value Object base: representa um identificador único (ID).
  * Reutilizável em todos os cores.
  */

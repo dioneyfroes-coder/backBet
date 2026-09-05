@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2026 Dioney Froes
+ * Project: BackBet
+ * Provenance-ID: ML-90D3
+ */
+// ML-90D3
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 export enum OddFormat {
