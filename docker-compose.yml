@@ -1,37 +1,15 @@
-# =============================================================================
-# BackBet — Compose do SERVIDOR DE APLICAÇÃO (server01)
-#
-# Este arquivo sobe NO server01 (host Ubuntu local com Docker):
-#   - backbet                 : API/contêiner principal (querys da aplicação)
-#   - withdrawal-worker       : worker de saque (Bull + Redis)
-#   - contact-worker          : worker de e-mails de contato (Bull + Redis)
-#   - redis                   : cache + filas Bull (interno, sem porta exposta)
-#
-# O MongoDB NÃO entra neste compose: ele roda em outro host local (server02),
-# usando o arquivo docker-compose.mongo.yml. A conexão é feita via MONGODB_URI.
-#
-# Uso:
-#   cp .env.example .env          # e preencha JWT_SECRET + MONGODB_URI
-#   docker compose up -d --build
-#
-# As variáveis do arquivo .env são injetadas nos contêineres via env_file,
-# porém o bloco `environment:` abaixo TEM PRIORIDADE e garante os valores
-# de integração internos (REDIS_URL, NODE_ENV, etc.).
-# =============================================================================
-
 x-backbet-env: &backbet-env
   NODE_ENV: production
   BACKBET_RUNTIME_ENV: production
   PORT: "3000"
 
-  # Infraestrutura
   USE_MONGOOSE_PERSISTENCE: "true"
-  MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env apontando para o MongoDB do server02 (ex.: mongodb://backbet:SUA_SENHA@192.168.0.20:27017/backbet?authSource=admin&replicaSet=rs0)}"
+  MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env}"
   MONGODB_DB_NAME: "${MONGODB_DB_NAME:-backbet}"
+
   REDIS_URL: "redis://redis:6379"
   USE_REDIS_QUEUE: "true"
 
-  # Autenticação / segurança
   JWT_SECRET: "${JWT_SECRET:?Defina JWT_SECRET no arquivo .env}"
   JWT_ISSUER: "${JWT_ISSUER:-backbet}"
   JWT_EXPIRATION: "${JWT_EXPIRATION:-15m}"
@@ -40,18 +18,15 @@ x-backbet-env: &backbet-env
   CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}"
   ADMIN_USER_IDS: "${ADMIN_USER_IDS:-}"
 
-  # Comportamento esperado no ambiente de teste (server01)
   GAME_COINFLIP_ENABLED: "${GAME_COINFLIP_ENABLED:-false}"
   PIX_PROVIDER: "${PIX_PROVIDER:-mock}"
   PIX_ENABLE_DEPOSITS: "${PIX_ENABLE_DEPOSITS:-true}"
   PIX_ENABLE_WITHDRAWALS: "${PIX_ENABLE_WITHDRAWALS:-true}"
   PIX_DEFAULT_KEY: "${PIX_DEFAULT_KEY:-pix@backbet.mock}"
 
-  # Logs e auditoria
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   AUDIT_ENABLED: "true"
 
-  # Observabilidade (opcional — ver docker-compose.observability.yml)
   OBS_ENABLE_PROMETHEUS: "${OBS_ENABLE_PROMETHEUS:-false}"
   TRACING_ENABLED: "${TRACING_ENABLED:-false}"
   OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318/v1/traces}"
@@ -59,10 +34,87 @@ x-backbet-env: &backbet-env
 
 x-worker-env: &worker-env
   <<: *backbet-env
-  # Workers logam no stdout (docker logs); o arquivo é mantido só na API
   LOG_FILE_ENABLED: "false"
 
 services:
+
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongodb-keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_ROOT_USER:-admin}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:?Defina MONGO_ROOT_PASSWORD no .env}"
+      MONGO_INITDB_DATABASE: "${MONGO_INITDB_DATABASE:-backbet}"
+      MONGO_INITDB_APP_USERNAME: "${MONGODB_APP_USER:-backbet}"
+      MONGO_INITDB_APP_PASSWORD: "${MONGODB_APP_PASSWORD:?Defina MONGODB_APP_PASSWORD no .env}"
+    volumes:
+      - mongodb_data:/data/db
+      - ./deploy/mongo/init-app-user.sh:/docker-entrypoint-initdb.d/init-app-user.sh:ro
+      - ./deploy/mongo/mongodb-keyfile:/etc/mongodb-keyfile:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          mongosh --quiet
+          --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin
+          --eval "db.adminCommand({ ping: 1 }).ok"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mongo-rs-init:
+    image: mongo:7
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_ROOT_USER: "${MONGO_ROOT_USER:-admin}"
+      MONGO_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:?Defina MONGO_ROOT_PASSWORD no .env}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+
+        URI="mongodb://$${MONGO_ROOT_USER}:$${MONGO_ROOT_PASSWORD}@mongodb:27017/admin?authSource=admin"
+
+        state=$$(mongosh "$${URI}" --quiet --eval \
+          'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+
+        if [ "$${state}" = "1" ]; then
+          echo "Replica set rs0 já está PRIMARY."
+          exit 0
+        fi
+
+        echo "Inicializando replica set rs0..."
+
+        mongosh "$${URI}" --quiet --eval \
+          "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] })" || true
+
+        echo "Aguardando MongoDB se tornar PRIMARY..."
+
+        i=0
+        while [ "$$i" -lt 30 ]; do
+          state=$$(mongosh "$${URI}" --quiet --eval \
+            'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+
+          if [ "$${state}" = "1" ]; then
+            echo "Replica set rs0 está PRIMARY."
+            exit 0
+          fi
+
+          i=$$((i + 1))
+          sleep 2
+        done
+
+        echo "Erro: MongoDB não se tornou PRIMARY."
+        exit 1
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -92,8 +144,14 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      mongo-rs-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -109,6 +167,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      mongo-rs-init:
+        condition: service_completed_successfully
     healthcheck:
       disable: true
 
@@ -122,10 +182,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      mongo-rs-init:
+        condition: service_completed_successfully
     healthcheck:
       disable: true
 
 volumes:
+  mongodb_data:
   redis_data:
   backbet_logs:
   backbet_uploads:

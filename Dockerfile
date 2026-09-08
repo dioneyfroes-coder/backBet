@@ -26,6 +26,7 @@ RUN npm ci
 FROM deps AS builder
 COPY tsconfig.json ./
 COPY src ./src
+COPY scripts ./scripts
 RUN npm run build \
   && npm prune --omit=dev
 

@@ -33,7 +33,6 @@ todo.txt
 # Configurações de execução fora do container (worker direto via node,
 # sem PM2, ecosystem nem scripts auxiliares)
 ecosystem*.config.cjs
-scripts
 jest.config.js
 eslint.config.mjs
 .prettierrc
@@ -44,4 +43,5 @@ tsconfig.test.json
 *.png
 *.jpg
 *.jpeg
-*.gif
+*.gifdeploy/mongo/mongodb-keyfile
+deploy/mongo/mongodb-keyfile
