@@ -7,7 +7,7 @@ x-backbet-env: &backbet-env
   MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env}"
   MONGODB_DB_NAME: "${MONGODB_DB_NAME:-backbet}"
 
-  REDIS_URL: "redis://redis:6379"
+  REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
   USE_REDIS_QUEUE: "true"
 
   JWT_SECRET: "${JWT_SECRET:?Defina JWT_SECRET no arquivo .env}"
@@ -40,6 +40,8 @@ services:
 
   mongodb:
     image: mongo:7
+    ports:
+      - "192.168.22.250:27018:27017"
     restart: unless-stopped
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongodb-keyfile"]
     environment:
@@ -117,12 +119,16 @@ services:
 
   redis:
     image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?Defina REDIS_PASSWORD no .env}"
+    ports:
+      - "192.168.22.250:6379:6379"
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
