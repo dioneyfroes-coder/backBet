@@ -256,6 +256,22 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
     expect(betOperations).toHaveLength(USERS * BETS_PER_USER);
 
     const results = await Promise.allSettled(betOperations.map((op) => retryOnConflict(op)));
+
+    const rejected = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+
+    console.log('LOAD rejected:', rejected.length);
+    console.log(
+      'LOAD rejection reasons:',
+      rejected.slice(0, 10).map((r) => ({
+        name: r.reason?.name,
+        message: r.reason?.message,
+        code: r.reason?.code,
+        statusCode: r.reason?.statusCode,
+      })),
+    );
+
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(USERS * BETS_PER_USER);
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
 

@@ -59,11 +59,7 @@ describeReal('MongoDB + Redis integration', () => {
 
     const persisted = await repository.getById(walletId);
 
-    console.log('DEBUG persisted:', persisted);
-    console.log('DEBUG profitBalance:', persisted?.profitBalance);
-    console.log('DEBUG typeof:', typeof persisted?.profitBalance);
-
-    expect([250, 400]).toContain(persisted?.profitBalance);
+    expect([250, 400]).toContain(persisted?.profitBalanceCents);
     expect(persisted?.version).toBe(2);
   });
 
