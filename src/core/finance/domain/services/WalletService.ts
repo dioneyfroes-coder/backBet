@@ -5,6 +5,7 @@ import { ILedgerRepository } from '../repositories/ILedgerRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { AppError } from '@/shared/errors/AppError';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
 import { randomUUID } from 'crypto';
@@ -27,10 +28,33 @@ export class WalletService {
     givenOptions?: WalletRepositoryOptions,
   ): Promise<T> {
     if (givenOptions) return work(givenOptions);
-    if (this.walletRepository.withTransaction) {
-      return this.walletRepository.withTransaction((session) => work({ session }));
+
+    if (!this.walletRepository.withTransaction) {
+      return work(undefined);
     }
-    return work(undefined);
+
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.walletRepository.withTransaction((session) =>
+          work({ session }),
+        );
+      } catch (error: unknown) {
+        const isConflict =
+          error instanceof AppError &&
+          error.code === 'CONFLICT';
+
+        if (!isConflict || attempt === maxAttempts) {
+          throw error;
+        }
+
+        const delayMs = 10 * attempt;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw new Error('Wallet transaction retry exhausted');
   }
 
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {
