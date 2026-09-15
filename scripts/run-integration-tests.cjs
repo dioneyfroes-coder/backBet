@@ -99,8 +99,8 @@ const DEFAULTS = loadTestConnectionEnv();
 if (!DEFAULTS.MONGODB_URI || !DEFAULTS.REDIS_URL) {
   console.error(
     '[integration] MONGODB_URI e REDIS_URL são obrigatórias para a suíte de ' +
-      'integração. Defina-as no .env (host/porta/auth da infra real) ou exporte ' +
-      'antes de rodar. O runner não assume localhost nem IP fixo.',
+    'integração. Defina-as no .env (host/porta/auth da infra real) ou exporte ' +
+    'antes de rodar. O runner não assume localhost nem IP fixo.',
   );
   process.exit(2);
 }
@@ -126,7 +126,8 @@ function runJest() {
 
   console.log(
     `[integration] node ${args.join(' ')}`,
-    `\n[integration] MONGODB_URI=${env.MONGODB_URI} REDIS_URL=${env.REDIS_URL}`,
+    `\n[integration] MONGODB_URI configurada: ${Boolean(env.MONGODB_URI)}`,
+    `\n[integration] REDIS_URL configurada: ${Boolean(env.REDIS_URL)}`,
   );
 
   const result = spawnSync(process.execPath, args, {
@@ -146,8 +147,8 @@ const up = runDocker(composeArgs('up', ['-d', '--wait', '--wait-timeout', '180']
 if (up.error) {
   console.error(
     '[integration] Docker não está disponível no PATH. Instale o Docker Engine + ' +
-      'Docker Compose v2 (veja docs/TESTING-ENV.mdx) e rode `npm run test:infra:up`, ' +
-      'ou forneça MONGODB_URI/REDIS_URL para rodar a suíte contra outra infra.',
+    'Docker Compose v2 (veja docs/TESTING-ENV.mdx) e rode `npm run test:infra:up`, ' +
+    'ou forneça MONGODB_URI/REDIS_URL para rodar a suíte contra outra infra.',
   );
   process.exit(up.status ?? 1);
 }
