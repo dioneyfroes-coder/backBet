@@ -39,7 +39,7 @@ Ajuste os principais toggles:
 | `NODE_ENV` | Ambiente lógico | `development` |
 | `PORT` | Porta HTTP | `3000` |
 | `USE_MONGOOSE_PERSISTENCE` | Liga repositórios Mongo/Mongoose | `false` se quiser in-memory |
-| `MONGODB_URI` / `MONGODB_DB_NAME` | Conexão Mongo | `mongodb://localhost:27017` / `backbet-dev` |
+| `MONGODB_URI` / `MONGODB_DB_NAME` | Conexão Mongo | `mongodb://localhost:27017` / *(derivado da URI)* |
 | `CACHE_ENABLED` / `REDIS_URL` | Libera cache Redis + métricas | `false` quando não houver Redis |
 | `ALLOW_DEV_BEARER_BYPASS` | Permite `Authorization: Bearer <userId>` sem JWT | `true` | 
 | `IDENTITY_PROVIDER_*` | Credenciais do provedor de identidade | Use valores reais só em staging/prod |
@@ -137,15 +137,16 @@ Variáveis relevantes:
 | `npm run migration:run` | Runner de migrations (Mongo) |
 | `npm run seed:initial` / `npm run seed:credit-packages` | Seeds utilitários |
 
-Para executar a suíte de integração real com MongoDB e Redis, isole um banco de teste e rode:
+Para executar a suíte de integração real com MongoDB e Redis, isole um banco de teste e rode (as URIs vêm do ambiente — não há fallback para localhost):
 
 ```bash
 RUN_REAL_INTEGRATION_TESTS=true \
-MONGODB_URI=mongodb://localhost:27017/backbet-integration \
-MONGODB_DB_NAME=backbet-integration \
-REDIS_URL=redis://localhost:6379 \
+MONGODB_URI="mongodb://backbet-test:senha@host:27017/backbet-test?authSource=admin&replicaSet=rs0" \
+REDIS_URL="redis://:senha@host:6379" \
 npm test -- --runInBand src/integration/__tests__/mongo-redis.integration.test.ts
 ```
+
+A forma recomendada é usar o orquestrador `npm run test:integration` (ou, no server01, `npm run test:integration:docker`), que já isola em `backbet-test`.
 
 Essa suíte é ignorada quando `RUN_REAL_INTEGRATION_TESTS` não é `true`; nunca aponte para dados de produção.
 

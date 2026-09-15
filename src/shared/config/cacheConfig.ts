@@ -13,7 +13,12 @@ const runtimeEnv = env.BACKBET_RUNTIME_ENV || env.NODE_ENV || 'development';
 const cacheEnabled = env.CACHE_ENABLED?.toLowerCase() !== 'false' && runtimeEnv !== 'test';
 
 export const cacheConfig = {
-  redisUrl: getRedisUrl(),
+  // Avaliado apenas quando o Redis é realmente usado (ex.: ping/health), para
+  // que a importação do módulo não falhe por falta de REDIS_URL — o erro só
+  // surge no ponto de uso, com mensagem clara.
+  get redisUrl(): string {
+    return getRedisUrl();
+  },
   defaultTTLSeconds: parsePositiveInt(env.CACHE_TTL_SECONDS, 60),
   userBalanceTTL: parsePositiveInt(env.CACHE_USER_BALANCE_TTL_SECONDS, 15),
   walletHistoryTTL: parsePositiveInt(env.CACHE_WALLET_HISTORY_TTL_SECONDS, 30),

@@ -21,8 +21,8 @@ slug: "/docs/mongodb-setup"
 | Variável | Obrigatória quando | Exemplo | Observações |
 | --- | --- | --- | --- |
 | `USE_MONGOOSE_PERSISTENCE` | Sempre | `true` / `false` | Escolhe entre repositórios Mongo ou memória. |
-| `MONGODB_URI` | `USE_MONGOOSE_PERSISTENCE=true` ou `NODE_ENV=production` | `mongodb://localhost:27017/backbet-dev` | Pode incluir parâmetros (`retryWrites=true&w=majority`). |
-| `MONGODB_DB_NAME` | `USE_MONGOOSE_PERSISTENCE=true` | `backbet-dev` | Default: `backbet-dev`. Em Atlas use `backbet-prod`. |
+| `MONGODB_URI` | `USE_MONGOOSE_PERSISTENCE=true` ou `NODE_ENV=production` | `mongodb://backbet:senha@mongodb:27017/backbet?authSource=admin&replicaSet=rs0` | **Sem default** — falha imediata se ausente (não tenta localhost). |
+| `MONGODB_DB_NAME` | `USE_MONGOOSE_PERSISTENCE=true` | `backbet` | Default: derivado do database da `MONGODB_URI`. |
 | `NODE_ENV` | Sempre | `development` | Em `production` o loader falha se `MONGODB_URI` estiver vazio. |
 
 > Alguns documentos antigos citam `MONGO_URL`; padronizamos `MONGODB_URI`. Se ambos estiverem presentes, priorize `MONGODB_URI`.
@@ -32,8 +32,8 @@ slug: "/docs/mongodb-setup"
 1. Ajuste `.env`:
    ```properties
    USE_MONGOOSE_PERSISTENCE=true
-   MONGODB_URI=mongodb://localhost:27017/backbet-dev
-   MONGODB_DB_NAME=backbet-dev
+   MONGODB_URI=mongodb://backbet:senha@mongodb:27017/backbet?authSource=admin&replicaSet=rs0
+   MONGODB_DB_NAME=backbet
    ```
 2. Reinicie o servidor (`npm run dev`). O log deverá mostrar `✓ MongoDB connected to backbet-dev` antes do banner Express.
 3. Bata em `/readiness`: a resposta terá `checks.mongo.status: "up"` e o gauge `backbet_dependency_health{dependency="mongo"}` passa para `1`.

@@ -13,6 +13,7 @@
     "smoke": "npm run build && node scripts/smoke-api.cjs",
     "test:integration": "node scripts/run-integration-tests.cjs",
     "test:integration:full": "node scripts/run-integration-tests.cjs --with-infra",
+    "test:integration:docker": "docker compose --profile tests run --rm integration-tests",
     "test:load": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/load.concurrency.integration.test.ts",
     "test:failure": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/failure.integration.test.ts",
     "test:infra:up": "docker compose -f docker-compose.test.yml up -d --wait",

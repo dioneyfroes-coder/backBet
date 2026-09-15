@@ -31,13 +31,13 @@ refactoring_plan.txt
 todo.txt
 
 # Configurações de execução fora do container (worker direto via node,
-# sem PM2, ecosystem nem scripts auxiliares)
+# sem PM2, ecosystem nem scripts auxiliares).
+# jest.config.js e tsconfig.test.json FICAM no contexto: o Dockerfile os copia
+# no estágio "tests" (imagem backbet:test) para rodar a suíte de integração.
 ecosystem*.config.cjs
-jest.config.js
 eslint.config.mjs
 .prettierrc
 tsconfig.dev.json
-tsconfig.test.json
 
 # Imagens soltas na raiz
 *.png

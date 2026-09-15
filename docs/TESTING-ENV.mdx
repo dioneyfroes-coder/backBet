@@ -57,25 +57,35 @@ Para **começar do zero** (apaga dados do Mongo/Redis de teste e religa tudo):
 npm run test:infra:reset
 ```
 
-## Determinismo (sem .env pessoal)
+## Configuração de conexão do runner
 
 O orquestrador `scripts/run-integration-tests.cjs`:
 
 - define `RUN_REAL_INTEGRATION_TESTS=true`;
 - roda o Jest com `--runInBand` no spec `src/integration/__tests__/mongo-redis.integration.test.ts`;
-- aponta `MONGODB_URI` e `REDIS_URL` para a infra local do compose (`mongodb://localhost:27017/backbet-test` e `redis://localhost:6379`), **ignorando um `.env` pessoal** da máquina — a infra de teste é sempre a mesma.
+- lê **`MONGODB_URI`** / **`REDIS_URL`** do ambiente (shell ou `.env`; o dotenv
+  nunca sobrescreve variáveis já exportadas) e **não tem fallback** para
+  localhost/IP fixo — se faltar alguma variável, o runner aborta com erro claro;
+- usa o database de teste **`MONGODB_TEST_DB`** (default `backbet-test`): deriva
+  da `MONGODB_URI` trocando só o database, ou usa **`MONGODB_TEST_URI`**
+  literalmente (credenciais do usuário dedicado `backbet-test`). Assim a suíte
+  **nunca acessa o banco da aplicação**.
+
+Para rodar contra a infra local de teste do compose (loopback, sem auth):
+
+```bash
+npm run test:infra:up
+npm run test:integration    # com .env apontando para a infra de teste
+```
 
 Para direcionar a suíte a **outra** infra (ex.: um ambiente de teste remoto),
 exporte as variáveis antes de rodar:
 
 ```bash
-export MONGODB_URI="mongodb://host:27017/backbet-test"
-export REDIS_URL="redis://host:6379"
+export MONGODB_URI="mongodb://backbet-test:senha@host:27017/backbet-test?authSource=admin&replicaSet=rs0"
+export REDIS_URL="redis://:senha@host:6379"
 npm run test:integration
 ```
-
-> Detalhe: `connectMongoDB` usa `dbName` de `MONGODB_DB_NAME` (padrão `backbet-dev`).
-> Se quiser isolar o banco dos testes, defina `MONGODB_DB_NAME=backbet-test`.
 
 ## Como a infra de teste foi montada
 
@@ -87,6 +97,29 @@ npm run test:integration
 - Portas publicadas **somente em loopback** e Mongo **sem autenticação**: essa
   infra é efêmera/local e não deve ser exposta na rede. Para produção, use
   `docker-compose.mongo.yml`.
+
+## Rodando a suíte dentro do compose de produção (server01)
+
+O compose principal (`docker-compose.yml`) tem o serviço **`integration-tests`**
+(profile `tests`) que usa a imagem `backbet:test` — estágio `tests` do
+Dockerfile com **devDependencies + fonte TS** (a imagem de produção
+`backbet:latest` é podada com `npm prune --omit=dev` e não contém Jest). Ele
+conecta nos endpoints **internos** `mongodb:27017` e `redis:6379` e só executa
+depois de o Redis estar saudável e o `mongo-rs-init` ter concluído (readiness
+antes dos testes):
+
+```bash
+# no server01 (com Docker)
+docker compose --profile tests run --rm integration-tests
+# ou via script do package.json
+npm run test:integration:docker
+```
+
+Requisitos no `.env` do server01: `MONGODB_URI`, `MONGODB_TEST_URI`,
+`REDIS_URL`, `JWT_SECRET` (o serviço falha na interpolação se faltarem). A
+`MONGODB_TEST_URI` usa o usuário dedicado `backbet-test` (criado no boot do
+Mongo pelo `deploy/mongo/init-app-user.sh`), com acesso somente ao banco
+`backbet-test`.
 
 ## Pipeline completo (Fase 19) — gate obrigatório + endpoints reais
 

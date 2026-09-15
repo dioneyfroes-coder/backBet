@@ -56,3 +56,28 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["node", "dist/index.js"]
+
+#####################################################################
+# Stage 5 — testes/integração (imagem backbet:test)
+#
+# Mantém devDependencies (Jest/ts-jest) e o fonte TS para rodar a
+# suíte de integração DENTRO da rede do compose (serviço
+# "integration-tests"). A imagem de produção "backbet:latest" não
+# contém Jest — por isso existe esta imagem dedicada.
+#####################################################################
+FROM node:22-alpine AS tests
+ENV NODE_ENV=test
+ENV BACKBET_RUNTIME_ENV=test
+WORKDIR /usr/src/app
+
+COPY package.json package-lock.json ./
+COPY tsconfig.json tsconfig.test.json jest.config.js ./
+COPY src ./src
+COPY scripts ./scripts
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+
+# Gravável para o Jest (coverage/), rodando como usuário não-root
+RUN chown -R node:node /usr/src/app
+USER node
+
+CMD ["node", "scripts/run-integration-tests.cjs"]

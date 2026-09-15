@@ -1,32 +1,40 @@
 #!/bin/sh
-# Cria ou atualiza o usuário da aplicação no MongoDB (executado no primeiro
-# boot do volume pelo docker-entrypoint-initdb, e idempotente caso o usuário
-# já exista — garante readWrite em backbet E backbet-test).
+# Cria/atualiza os usuários do MongoDB no primeiro boot do volume
+# (docker-entrypoint-initdb) e é idempotente em re-execução manual:
+#   backbet      -> readWrite em ${MONGO_INITDB_DATABASE:-backbet} (aplicação)
+#   backbet-test -> readWrite em "backbet-test"                      (suíte de integração)
+#
+# Usuários SEPARADOS = isolamento: a suíte de integração usa credenciais
+# próprias e NUNCA tem acesso ao banco da aplicação.
 set -e
 
 mongosh --quiet --eval '
   const appUser = process.env.MONGO_INITDB_APP_USERNAME;
   const appPassword = process.env.MONGO_INITDB_APP_PASSWORD;
   const appDb = process.env.MONGO_INITDB_DATABASE || "backbet";
+  const testUser = process.env.MONGO_INITDB_TEST_USERNAME;
+  const testPassword = process.env.MONGO_INITDB_TEST_PASSWORD;
   const testDb = "backbet-test";
 
-  if (!appUser || !appPassword) {
-    print("MONGO_INITDB_APP_USERNAME/PASSWORD nao definidos — pulando criacao do usuario da app.");
-    quit();
-  }
-
   const admin = db.getSiblingDB("admin");
-  const roles = [
-    { role: "readWrite", db: appDb },
-    { role: "readWrite", db: testDb },
-  ];
 
-  if (admin.getUser(appUser)) {
-    admin.grantRolesToUser(appUser, roles);
-    print("Usuario da aplicacao atualizado: " + appUser + " (readWrite em " + appDb + " e " + testDb + ")");
-    quit();
-  }
+  const appRoles = [{ role: "readWrite", db: appDb }];
+  const testRoles = [{ role: "readWrite", db: testDb }];
 
-  admin.createUser({ user: appUser, pwd: appPassword, roles });
-  print("Usuario da aplicacao criado: " + appUser + " (readWrite em " + appDb + " e " + testDb + ")");
+  const upsertUser = (username, password, roles) => {
+    if (!username || !password) {
+      print("Pulando usuario ausente na configuracao (MONGO_INITDB_*_USERNAME/PASSWORD).");
+      return;
+    }
+    if (admin.getUser(username)) {
+      admin.updateUser(username, { roles });
+      print("Usuario atualizado: " + username + " (papeis: " + roles.map(r => r.db + ":" + r.role).join(", ") + ")");
+    } else {
+      admin.createUser({ user: username, pwd: password, roles });
+      print("Usuario criado: " + username + " (papeis: " + roles.map(r => r.db + ":" + r.role).join(", ") + ")");
+    }
+  };
+
+  upsertUser(appUser, appPassword, appRoles);
+  upsertUser(testUser, testPassword, testRoles);
 '

@@ -50,6 +50,8 @@ services:
       MONGO_INITDB_DATABASE: "${MONGO_INITDB_DATABASE:-backbet}"
       MONGO_INITDB_APP_USERNAME: "${MONGODB_APP_USER:-backbet}"
       MONGO_INITDB_APP_PASSWORD: "${MONGODB_APP_PASSWORD:?Defina MONGODB_APP_PASSWORD no .env}"
+      MONGO_INITDB_TEST_USERNAME: "${MONGODB_TEST_USER:-backbet-test}"
+      MONGO_INITDB_TEST_PASSWORD: "${MONGODB_TEST_PASSWORD:?Defina MONGODB_TEST_PASSWORD no .env}"
     volumes:
       - mongodb_data:/data/db
       - ./deploy/mongo/init-app-user.sh:/docker-entrypoint-initdb.d/init-app-user.sh:ro
@@ -192,6 +194,29 @@ services:
         condition: service_completed_successfully
     healthcheck:
       disable: true
+
+  integration-tests:
+    profiles: ["tests"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tests
+    image: backbet:test
+    restart: "no"
+    init: true
+    environment:
+      NODE_ENV: test
+      BACKBET_RUNTIME_ENV: test
+      MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env}"
+      MONGODB_TEST_URI: "${MONGODB_TEST_URI:?Defina MONGODB_TEST_URI no .env}"
+      MONGODB_TEST_DB: "${MONGODB_TEST_DB:-backbet-test}"
+      REDIS_URL: "${REDIS_URL:?Defina REDIS_URL no .env}"
+      JWT_SECRET: "${JWT_SECRET:?Defina JWT_SECRET no arquivo .env}"
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo-rs-init:
+        condition: service_completed_successfully
 
 volumes:
   mongodb_data:

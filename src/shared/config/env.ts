@@ -95,6 +95,10 @@ assignDefault('SIGAP_TRANSMISSION_JOB_INTERVAL_MS', '86400000');
 assignDefault('SIGAP_QUERY_DEFAULT_LIMIT', '50');
 assignDefault('SIGAP_QUERY_MAX_LIMIT', '200');
 
+// Estados apenas para os testes unitários locais (Jest), que não conectam em
+// Mongo/Redis. Em PRODUÇÃO/TESTE real (compose) estas variáveis são
+// OBRIGATÓRIAS: o docker-compose.yml falha na interpolação se faltarem e o
+// requiredInProduction abaixo também valida — nunca tenta conectar em localhost.
 if (isTestEnv) {
   assignDefault('JWT_SECRET', 'test-secret');
   assignDefault('MONGODB_URI', 'mongodb://localhost:27017/backbet-test');
