@@ -3,8 +3,9 @@ import type { Queue as BullQueue } from 'bull';
 import { ContactPayload } from './InMemoryMailerQueue';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
+import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = getRedisUrl();
 
 export class BullMailerQueue {
   private queue: BullQueue;

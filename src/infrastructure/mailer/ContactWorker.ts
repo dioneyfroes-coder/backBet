@@ -5,8 +5,9 @@ import type { Queue as BullQueue } from 'bull';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = getRedisUrl();
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
 
 async function processContactPayloadOnce(payload: ContactPayload): Promise<void> {

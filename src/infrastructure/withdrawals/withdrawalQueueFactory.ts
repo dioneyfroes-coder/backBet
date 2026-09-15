@@ -2,9 +2,10 @@ import IORedis from 'ioredis';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { InMemoryWithdrawalQueue } from './InMemoryWithdrawalQueue';
 import { BullWithdrawalQueue } from './BullWithdrawalQueue';
+import { getRedisUrl } from '@/shared/config/connections';
 import type IWithdrawalQueue from '@/core/finance/domain/ports/IWithdrawalQueue';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = getRedisUrl();
 const isTestRuntime = (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || '').toLowerCase() === 'test';
 
 export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {

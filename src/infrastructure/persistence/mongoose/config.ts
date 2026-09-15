@@ -5,6 +5,7 @@ import {
   recordRetryAttempt,
   recordRetryFailure,
 } from '@/infrastructure/observability/resilienceMetrics';
+import { getMongoDbName, getMongoUri } from '@/shared/config/connections';
 
 export interface MongoDBConfig {
   mongoUri: string;
@@ -57,8 +58,8 @@ export async function disconnectMongoDB(): Promise<void> {
 }
 
 export function getMongoDBConfig(): MongoDBConfig {
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-  const dbName = process.env.MONGODB_DB_NAME || 'backbet-dev';
+  const mongoUri = getMongoUri();
+  const dbName = getMongoDbName();
 
   return {
     mongoUri,

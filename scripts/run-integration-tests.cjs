@@ -6,10 +6,11 @@
  *
  * Fase 18 — Ambiente de testes:
  *  - Define RUN_REAL_INTEGRATION_TESTS=true e roda o Jest com --runInBand no
- *    spec de integração, sem que um .env pessoal da máquina redirecione os
- *    testes para um Mongo/Redis de verdade do desenvolvedor.
- *  - SEM argumentos: apenas roda a suíte (a infra deve já estar de pé via
- *    "npm run test:infra:up" ou equivalentes).
+ *    spec de integração.
+ *  - As conexões usam o .env como fonte única (MONGODB_URI/REDIS_URL). A suíte
+ *    apenas troca o database para MONGODB_TEST_DB (default backbet-test),
+ *    mantendo host/porta/autenticação da infra real. Veja loadTestConnectionEnv.
+ *  - SEM argumentos: apenas roda a suíte (a infra deve já estar de pé).
  *  - Com --with-infra: sobe o docker-compose.test.yml (up -d --wait), roda a
  *    suíte e derruba a infra (down) mesmo em caso de falha.
  *
@@ -50,6 +51,54 @@ const shift = (value, fallback) => {
   return value;
 };
 
+// ---------------------------------------------------------------------------
+// Configuração de conexão — fonte única: o .env.
+//
+// As URIs NÃO são hardcoded aqui. O runner carrega o .env e usa MONGODB_URI /
+// REDIS_URL definidos no ambiente (host + porta + autenticação da infra real).
+// A suíte só troca o database para MONGODB_TEST_DB (default backbet-test),
+// mantendo a mesma autenticação/porta da URI de origem — decisão explícita da
+// configuração de teste, não uma URI paralela escondida.
+//
+// Overrides explícitos (quando definidos pelo chamador):
+//   MONGODB_TEST_URI = URI completa usada literalmente pela suíte
+//   REDIS_TEST_URL   = URI completa do Redis usada literalmente pela suíte
+// ---------------------------------------------------------------------------
+function resolveMongoTestUri(baseUri, testDb, explicitOverride) {
+  if (explicitOverride !== undefined && explicitOverride !== '') return explicitOverride;
+  try {
+    const uri = new URL(baseUri);
+    uri.pathname = `/${testDb}`;
+    return uri.toString();
+  } catch {
+    return baseUri;
+  }
+}
+
+function loadTestConnectionEnv() {
+  const shellMongoUri = process.env.MONGODB_URI;
+  const shellRedisUrl = process.env.REDIS_URL;
+
+  require('dotenv').config({ path: path.join(root, '.env') });
+
+  const testDb = shift(process.env.MONGODB_TEST_DB, 'backbet-test');
+  const baseUri = shift(
+    shellMongoUri,
+    shift(process.env.MONGODB_URI, 'mongodb://localhost:27017/backbet-dev'),
+  );
+  const baseRedis = shift(
+    shellRedisUrl,
+    shift(process.env.REDIS_URL, 'redis://localhost:6379'),
+  );
+
+  return {
+    MONGODB_URI: resolveMongoTestUri(baseUri, testDb, process.env.MONGODB_TEST_URI),
+    REDIS_URL: shift(process.env.REDIS_TEST_URL, baseRedis),
+  };
+}
+
+const DEFAULTS = loadTestConnectionEnv();
+
 function composeArgs(command, extra) {
   return ['compose', '-f', composeFile, command, ...(extra || [])];
 }
@@ -63,11 +112,11 @@ function runJest() {
 
   const env = { ...process.env };
   env.RUN_REAL_INTEGRATION_TESTS = 'true';
-  // A suíte de integração é reproduzível: ignora um .env pessoal do dev e
-  // aponta para a infra local do docker-compose.test.yml, a menos que a
-  // variável seja definida explicitamente no ambiente (export MONGODB_URI=...).
-  env.MONGODB_URI = shift(process.env.MONGODB_URI, 'mongodb://192.168.22.250:27018/backbet-test?directConnection=true');
-  env.REDIS_URL = shift(process.env.REDIS_URL, 'redis://192.168.22.250:6379');
+  env.MONGODB_URI = shift(process.env.MONGODB_URI, DEFAULTS.MONGODB_URI);
+  env.REDIS_URL = shift(process.env.REDIS_URL, DEFAULTS.REDIS_URL);
+  // O database usado pela suíte vem da URI derivada (backbet-test), não de uma
+  // variável de infraestrutura que aponte para o db da aplicação.
+  delete env.MONGODB_DB_NAME;
 
   console.log(
     `[integration] node ${args.join(' ')}`,

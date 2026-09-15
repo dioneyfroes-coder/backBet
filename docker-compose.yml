@@ -7,7 +7,7 @@ x-backbet-env: &backbet-env
   MONGODB_URI: "${MONGODB_URI:?Defina MONGODB_URI no .env}"
   MONGODB_DB_NAME: "${MONGODB_DB_NAME:-backbet}"
 
-  REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379"
+  REDIS_URL: "${REDIS_URL:?Defina REDIS_URL no .env}"
   USE_REDIS_QUEUE: "true"
 
   JWT_SECRET: "${JWT_SECRET:?Defina JWT_SECRET no arquivo .env}"

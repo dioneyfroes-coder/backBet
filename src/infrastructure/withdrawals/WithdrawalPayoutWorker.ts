@@ -12,8 +12,9 @@ import type { IWithdrawalRequestRepository } from '@/core/finance/domain/reposit
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = getRedisUrl();
 
 async function markProcessingBestEffort(
   payload: WithdrawalPayoutPayload,

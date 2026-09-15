@@ -3,8 +3,9 @@ import type { Queue as BullQueue } from 'bull';
 import IWithdrawalQueue, {
   WithdrawalPayoutPayload,
 } from '@/core/finance/domain/ports/IWithdrawalQueue';
+import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+const REDIS_URL = getRedisUrl();
 
 export class BullWithdrawalQueue implements IWithdrawalQueue {
   private queue: BullQueue;
