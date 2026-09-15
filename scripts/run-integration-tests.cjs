@@ -67,7 +67,7 @@ function runJest() {
   // aponta para a infra local do docker-compose.test.yml, a menos que a
   // variável seja definida explicitamente no ambiente (export MONGODB_URI=...).
   env.MONGODB_URI = shift(process.env.MONGODB_URI, 'mongodb://192.168.22.250:27018/backbet-test?directConnection=true');
-  env.REDIS_URL = shift(process.env.REDIS_URL, 'redis://localhost:6379');
+  env.REDIS_URL = shift(process.env.REDIS_URL, 'redis://192.168.22.250:6379');
 
   console.log(
     `[integration] node ${args.join(' ')}`,
