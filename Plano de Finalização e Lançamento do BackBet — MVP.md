@@ -1,465 +1,191 @@
-Fase 1 — Corrigir o que ainda foi identificado
-1. Corrigir AppError no MongooseEventRepository
+3. Código da aplicação
 
-Prioridade: P0 — pequeno e direto
+Precisamos eliminar a duplicação de endpoints.
 
-Problema:
+src/shared/config/env.ts
 
-new AppError(
-    'Erro ao buscar evento',
-    'INTERNAL_SERVER_ERROR',
-    500
-)
+Verificar se a configuração aceita:
 
-O construtor espera:
+MONGODB_URI
+REDIS_URL
 
-AppError(code, message, statusCode)
-Fazer
+sem assumir:
 
-Corrigir apenas as chamadas desse repository.
+localhost
 
-Não fazer
-refatorar AppError;
-alterar tratamento global de erros;
-mudar controllers;
-reorganizar repositories;
-criar nova hierarquia de exceções.
-Teste
+Os defaults de localhost são problemáticos para o ambiente Docker.
 
-Verificar que uma falha do repository retorna:
+Idealmente:
 
-code = INTERNAL_SERVER_ERROR
-message = mensagem correta
-status = 500
-Fase 2 — Verificar a janela de crash do Withdrawal
+MONGODB_URI → obrigatório
+REDIS_URL → obrigatório
 
-Prioridade: P0/P1
+em produção/teste.
 
-Cenário identificado:
+Assim, um erro de configuração aparece imediatamente em vez de tentar conectar em localhost.
 
-Wallet lock
-    ↓
-processo morre
-    ↓
-WithdrawalRequest ainda não foi criado
+src/infrastructure/persistence/mongoose/config.ts
 
-Resultado potencial:
+Hoje existe algo equivalente a:
 
-saldo bloqueado
-+
-withdrawal inexistente
-Primeiro passo
+process.env.MONGODB_URI || 'mongodb://localhost:27017'
 
-Não implementar solução imediatamente.
+Precisamos remover esse fallback ou deixá-lo exclusivamente para um ambiente explicitamente local.
 
-Pedir à IA:
+A aplicação deve receber a URI pelo ambiente.
 
-Analise exclusivamente o fluxo de criação de withdrawal e determine se existe
-uma janela de inconsistência entre o bloqueio da wallet e a criação da
-WithdrawalRequest em caso de crash abrupto do processo.
+Configuração Redis
 
-Não altere código.
+Precisamos verificar se algum código ainda possui:
 
-Mostre:
-1. sequência exata das operações;
-2. estado possível da wallet;
-3. estado possível do withdrawal;
-4. se o mecanismo atual já permite recuperação;
-5. testes existentes que cobrem o cenário.
+redis://localhost:6379
 
-Só depois decidir.
+como fallback.
 
-Se realmente existir uma lacuna
+O objetivo é:
 
-Implementar a menor solução possível, preferencialmente reaproveitando mecanismos já existentes.
+REDIS_URL
+   ↓
+redis://:${password}@redis:6379
 
-Não criar uma nova arquitetura de recovery.
+para todos os containers.
 
-Teste obrigatório
+4. run-integration-tests.cjs
 
-Simular:
+Essa é uma das principais mudanças.
 
-lock
-↓
-crash
-↓
-restart
-↓
-recovery
+Hoje ele está fazendo algo como:
 
-e verificar:
+env.MONGODB_URI = shift(
+  process.env.MONGODB_URI,
+  'mongodb://192.168.22.250:27018/backbet-test?...'
+);
 
-wallet
-withdrawal
-ledger
-Fase 3 — Auditoria rápida de consistência financeira
+env.REDIS_URL = shift(
+  process.env.REDIS_URL,
+  'redis://192.168.22.250:6379'
+);
 
-Prioridade: P0
+Isso precisa desaparecer.
 
-Não é para reescrever nada.
+O script não deve mais conhecer:
 
-É uma auditoria.
+192.168.22.250
+27018
+6379
 
-Faça a IA procurar:
+Ele deve simplesmente executar Jest usando o ambiente recebido pelo container.
 
-balance
-balanceCents
-amount
-amountCents
-payout
-potentialReturn
-odds
-exposure
+Por exemplo, conceitualmente:
 
-e também:
+Docker Compose
+      ↓
+MONGODB_TEST_URI
+REDIS_URL
+      ↓
+integration-tests
+      ↓
+run-integration-tests.cjs
+      ↓
+Jest
+5. Testes
 
-parseFloat
-Number(...)
-toFixed(...)
-Objetivo
+Precisamos verificar os testes para procurar:
 
-Encontrar somente situações onde:
+Endpoints hardcoded
+localhost
+127.0.0.1
+192.168.22.250
+27018
+6379
+mongodb://
+redis://
+Bancos hardcoded
+backbet-test
+backbet-dev
+backbet
+Limpeza
 
-dinheiro ou cálculo financeiro crítico esteja sendo tratado incorretamente como ponto flutuante.
+Os testes atualmente fazem coisas como:
 
-Regra
+deleteMany()
 
-Se encontrar algo suspeito:
+Precisamos garantir que:
 
-NÃO CORRIGIR AUTOMATICAMENTE
+Mongo → backbet-test
+Redis → namespace/keys de teste
 
-gerar relatório:
+e nunca o banco usado pelo runtime normal.
 
-arquivo
-linha
-problema
-risco
-correção mínima sugerida
+6. Infraestrutura Mongo
 
-Você decide depois.
+Também precisamos decidir a autenticação do banco de testes.
 
-Isso impede uma busca genérica da IA de virar uma refatoração em massa.
+Minha recomendação:
 
-Fase 4 — Validar os quatro pilares que já foram corrigidos
-
-Aqui não é para alterar código. É para provar que continuam funcionando.
-
-A. Event persistence
-
-Validar:
-
-create
-↓
 Mongo
-↓
-restart/reconnect
-↓
-find
+├── backbet
+│   └── usuário backbet
+│
+└── backbet-test
+    └── usuário backbet-test
 
-O evento precisa continuar existindo.
+No .env:
 
-B. Settlement transacional
+MONGODB_APP_USER=backbet
+MONGODB_APP_PASSWORD=...
 
-Forçar:
+MONGODB_TEST_USER=backbet-test
+MONGODB_TEST_PASSWORD=...
 
-Bet update
-↓
-erro proposital
+E o script de inicialização cria os dois usuários.
 
-Resultado esperado:
+Isso deixa:
 
-Bet      rollback
-Risk     rollback
-Wallet   rollback
-Ledger   rollback
-C. Wallet + Ledger
-
-Forçar:
-
-Wallet mutation
-↓
-Ledger failure
-
-Resultado:
-
-Wallet rollback
-Ledger rollback
-
-Nunca:
-
-Wallet alterada
-Ledger ausente
-D. Idempotência
-
-Testar:
-
-mesma request
-× várias vezes
-
-Resultado:
-
-1 operação real
-+
-replays
-
-E:
-
-PROCESSING
-↓
-processo morto
-↓
-timeout
-↓
-recovery
-Fase 5 — Testes locais completos
-
-Depois das correções:
-
-npm ci
-npm run typecheck
-npm test
-
-Depois os testes de:
-
-integration
-failure
-load
-security
-
-Use os scripts que realmente existem no package.json.
-
-Regra para IA
-
-Se um teste falhar:
-
-NÃO corrigir imediatamente tudo que parece relacionado.
-
-Primeiro:
-
-1. reproduzir
-2. identificar causa
-3. corrigir mínimo
-4. testar novamente
-Fase 6 — Docker
-
-Antes de Ubuntu:
-
-docker compose config
-docker compose build
-docker compose up
-
-Verificar:
-
-API
-Redis
-Workers
-Mongo connection
-health
-readiness
-
-Não alterar Dockerfile ou compose simplesmente porque alguma IA acha que a configuração poderia ser "melhor".
-
-Primeiro faça funcionar.
-
-Depois, melhorias ficam para outro ciclo.
-
-Fase 7 — Server 02: MongoDB
-
-Seu notebook dedicado ao Mongo:
-
-Ubuntu Server
+backbet container
     ↓
+backbet DB
+
+integration-tests
+    ↓
+backbet-test DB
+
+sem risco de os testes apagarem dados do ambiente principal.
+
+Checklist completo
 Docker
-    ↓
-MongoDB
-    ↓
-replica set
-    ↓
-PRIMARY
-
-Testar do Server 01:
-
-connection
-authentication
-replica set
-transactions
-
-O objetivo não é HA.
-
-É provar:
-
-o BackBet consegue usar transações Mongo remotamente no ambiente planejado.
-
-Fase 8 — Server 01: BackBet
-
-Subir:
-
-BackBet API
-Redis
-Workers
-
-Configurar:
-
-Mongo URI → Server 02
-Redis → Server 01
-
-Validar:
-
-health
-readiness
-logs
-workers
-database connection
-Fase 9 — Teste end-to-end
-
-Executar o fluxo:
-
-Usuário
-  ↓
-Login
-  ↓
-Depósito
-  ↓
-Wallet
-  ↓
-Evento
-  ↓
-Aposta
-  ↓
-Risk
-  ↓
-Settlement
-  ↓
-Wallet
-  ↓
-Ledger
-  ↓
-Withdrawal
-  ↓
-Worker
-  ↓
-PSP Mock
-  ↓
-Ledger
-
-Depois conferir diretamente no Mongo.
-
-A regra é:
-
-Wallet
-Ledger
-Bet
-Risk
-Withdrawal
-Treasury
-
-precisam contar a mesma história.
-
-Fase 10 — Testes de desastre controlado
-
-Aqui começa a parte realmente útil do ambiente separado.
-
-API
-processo reiniciado
-container reiniciado
-Worker
-worker morto durante withdrawal
-worker reiniciado
+ Corrigir REDIS_URL para redis
+ Criar integration-tests
+ Colocar testes na mesma network
+ Usar mongodb:27017
+ Usar redis:6379
+ Manter mongo-rs-init como dependência
+ Garantir readiness antes dos testes
+.env
+ MONGODB_URI → endpoint interno
+ REDIS_URL → endpoint interno
+ Criar MONGODB_TEST_URI
+ Criar credencial do usuário de teste
+ Não colocar IP do servidor nas URLs internas
+Código
+ Remover fallbacks localhost problemáticos
+ Centralizar MONGODB_URI
+ Centralizar REDIS_URL
+ Não deixar código saber IP/porta Docker publicada
+Test runner
+ Remover 192.168.22.250
+ Remover 27018
+ Remover localhost
+ Remover 6379 hardcoded
+ Receber configuração do ambiente
+Testes
+ Verificar Mongo URI
+ Verificar Redis URI
+ Verificar banco backbet-test
+ Verificar limpeza
+ Verificar isolamento
+ Garantir que nenhum teste atinge backbet
 Mongo
-Mongo parado
-Mongo iniciado
-Redis
-Redis parado
-Redis iniciado
-Concorrência
-100 apostas simultâneas
-Idempotência
-100 requests
-mesma Idempotency-Key
-Settlement
-settle
-settle
-settle
-
-Tudo isso sem modificar código inicialmente.
-
-O objetivo é descobrir bugs reais, não bugs imaginados.
-
-Fase 11 — Correção baseada nos testes
-
-Depois dos testes, classifique cada falha:
-
-Tipo	Ação
-Bug real	Corrigir
-Configuração	Corrigir configuração
-Ambiente	Corrigir ambiente
-Teste incorreto	Corrigir teste
-Melhoria futura	Registrar
-Refatoração estética	Ignorar
-
-A IA só deve atuar nos dois primeiros, e mesmo assim com alterações pequenas.
-
-Fase 12 — Congelar o MVP
-
-Quando:
-
-typecheck ✓
-unit ✓
-integration ✓
-failure ✓
-Docker ✓
-Mongo remoto ✓
-Redis ✓
-E2E ✓
-concurrency ✓
-recovery ✓
-
-faça:
-
-git tag v1.0.0-mvp
-
-e considere o núcleo congelado.
-
-A partir daí, qualquer mudança deve responder a uma destas perguntas:
-
-Existe bug?
-
-Existe requisito faltando?
-
-Existe risco comprovado?
-
-Se a resposta for "não, mas poderia ficar mais bonito", não mexa.
-
-Ordem final
-P0
-├── AppError EventRepository
-├── verificar withdrawal crash window
-└── auditoria de valores monetários
-
-P0 — validação
-├── Event persistence
-├── Settlement transaction
-├── Wallet + Ledger atomicity
-└── Idempotency recovery
-
-P1 — ambiente
-├── typecheck/tests
-├── Docker
-├── Mongo Server 02
-├── BackBet Server 01
-└── conexão entre servidores
-
-P1 — validação real
-├── E2E financeiro
-├── concorrência
-├── restart
-├── crash recovery
-├── Mongo failure
-└── Redis failure
-
-FINAL
-└── corrigir apenas falhas encontradas
-    ↓
-    v1.0.0-MVP
-    ↓
-    congelar
+ Criar usuário específico backbet-test
+ Dar readWrite somente em backbet-test
+ Manter rs0 anunciando mongodb:27017
