@@ -267,8 +267,12 @@ export class IdempotencyService {
   }
 }
 
+const idempotencyRuntimeEnv = process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || 'development';
+const useMongooseStore =
+  process.env.USE_MONGOOSE_PERSISTENCE === 'true' && idempotencyRuntimeEnv !== 'test';
+
 export const idempotencyService = new IdempotencyService(
-  process.env.USE_MONGOOSE_PERSISTENCE === 'true'
+  useMongooseStore
     ? new MongoIdempotencyStore()
     : cacheConfig.enabled
       ? new RedisIdempotencyStore()

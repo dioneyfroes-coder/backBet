@@ -7,7 +7,6 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
 import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = getRedisUrl();
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
 
 async function processContactPayloadOnce(payload: ContactPayload): Promise<void> {
@@ -16,7 +15,8 @@ async function processContactPayloadOnce(payload: ContactPayload): Promise<void>
   const text = `Ticket: ${payload.ticketId}\nFrom: ${payload.name ?? 'anonymous'} <$${payload.email ?? 'noreply'}>\n\n${payload.message}`;
 
   // configure transporter from env or use direct transport
-  const smtpUrl = process.env.MAILER_SMTP_URL;
+  const mailerRuntimeEnv = process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || 'development';
+  const smtpUrl = mailerRuntimeEnv === 'test' ? undefined : process.env.MAILER_SMTP_URL;
   const transport = smtpUrl
     ? nodemailer.createTransport(smtpUrl)
     : nodemailer.createTransport({ jsonTransport: true });
@@ -48,7 +48,7 @@ export async function processContactPayload(payload: ContactPayload): Promise<vo
 }
 
 export function startContactWorker(): BullQueue {
-  const queue = new Queue('contact_queue', REDIS_URL) as BullQueue;
+  const queue = new Queue('contact_queue', getRedisUrl()) as BullQueue;
   // using named processor 'contact'
   queue.process('contact', async (job) => {
     try {

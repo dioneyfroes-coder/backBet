@@ -101,6 +101,7 @@ async function buildTestApp(): Promise<void> {
       eventRepository: eventRepo,
       walletRepository: walletRepo,
       ledgerRepository: ledgrRepo,
+      riskRepository: riskRepo,
       responsibleGamblingRepository: responsibleGamblingRepo,
     }),
   );

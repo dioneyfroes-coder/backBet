@@ -62,7 +62,7 @@ Ambientes, env vars e troubleshooting: `docs/QUICKSTART.mdx` e `docs/MONGODB_SET
 |---------|-----------|
 | `npm run typecheck` | Checagem de tipos (`tsc --noEmit`) |
 | `npm run lint` | ESLint em `src/**/*.ts` |
-| `npm test` | Suíte unitária Jest (~750 testes) |
+| `npm test` | Suíte unitária Jest hermética (888 testes) |
 | `npm run test:coverage` | Unitária + cobertura |
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) |
 | `npm run test:integration` | Suíte real (MongoDB replica set + Redis via `docker-compose.test.yml`) |
@@ -118,7 +118,7 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 
 ## Status do projeto
 
-- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` (Fase 30) com contrato, envelope padronizado, paginação, idempotência e OpenAPI; suíte unitária com 784 testes, gate final `npm run check` verde e invariantes financeiros FI-01..FI-10 testados.
+- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` (Fase 30) com contrato, envelope padronizado, paginação, idempotência e OpenAPI; suíte completa com **902 testes** (888 unitários herméticos + 14 de integração real Mongo/Redis), gate `npm run check` verde e invariantes financeiros FI-01..FI-10 testados.
 - **Definition of Done (seção 41 do plano)**: 48/50 itens atendidos com evidência (`docs/DEFINITION_OF_DONE.mdx`); os 2 restantes exigem ambiente com Docker/CI. Aceite final do MVP: `docs/GO_NOGO_FINAL.mdx`.
 - **Requisitos operacionais cobertos**: auditoria/retention, transmissão SIGAP/SPA, Docker/deploy, backup/recuperação, segredos e endurecimento de segurança; auto-avaliação executável via `npm run security:assess` (`docs/CERTIFICACAO_PREPARACAO.mdx`).
 - **Pendências/roadmap**: build da imagem Docker e integração real (verificação em ambiente com Docker/CI), provedores reais W-01..W-05 (KYC/geolocalização/SIGAP/PSP) e certificação SPA — dependem de operador autorizado (projeto separado de compliance).

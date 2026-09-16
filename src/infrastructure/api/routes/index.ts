@@ -93,6 +93,7 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
       betRepository,
       eventRepository,
       walletRepository,
+      riskRepository,
       ...(deps.bet || {}),
     }),
   );

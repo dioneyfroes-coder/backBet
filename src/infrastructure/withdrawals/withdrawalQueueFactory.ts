@@ -5,7 +5,6 @@ import { BullWithdrawalQueue } from './BullWithdrawalQueue';
 import { getRedisUrl } from '@/shared/config/connections';
 import type IWithdrawalQueue from '@/core/finance/domain/ports/IWithdrawalQueue';
 
-const REDIS_URL = getRedisUrl();
 const isTestRuntime = (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || '').toLowerCase() === 'test';
 
 export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
@@ -13,11 +12,11 @@ export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
     writeStructuredLog({
       event: 'withdrawal_queue_test_mode',
       backend: 'inmemory',
-      redis: REDIS_URL,
     });
     return new InMemoryWithdrawalQueue();
   }
 
+  const REDIS_URL = getRedisUrl();
   // Try a lightweight ping to Redis before deciding to use Bull. This avoids throwing
   // when Redis is not available and provides a clear fallback to an in-memory queue.
   const client = new IORedis(REDIS_URL);

@@ -5,13 +5,11 @@ import IWithdrawalQueue, {
 } from '@/core/finance/domain/ports/IWithdrawalQueue';
 import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = getRedisUrl();
-
 export class BullWithdrawalQueue implements IWithdrawalQueue {
   private queue: BullQueue;
 
   constructor() {
-    this.queue = new Queue('withdrawal_payouts', REDIS_URL) as BullQueue;
+    this.queue = new Queue('withdrawal_payouts', getRedisUrl()) as BullQueue;
   }
 
   async getPendingCount(): Promise<number> {

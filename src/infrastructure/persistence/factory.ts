@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { env } from '@/shared/config/env';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
@@ -14,7 +15,8 @@ import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domai
 import { IAuditEventRepository } from '@/core/audit/domain/repositories/IAuditEventRepository';
 import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
 
-const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true';
+const runtimeEnv = env.BACKBET_RUNTIME_ENV || env.NODE_ENV || 'development';
+const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true' && runtimeEnv !== 'test';
 
 // Lazy imports to avoid loading mongoose models when not needed
 export async function createUserRepository(): Promise<IUserRepository> {

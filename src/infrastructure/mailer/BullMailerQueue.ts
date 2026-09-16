@@ -5,14 +5,12 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = getRedisUrl();
-
 export class BullMailerQueue {
   private queue: BullQueue;
 
   constructor() {
     // bull accepts a connection string as the second argument
-    this.queue = new Queue('contact_queue', REDIS_URL) as BullQueue;
+    this.queue = new Queue('contact_queue', getRedisUrl()) as BullQueue;
   }
 
   async enqueueContact(payload: ContactPayload): Promise<void> {

@@ -57,8 +57,8 @@ describe('env config loader', () => {
     const { env } = loadModule();
 
     expect(env.JWT_SECRET).toBe('test-secret');
-    expect(env.MONGODB_URI).toBe('mongodb://localhost:27017/backbet-test');
-    expect(env.REDIS_URL).toBe('redis://localhost:6379');
+    expect(env.MONGODB_URI).toBeUndefined();
+    expect(env.REDIS_URL).toBeUndefined();
     expect(env.ALLOW_DEV_BEARER_BYPASS).toBe('false');
     expect(env.WALLET_MIN_DEPOSIT).toBe('1');
     expect(env.WALLET_MIN_WITHDRAW).toBe('100');

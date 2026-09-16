@@ -21,7 +21,6 @@ describe('configuration parsing helpers', () => {
     await jest.isolateModulesAsync(async () => {
       const { env } = await import('../env');
       expect(env.JWT_SECRET).toBe('test-secret');
-      expect(env.MONGODB_URI).toBeDefined();
     });
   });
 
@@ -56,6 +55,7 @@ describe('configuration parsing helpers', () => {
   it('derives cache configuration defaults', async () => {
     process.env.JWT_SECRET = 'secret';
     process.env.NODE_ENV = 'development';
+    process.env.BACKBET_RUNTIME_ENV = 'development';
     process.env.CACHE_TTL_SECONDS = '120';
     process.env.CACHE_ENABLED = 'true';
 

@@ -66,6 +66,9 @@ O orquestrador `scripts/run-integration-tests.cjs`:
 - lê **`MONGODB_URI`** / **`REDIS_URL`** do ambiente (shell ou `.env`; o dotenv
   nunca sobrescreve variáveis já exportadas) e **não tem fallback** para
   localhost/IP fixo — se faltar alguma variável, o runner aborta com erro claro;
+- o `env.ts` também **não fornece mais defaults localhost** em modo teste: as
+  URIs são obrigatórias sempre que Mongo/Redis forem usados (a suíte unitária
+  hermética roda sem elas, pois usa adaptadores in-memory);
 - usa o database de teste **`MONGODB_TEST_DB`** (default `backbet-test`): deriva
   da `MONGODB_URI` trocando só o database, ou usa **`MONGODB_TEST_URI`**
   literalmente (credenciais do usuário dedicado `backbet-test`). Assim a suíte

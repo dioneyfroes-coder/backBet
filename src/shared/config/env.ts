@@ -101,8 +101,6 @@ assignDefault('SIGAP_QUERY_MAX_LIMIT', '200');
 // requiredInProduction abaixo também valida — nunca tenta conectar em localhost.
 if (isTestEnv) {
   assignDefault('JWT_SECRET', 'test-secret');
-  assignDefault('MONGODB_URI', 'mongodb://localhost:27017/backbet-test');
-  assignDefault('REDIS_URL', 'redis://localhost:6379');
 }
 
 const requiredAlways = ['JWT_SECRET'];

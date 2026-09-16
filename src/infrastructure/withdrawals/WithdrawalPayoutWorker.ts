@@ -14,8 +14,6 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
 import { getRedisUrl } from '@/shared/config/connections';
 
-const REDIS_URL = getRedisUrl();
-
 async function markProcessingBestEffort(
   payload: WithdrawalPayoutPayload,
   service?: WithdrawalRequestService,
@@ -294,7 +292,7 @@ export function startWithdrawalRecovery(options: {
 }
 
 export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQueue {
-  const queue = new Queue('withdrawal_payouts', REDIS_URL) as BullQueue;
+  const queue = new Queue('withdrawal_payouts', getRedisUrl()) as BullQueue;
 
   queue.process('payout', async (job) => {
     return processWithdrawalPayload(job.data as WithdrawalPayoutPayload, undefined, service).then(

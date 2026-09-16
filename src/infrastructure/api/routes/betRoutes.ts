@@ -34,6 +34,7 @@ export type BetRoutesDeps = {
   eventRepository?: IEventRepository;
   walletRepository?: IWalletRepository;
   ledgerRepository?: ILedgerRepository;
+  riskRepository?: IRiskRepository;
   responsibleGamblingRepository?: IResponsibleGamblingRepository;
 };
 
@@ -48,7 +49,7 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
     deps.ledgerRepository ?? (await createLedgerRepository());
   const walletService = new WalletService(walletRepository, ledgerRepository);
 
-  const riskRepository: IRiskRepository = await createRiskRepository();
+  const riskRepository: IRiskRepository = deps.riskRepository ?? (await createRiskRepository());
   const riskService = new RiskService(riskRepository, betRepository);
 
   const transactionRunner = walletRepository.withTransaction
