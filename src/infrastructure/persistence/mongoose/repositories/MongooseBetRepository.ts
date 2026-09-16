@@ -6,6 +6,7 @@ import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { AppError } from '@/shared/errors/AppError';
 import { BetModel, IBetDocument } from '../schemas/BetSchema';
 import { BetRecord } from '@/types/persistence';
+import { isRetryableTransactionError } from '../errors/retryableTransactionError';
 
 type BetRecordRaw = Omit<BetRecord, '_id'> & {
   _id: BetRecord['_id'] | { toString(): string };
@@ -35,6 +36,9 @@ export class MongooseBetRepository implements IBetRepository {
       const newBet = new BetModel(betData);
       await newBet.save({ session: options.session as never });
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao criar aposta', 500, {
         originalError,
@@ -78,6 +82,9 @@ export class MongooseBetRepository implements IBetRepository {
         });
       }
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       if (error instanceof AppError) {
         throw error;
       }
@@ -98,6 +105,9 @@ export class MongooseBetRepository implements IBetRepository {
       }
       return this.mapToDomain(this.normalizeBetRecord(betData));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar aposta', 500, {
         originalError,
@@ -110,6 +120,9 @@ export class MongooseBetRepository implements IBetRepository {
       const betsData = await BetModel.find({ userId }).lean<BetRecordRaw[]>();
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do usuário', 500, {
         originalError,
@@ -122,6 +135,9 @@ export class MongooseBetRepository implements IBetRepository {
       const betsData = await BetModel.find({ eventId }).lean<BetRecordRaw[]>();
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do evento', 500, {
         originalError,
@@ -134,6 +150,9 @@ export class MongooseBetRepository implements IBetRepository {
       const betsData = await BetModel.find({ marketId }).lean<BetRecordRaw[]>();
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas do mercado', 500, {
         originalError,
@@ -146,6 +165,9 @@ export class MongooseBetRepository implements IBetRepository {
       const betsData = await BetModel.find({ status }).lean<BetRecordRaw[]>();
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar apostas por status', 500, {
         originalError,
@@ -167,6 +189,9 @@ export class MongooseBetRepository implements IBetRepository {
       const betsData = await BetModel.find(query).lean<BetRecordRaw[]>();
       return betsData.map((betData) => this.mapToDomain(this.normalizeBetRecord(betData)));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao listar apostas', 500, {
         originalError,
@@ -179,6 +204,9 @@ export class MongooseBetRepository implements IBetRepository {
       const bet = await BetModel.findById(id).lean();
       return !!bet;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao verificar aposta', 500, {
         originalError,
@@ -191,6 +219,9 @@ export class MongooseBetRepository implements IBetRepository {
       const result = await BetModel.findByIdAndDelete(id);
       return !!result;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao deletar aposta', 500, {
         originalError,

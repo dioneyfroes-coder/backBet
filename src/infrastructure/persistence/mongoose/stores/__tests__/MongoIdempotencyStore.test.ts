@@ -42,10 +42,17 @@ describe('MongoIdempotencyStore (mocked model)', () => {
     const claimed = await store.setIfAbsent('k1', { fingerprint: 'fp', status: 'PROCESSING' }, 60);
 
     expect(claimed).toBe(true);
-    const [, data] = updateSpy.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
+    const [, data, options] = updateSpy.mock.calls[0] as unknown as [
+      unknown,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
     const setOnInsert = data.$setOnInsert as Record<string, unknown>;
     expect(setOnInsert.processingAt).toBeInstanceOf(Date);
     expect(setOnInsert.key).toBe('k1');
+    // Mongoose 8 ignora `rawResult`; sem includeResultMetadata o retorno é o
+    // documento e a detecção de insert/update quebra (sempre "não reivindicado").
+    expect(options.includeResultMetadata).toBe(true);
   });
 
   it('setIfAbsent does not claim when the record already exists', async () => {

@@ -7,6 +7,7 @@ import { RiskExposureCounterModel } from '../schemas/RiskExposureCounterSchema';
 import { AppError } from '@/shared/errors/AppError';
 import { RiskRepositoryOptions } from '@/core/risk/domain/repositories/IRiskRepository';
 import { RISK_CONFIG } from '@/core/risk/config/risk-config';
+import { isRetryableTransactionError } from '../errors/retryableTransactionError';
 
 type RiskProfileRecord = {
   _id?: string | { toString(): string };
@@ -51,6 +52,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       if (!doc) return null;
       return mapToDomain(doc);
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar perfil de risco', 500, {
         originalError: getErrorMessage(error),
       });
@@ -67,6 +71,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       if (options.session) query.session(options.session as never);
       await query;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar perfil de risco', 500, {
         originalError: getErrorMessage(error),
       });
@@ -83,6 +90,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       if (options.session) query.session(options.session as never);
       await query;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao incrementar exposição', 500, {
         originalError: getErrorMessage(error),
       });
@@ -108,6 +118,9 @@ export class MongooseRiskRepository implements IRiskRepository {
         }
       }
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao decrementar exposição', 500, {
         originalError: getErrorMessage(error),
       });
@@ -119,6 +132,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       const doc = await RiskProfileModel.findOne({ userId }).lean<RiskProfileRecord | null>();
       return (doc?.exposureCents ?? 0) / 100;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição', 500, {
         originalError: getErrorMessage(error),
       });
@@ -134,6 +150,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       const row = rows[0];
       return { exposureCents: row?.total ?? 0, openProfiles: row?.totalCount ?? 0 };
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter exposição total', 500, {
         originalError: getErrorMessage(error),
       });
@@ -177,6 +196,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       const res = await query.lean<RiskProfileRecord | null>();
       return res !== null;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao reservar exposição', 500, {
         originalError: getErrorMessage(error),
       });
@@ -200,6 +222,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       if (!doc) return null;
       return mapCounterToDomain(doc);
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao obter contador de exposição', 500, {
         originalError: getErrorMessage(error),
       });
@@ -243,6 +268,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       const res = await query.lean<RiskCounterRecord | null>();
       return res !== null;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao reservar exposição por contador', 500, {
         originalError: getErrorMessage(error),
       });
@@ -275,6 +303,9 @@ export class MongooseRiskRepository implements IRiskRepository {
         }
       }
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao decrementar exposição por contador', 500, {
         originalError: getErrorMessage(error),
       });
@@ -299,6 +330,9 @@ export class MongooseRiskRepository implements IRiskRepository {
       if (options.session) query.session(options.session as never);
       await query;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao definir exposição por contador', 500, {
         originalError: getErrorMessage(error),
       });

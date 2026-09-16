@@ -12,6 +12,23 @@ type IdempotencyDoc = {
 export class MongoIdempotencyStore implements IdempotencyStore {
   private initPromise?: Promise<unknown>;
 
+  /**
+   * Objetos de domínio (ex.: Bet com getter `status`) não são preservados pelo
+   * round-trip BSON do Mixed se gravados como instância. Materializamos via
+   * `toJSON()` (que expõe os getters como props) para que um replay entregue o
+   * resultado completo — inclusive getters como `status`/`balance`.
+   */
+  private serialize(value: unknown): unknown {
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      typeof (value as { toJSON?: unknown }).toJSON === 'function'
+    ) {
+      return (value as { toJSON(): unknown }).toJSON();
+    }
+    return value;
+  }
+
   private async ensureIndex(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = IdempotencyEntryModel.init().then(() => undefined);
@@ -47,11 +64,11 @@ export class MongoIdempotencyStore implements IdempotencyStore {
           key,
           fingerprint: value.fingerprint,
           status: value.status,
-          result: value.result,
+          result: this.serialize(value.result),
           processingAt: new Date(),
         },
       },
-      { upsert: true, new: true, rawResult: true },
+      { upsert: true, new: true, includeResultMetadata: true },
     );
     const raw = res as unknown as { lastErrorObject?: { updatedExisting?: boolean } } | null;
     return !(raw?.lastErrorObject?.updatedExisting ?? true);
@@ -65,7 +82,7 @@ export class MongoIdempotencyStore implements IdempotencyStore {
         $set: {
           fingerprint: value.fingerprint,
           status: value.status,
-          result: value.result,
+          result: this.serialize(value.result),
           processingAt: new Date(),
         },
       },

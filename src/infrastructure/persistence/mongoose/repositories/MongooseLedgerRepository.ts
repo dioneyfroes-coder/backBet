@@ -11,6 +11,7 @@ import {
 } from '@/core/finance/domain/entities/LedgerEntry';
 import { AppError } from '@/shared/errors/AppError';
 import { ILedgerEntryDocument, LedgerEntryModel } from '../schemas/LedgerEntrySchema';
+import { isRetryableTransactionError } from '../errors/retryableTransactionError';
 
 type LedgerDoc = ILedgerEntryDocument & { _id: unknown };
 
@@ -38,6 +39,9 @@ export class MongooseLedgerRepository implements ILedgerRepository {
       await query;
       return entry;
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao registrar entrada de ledger', 500, {
         originalError,

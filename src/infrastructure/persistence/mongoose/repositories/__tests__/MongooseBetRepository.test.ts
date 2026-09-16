@@ -113,6 +113,30 @@ describe('MongooseBetRepository (mocked model)', () => {
       });
     });
 
+    it('create propaga erro transiente (WriteConflict) intacto para o driver repetir a transação', async () => {
+      const writeConflict = Object.assign(new Error('Write conflict'), {
+        code: 112,
+        codeName: 'WriteConflict',
+        errorLabels: ['TransientTransactionError'],
+      });
+      jest.spyOn(BetModel.prototype, 'save').mockRejectedValue(writeConflict);
+
+      const repo = new MongooseBetRepository();
+      await expect(repo.create(makeBet())).rejects.toBe(writeConflict);
+    });
+
+    it('update propaga erro transiente (WriteConflict) intacto', async () => {
+      const writeConflict = Object.assign(new Error('Write conflict'), {
+        code: 112,
+        codeName: 'WriteConflict',
+        errorLabels: ['TransientTransactionError'],
+      });
+      jest.spyOn(BetModel, 'findOneAndUpdate').mockRejectedValue(writeConflict);
+
+      const repo = new MongooseBetRepository();
+      await expect(repo.update(makeBet())).rejects.toBe(writeConflict);
+    });
+
     it('findById', async () => {
       jest.spyOn(BetModel, 'findById').mockReturnValue(rejectedChain(dbError) as never);
 

@@ -321,6 +321,7 @@ describeReal('Fase 22 — Testes de falha (MongoDB real)', () => {
             userId,
             eventId,
             marketId,
+            oddId: 'home',
             amount: 100,
             currency: 'BRL',
             odds: new Odds(2.0),

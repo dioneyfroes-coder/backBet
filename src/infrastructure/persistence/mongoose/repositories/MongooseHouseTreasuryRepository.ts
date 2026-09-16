@@ -8,6 +8,7 @@ import { HouseTreasuryRecord, TreasuryLedgerRecord } from '@/types/persistence';
 import { optimisticLockConflictCounter } from '@/infrastructure/observability/metrics';
 import { transactionFailuresCounter } from '@/infrastructure/observability/metrics';
 import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
+import { isRetryableTransactionError } from '../errors/retryableTransactionError';
 
 type PersistedRecord = Omit<HouseTreasuryRecord, '_id'> & {
   _id: HouseTreasuryRecord['_id'] | { toString(): string };
@@ -27,6 +28,9 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       }
       return this.mapToDomain(record);
     } catch (error) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar tesouraria', 500, { message });
     }
@@ -44,6 +48,9 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       await query;
       return wallet;
     } catch (error) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar tesouraria', 500, { message });
     }
@@ -79,6 +86,9 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
       }
       return wallet;
     } catch (error) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       if (error instanceof AppError) {
         throw error;
       }
@@ -92,6 +102,9 @@ export class MongooseHouseTreasuryRepository implements IHouseTreasuryRepository
     try {
       return await session.withTransaction(() => work(session));
     } catch (error) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       if (isInfraTransactionFailure(error)) {
         transactionFailuresCounter.inc({ resource: 'house_treasury' });
       }

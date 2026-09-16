@@ -7,6 +7,7 @@ import { WalletModel, IWalletDocument } from '../schemas/WalletSchema';
 import { WalletRecord, WalletTransactionRecord } from '@/types/persistence';
 import { optimisticLockConflictCounter, transactionFailuresCounter } from '@/infrastructure/observability/metrics';
 import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
+import { isRetryableTransactionError } from '../errors/retryableTransactionError';
 
 type WalletRecordRaw = Omit<WalletRecord, '_id'> & {
   _id: WalletRecord['_id'] | { toString(): string };
@@ -90,6 +91,9 @@ export class MongooseWalletRepository implements IWalletRepository {
       ) {
         throw new AppError('CONFLICT', 'Uma carteira para este usuário já existe', 409);
       }
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao salvar carteira', 500, {
         originalError,
@@ -110,6 +114,9 @@ export class MongooseWalletRepository implements IWalletRepository {
       }
       return this.mapToDomain(this.normalizeWalletRecord(walletData));
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar carteira', 500, {
         originalError,
@@ -159,6 +166,9 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
       if (error instanceof AppError) {
         throw error;
       }
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao atualizar carteira', 500, {
         originalError,
@@ -184,6 +194,9 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
     try {
       await WalletModel.findOneAndDelete({ userId: sanitizeUserId(userId) });
     } catch (error: unknown) {
+      if (isRetryableTransactionError(error)) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao deletar carteira', 500, {
         originalError,
@@ -225,6 +238,9 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
       };
     } catch (error: unknown) {
       if (error instanceof AppError) {
+        throw error;
+      }
+      if (isRetryableTransactionError(error)) {
         throw error;
       }
       const originalError = error instanceof Error ? error.message : 'unknown';

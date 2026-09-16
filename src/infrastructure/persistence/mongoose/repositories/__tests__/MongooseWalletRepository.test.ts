@@ -112,6 +112,30 @@ describe('MongooseWalletRepository (mocked model)', () => {
       });
     });
 
+    it('update propaga erro transiente (WriteConflict) intacto para o driver repetir a transação', async () => {
+      const writeConflict = Object.assign(new Error('Write conflict'), {
+        code: 112,
+        codeName: 'WriteConflict',
+        errorLabels: ['TransientTransactionError'],
+      });
+      jest.spyOn(WalletModel, 'findOneAndUpdate').mockRejectedValue(writeConflict);
+
+      const repo = new MongooseWalletRepository();
+      await expect(repo.update(makeWallet())).rejects.toBe(writeConflict);
+    });
+
+    it('findByUserId propaga erro transiente intacto (leitura dentro da transação)', async () => {
+      const writeConflict = Object.assign(new Error('Write conflict'), {
+        code: 112,
+        codeName: 'WriteConflict',
+        errorLabels: ['TransientTransactionError'],
+      });
+      jest.spyOn(WalletModel, 'findOne').mockReturnValue(rejectedChain(writeConflict) as never);
+
+      const repo = new MongooseWalletRepository();
+      await expect(repo.findByUserId('user-1')).rejects.toBe(writeConflict);
+    });
+
     it('delete', async () => {
       jest.spyOn(WalletModel, 'findOneAndDelete').mockRejectedValue(dbError);
 

@@ -29,18 +29,20 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     options: WithdrawalRequestRepositoryOptions = {},
   ): Promise<WithdrawalRequest> {
     const created = await WithdrawalRequestModel.create(
-      {
-        requestId: request.id,
-        userId: request.userId,
-        amountCents: Math.round(request.amount * 100),
-        currency: request.currency,
-        status: request.status,
-        requestedAt: request.requestedAt,
-        processedAt: request.processedAt,
-        processingAt: request.processingAt,
-        notes: request.notes,
-        approvalLogs: request.approvalLogs,
-      },
+      [
+        {
+          requestId: request.id,
+          userId: request.userId,
+          amountCents: Math.round(request.amount * 100),
+          currency: request.currency,
+          status: request.status,
+          requestedAt: request.requestedAt,
+          processedAt: request.processedAt,
+          processingAt: request.processingAt,
+          notes: request.notes,
+          approvalLogs: request.approvalLogs,
+        },
+      ],
       { session: options.session as never },
     );
     const doc = (Array.isArray(created) ? created[0] : created) as unknown as IWithdrawalRequestDocument;
