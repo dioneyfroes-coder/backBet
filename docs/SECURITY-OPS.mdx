@@ -17,8 +17,8 @@ slug: "/docs/security-ops"
 | **Firewall** | ✅ Fase 27 | `deploy/harden-server.sh` (UFW: 22/80/443; deny default) |
 | **SSH por chave** | ✅ Fase 27 | mesmo script; exige chave antes de desabilitar senha |
 | **SSH root desabilitado** | ✅ Fase 27 | `PermitRootLogin no` no script |
-| **Updates automáticos de segurança** | ✅ Fase 27 | `unattended-upgrades` no script (server01) |
-| **Mongo privado** | ✅ Fase 17/25 | server02 separado + UFW `27017` só do server01 (`HOST_ROLE=db`) |
+| **Updates automáticos de segurança** | ✅ Fase 27 | `unattended-upgrades` no script |
+| **Mongo privado** | ✅ Fase 17/25 | serviço `mongodb` interno ao Compose (sem porta pública) + UFW default deny |
 | **Redis privado** | ✅ Fase 17 | serviço interno do Compose, **sem porta publicada** |
 | **Logs sem segredos** | ✅ Fase 26/27 | `docs/LOGS.mdx`; boot loga só `hasJwtSecret`; guard `check:secrets` |
 | **Backups** | ✅ Fase 24 | `npm run backup:*` + `docs/BACKUP_RECOVERY.mdx` |
@@ -27,14 +27,11 @@ slug: "/docs/security-ops"
 
 ## Endurecimento do servidor
 
-Nos dois hosts Ubuntu, **antes** de subir a aplicação:
+No host Ubuntu, **antes** de subir a aplicação:
 
 ```bash
-# server01 (API + proxy + workers)
-sudo bash deploy/harden-server.sh                      # HOST_ROLE=web
-
-# server02 (MongoDB) — libera 27017 apenas para o server01
-sudo HOST_ROLE=db SERVER01_IP=192.168.0.10 bash deploy/harden-server.sh
+# host único (MongoDB + Redis + API + workers no mesmo Compose)
+sudo bash deploy/harden-server.sh
 ```
 
 O script é idempotente e **se recusa a desabilitar senha SSH** enquanto não
@@ -84,6 +81,6 @@ npm run check:secrets                          # sem segredos no Git
 npm run audit:prod:critical                    # 0 críticas em produção
 curl -sf https://$PUBLIC_DOMAIN/health         # HTTPS + Caddy ok
 curl -sfI https://$PUBLIC_DOMAIN/ | grep -i strict-transport-security
-ufw status verbose                             # só 22, 80, 443 (+ 27017 s/ server01)
+ufw status verbose                             # só 22, 80, 443
 npm run backup:drill                           # ciclo de recuperação ok
 ```

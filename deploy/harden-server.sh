@@ -4,13 +4,17 @@
 #
 # Aplica o checklist mínimo ANTES do primeiro deploy em um Ubuntu server:
 #   - SSH apenas por chave (root desabilitado, senha desabilitada)
-#   - firewall UFW (default deny; 22/80/443; 27017 só para o server01 em 'db')
+#   - firewall UFW (default deny; só 22/80/443 públicos)
 #   - updates automáticos de segurança (unattended-upgrades)
 #   - fail2ban (proteção extra ao SSH)
 #
 # Uso (como root ou sudo):
-#   HOST_ROLE=web  bash deploy/harden-server.sh     # server01 (api + proxy)
-#   HOST_ROLE=db   SERVER01_IP=192.168.0.10 bash deploy/harden-server.sh  # server02 (mongo)
+#   bash deploy/harden-server.sh
+#
+# Arquitetura: TUDO roda em Docker no MESMO host (docker-compose.yml):
+# mongodb + redis + API + workers. O MongoDB e o Redis ficam na rede interna
+# do Compose e NÃO publicam porta pública; o único ponto de entrada é o proxy
+# (Caddy, portas 80/443) ou a própria API em loopback.
 #
 # SEGURANÇA: o script só desabilita senha SSH se encontrar UMA chave pública
 # instalada em algum usuário com shell. Se nenhuma chave existir, ele mostra
@@ -18,8 +22,6 @@
 # =============================================================================
 set -euo pipefail
 
-HOST_ROLE="${HOST_ROLE:-web}"                     # 'web' (server01) ou 'db' (server02)
-SERVER01_IP="${SERVER01_IP:-}"                    # IP do server01 (obrigatório para 'db')
 SSH_ADMIN_USER="${SSH_ADMIN_USER:-$(logname 2>/dev/null || echo root)}"
 
 info() { printf '\n[backbet-harden] %s\n' "$*"; }
@@ -57,7 +59,7 @@ else
   info "NENHUMA chave pública encontrada. Não vou desabilitar senha (evitaria acesso)."
   info '  Instale sua chave ANTES de rodar de novo, ex.:'
   info '  ssh-copy-id <seu-usuario>@<ip-do-server>  (na sua máquina local)'
-  info "  Depois re-execute: HOST_ROLE=$HOST_ROLE bash deploy/harden-server.sh"
+  info "  Depois re-execute: bash deploy/harden-server.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -70,30 +72,20 @@ ufw default allow outgoing >/dev/null
 ufw allow 22/tcp >/dev/null
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
-if [[ "$HOST_ROLE" == "web" ]]; then
-  # API quando estiver SEM o proxy (Fase 25) — expor só na LAN/loopback se possível.
-  true
-elif [[ "$HOST_ROLE" == "db" ]]; then
-  [[ -n "$SERVER01_IP" ]] || die "HOST_ROLE=db exige SERVER01_IP=<ip-do-server01>."
-  info "MongoDB: 27017 liberado SOMENTE para $SERVER01_IP"
-  ufw allow from "$SERVER01_IP" to any port 27017 proto tcp >/dev/null
-else
-  die "HOST_ROLE inválida: $HOST_ROLE (use 'web' ou 'db')."
-fi
+# Mongo/Redis/API: NUNCA públicos. Ficam na rede interna do Compose; a API só
+# é alcançada via proxy (80/443) ou loopback. Nenhuma porta extra é liberada.
 ufw --force enable >/dev/null
 ufw status verbose
 
 # ---------------------------------------------------------------------------
 # 3) Updates automáticos de segurança
 # ---------------------------------------------------------------------------
-if [[ "$HOST_ROLE" == "web" ]]; then
-  info "Instalando e habilitando unattended-upgrades..."
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get install -y -qq unattended-upgrades >/dev/null
-  dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null || true
-  systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
-fi
+info "Instalando e habilitando unattended-upgrades..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq unattended-upgrades >/dev/null
+dpkg-reconfigure -f noninteractive unattended-upgrades >/dev/null || true
+systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
 # 4) fail2ban (opcional)

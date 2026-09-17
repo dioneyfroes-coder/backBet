@@ -88,12 +88,12 @@ Contrato completo (códigos de erro, exemplos e fluxos): `docs/API_CONTRACT.mdx`
 
 | Compose | Finalidade |
 |---------|-----------|
-| `docker-compose.yml` | Servidor de aplicação: `backbet` + `redis` + workers (contato/saque) |
-| `docker-compose.mongo.yml` | MongoDB (replica set `rs0`, obrigatório p/ transações) no segundo host |
+| `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers (contato/saque) |
 | `docker-compose.test.yml` | Infra de teste isolada (Mongo + Redis no loopback) |
 | `docker-compose.proxy.yml` | Reverse proxy (Caddy/TLS) opcional |
+| `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional) |
 
-Produção: `docker-compose.mongo.yml` (server02) → `MONGODB_URI` no `.env` → `docker compose up -d --build` (server01). Guias: `docs/DOCKER.mdx`, `docs/DEPLOY.mdx`.
+Produção: `docker compose up -d --build` — tudo em Docker no **mesmo host**. Guias: `docs/DOCKER.mdx`, `docs/DEPLOY.mdx`.
 
 ## Como o dinheiro funciona
 

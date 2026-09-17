@@ -3,7 +3,7 @@
 # Fase 25 — Deploy. Usado pelo overlay docker-compose.proxy.yml.
 #
 # O domínio público vem de ${DOMAIN} (env PUBLIC_DOMAIN no .env do
-# server01). O upstream é o serviço compose "backbet" na rede interna.
+# host). O upstream é o serviço compose "backbet" na rede interna.
 # =====================================================================
 
 {$DOMAIN:https://localhost} {

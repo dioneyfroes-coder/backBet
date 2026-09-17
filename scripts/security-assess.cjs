@@ -298,7 +298,7 @@ control(
   'Imagem Docker e orquestração por compose',
   true,
   exists('Dockerfile') && exists('docker-compose.yml'),
-  'Dockerfile + docker-compose.yml (server01/02)',
+  'Dockerfile + docker-compose.yml (host único)',
 );
 control(
   'F — Infraestrutura de produção',

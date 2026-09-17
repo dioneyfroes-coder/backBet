@@ -2,7 +2,7 @@
 # BackBet — Overlay do REVERSE PROXY (Fase 25 — Deploy)
 #
 # Este arquivo é um OVERLAY: NÃO sobe sozinho. Combine-o com o
-# docker-compose.yml (API + Redis + workers) do server01:
+# docker-compose.yml (API + Redis + workers + MongoDB) do host:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
 #
@@ -13,7 +13,7 @@
 # Com o proxy ativo, deixe a API fora da Internet definindo no .env:
 #   BACKBET_PORT=127.0.0.1:3000     # expõe a API apenas em loopback
 #
-# MongoDB (server02) e Redis (interno ao Compose) continuam SEM porta pública.
+# MongoDB e Redis (serviços internos do Compose) continuam SEM porta pública.
 # =============================================================================
 
 services:

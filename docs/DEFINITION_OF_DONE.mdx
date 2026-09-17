@@ -53,7 +53,7 @@ ambiente com Docker/CI (não disponível nesta estação de dev).
 | 24 | ambiente de teste | ✔ | `docker-compose.test.yml` + `docs/TESTING-ENV.mdx` |
 | 25 | build reproduzível | ✔ | `package-lock.json` + `npm ci` no CI (job `test`) |
 | 26 | deploy documentado | ✔ | `docs/DEPLOY.mdx`, `docs/PM2.mdx`, `docs/DOCKER.mdx` |
-| 27 | Mongo privado | ✔ | `docker-compose.mongo.yml` (auth) + `deploy/harden-server.sh` (UFW 27017 só do server01) |
+| 27 | Mongo privado | ✔ | `docker-compose.yml` (serviço `mongodb` autenticado, interno ao Compose) + `deploy/harden-server.sh` (UFW default deny) |
 | 28 | Redis privado | ✔ | Compose: Redis interno sem porta pública |
 | 29 | HTTPS | ✔ | `deploy/proxy/Caddyfile` |
 | 30 | monitoramento | ✔ | `deploy/observability/prometheus.yml` + `/metrics` (prom-client) |

@@ -10,8 +10,8 @@
 #   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
 #
 # Acesso:
-#   Prometheus : http://<ip-do-server01>:9090
-#   Grafana    : http://<ip-do-server01>:3001  (login admin / GF_ADMIN_PASSWORD)
+#   Prometheus : http://<ip-do-host>:9090
+#   Grafana    : http://<ip-do-host>:3001  (login admin / GF_ADMIN_PASSWORD)
 #   Nariz do collector (OTLP HTTP): 4318 (interno ao Compose)
 # =============================================================================
 

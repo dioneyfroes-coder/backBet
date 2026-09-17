@@ -16,7 +16,7 @@ específica da máquina de desenvolvimento.
 |---|---|---|
 | **development** | Local do PC dev (Mongo + Redis via `docker run` ou Compose), app com `npm run dev` | Ver `docs/QUICKSTART.mdx` |
 | **test** | **Docker Compose versionado** (`docker-compose.test.yml`): MongoDB `mongo:7` como replica set `rs0` de nó único + Redis `redis:7` | `npm run test:integration:full` |
-| **production** | Dois servidores locais: `server02` (MongoDB) + `server01` (app + workers + Redis), ambos via Compose | Ver `docs/DOCKER.mdx` (Fase 17) |
+| **production** | Host único em Docker via Compose: MongoDB (replica set `rs0`) + Redis + API + workers | Ver `docs/DOCKER.mdx` (Fase 17) |
 
 ## Por que uma infra de teste em Compose?
 
@@ -98,10 +98,10 @@ npm run test:integration
   porque o **Jest roda no host** e precisa descobrir o primary pela porta publicada.
 - **`redis`** — `redis:7-alpine`, healthcheck com `redis-cli ping`.
 - Portas publicadas **somente em loopback** e Mongo **sem autenticação**: essa
-  infra é efêmera/local e não deve ser exposta na rede. Para produção, use
-  `docker-compose.mongo.yml`.
+  infra é efêmera/local e não deve ser exposta na rede. Para produção, use o
+  `docker-compose.yml` (Mongo autenticado + Redis + API + workers no mesmo host).
 
-## Rodando a suíte dentro do compose de produção (server01)
+## Rodando a suíte dentro do compose de produção (host único)
 
 O compose principal (`docker-compose.yml`) tem o serviço **`integration-tests`**
 (profile `tests`) que usa a imagem `backbet:test` — estágio `tests` do
@@ -112,13 +112,13 @@ depois de o Redis estar saudável e o `mongo-rs-init` ter concluído (readiness
 antes dos testes):
 
 ```bash
-# no server01 (com Docker)
+# no host (com Docker)
 docker compose --profile tests run --rm integration-tests
 # ou via script do package.json
 npm run test:integration:docker
 ```
 
-Requisitos no `.env` do server01: `MONGODB_URI`, `MONGODB_TEST_URI`,
+Requisitos no `.env` do host: `MONGODB_URI`, `MONGODB_TEST_URI`,
 `REDIS_URL`, `JWT_SECRET` (o serviço falha na interpolação se faltarem). A
 `MONGODB_TEST_URI` usa o usuário dedicado `backbet-test` (criado no boot do
 Mongo pelo `deploy/mongo/init-app-user.sh`), com acesso somente ao banco
@@ -154,14 +154,13 @@ mínimo) → **aposta real** → `bets/me` (estaca abatida do saldo) → **cance
 > pela API real.
 
 **Docker (deploy real)** — `docker compose build` / `docker compose up` exigem
-Docker Engine; no PC de dev não há Docker, então esses passos rodam nos
-servidores locais (**server01/server02**, ver `docs/DOCKER.mdx`) seguindo:
+Docker Engine; no PC de dev não há Docker, então esses passos rodam no host
+Docker (ver `docs/DOCKER.mdx`) seguindo:
 
 ```bash
-# no server01 e/ou server02 (com Docker):
-docker compose -f docker-compose.yml build   # app + workers (server01)
-docker compose -f docker-compose.yml up -d   # (server01)
-docker compose -f docker-compose.mongo.yml up -d  # (server02)
+# no host (com Docker):
+docker compose build         # imagem backbet:latest
+docker compose up -d         # MongoDB + Redis + API + workers
 ```
 
 ## CI (GitHub Actions)
