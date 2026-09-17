@@ -49,3 +49,22 @@ base de um BackBet funcionando corretamente).
 ## Log de execução
 
 (As fases são executadas uma a uma, com commit + push ao final de cada uma.)
+
+### Fase 0 — Congelar a correção atual · concluída (17/set/2026)
+
+- `git diff` no estado atual: **árvore limpa** (nada além do autal commit). A solução de
+  concorrência está congelada nos commits `735d7cb` e `74a15f6`.
+- Revisão do que mudou na solução de concorrência (`735d7cb`):
+  `WalletService.run()` agora envolve cada mutação financeira em transação Mongo
+  (`withTransaction`) e, ao receber `AppError CONFLICT` (optimistic lock — versão
+  obsoleta lançada por `MongooseWalletRepository.update`), **re-executa a transação
+  inteira até 3 tentativas** com backoff `10ms × tentativa`. Erros que não são
+  `CONFLICT` propagam imediatamente (sem retry). Falha do ledger rejeita/reverte a
+  operação.
+- Regressão garantida:
+  - Existente: `WalletConcurrency.test.ts` (in-memory, convergência 100 ops) e
+    `load.concurrency.integration.test.ts` (Mongo real — `LOAD rejected: 0`).
+  - **Lacuna fechada**: novo teste unitário do retry interno de `run()` em
+    `WalletService.atomicity.test.ts` — (1) `CONFLICT` transitório re-executa e conclui;
+    (2) `CONFLICT` persistente esgota as 3 tentativas e rejeita sem gravar ledger;
+    (3) erro não-`CONFLICT` não é re-tentado. 7/7 verdes.

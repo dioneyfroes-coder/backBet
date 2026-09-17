@@ -2,6 +2,7 @@ import { WalletService } from '../WalletService';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
 import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
 import { LedgerEntry } from '@/core/finance/domain/entities/LedgerEntry';
+import { AppError } from '@/shared/errors/AppError';
 
 function baseWalletRepoMock(wallet: Wallet) {
   return {
@@ -80,6 +81,65 @@ describe('WalletService — atomicidade Wallet + Ledger', () => {
 
     expect(repo.update).toHaveBeenCalledTimes(1);
     expect(ledger.append).toHaveBeenCalled();
+  });
+
+  it('CONFLICT transitório na transação: re-executa a unidade inteira e a operação conclui', async () => {
+    const wallet = new Wallet('u-retry-ok', 'BRL');
+    let attempts = 0;
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        attempts += 1;
+        if (attempts === 1) throw new AppError('CONFLICT', 'conflito transitório (simulado)', 409);
+        return work({ id: 's-retry' });
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await service.deposit('u-retry-ok', 100, { type: 'DEPOSIT', referenceId: 'ref-r1', source: 'CREDIT_PACKAGE' });
+
+    expect(repo.withTransaction).toHaveBeenCalledTimes(2);
+    expect(ledger.append).toHaveBeenCalledTimes(1);
+    expect(wallet.balance).toBe(100);
+  });
+
+  it('CONFLICT persistente esgota as tentativas e rejeita a operação sem gravar o ledger', async () => {
+    const wallet = new Wallet('u-retry-fail', 'BRL');
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        throw new AppError('CONFLICT', 'conflito persistente (simulado)', 409);
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await expect(
+      service.deposit('u-retry-fail', 50, { type: 'DEPOSIT', referenceId: 'ref-r2', source: 'CREDIT_PACKAGE' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', statusCode: 409 });
+
+    expect(repo.withTransaction).toHaveBeenCalledTimes(3);
+    expect(ledger.append).not.toHaveBeenCalled();
+  });
+
+  it('NÃO re-tenta erros que não são CONFLICT (propaga imediatamente)', async () => {
+    const wallet = new Wallet('u-retry-other', 'BRL');
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        throw new AppError('INTERNAL_SERVER_ERROR', 'erro não transitório (simulado)', 500);
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await expect(service.deposit('u-retry-other', 10)).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
+      statusCode: 500,
+    });
+    expect(repo.withTransaction).toHaveBeenCalledTimes(1);
+    expect(ledger.append).not.toHaveBeenCalled();
   });
 
   it('withdraw/lock/withdrawLocked também passam a sessão de transação para wallet e ledger', async () => {
