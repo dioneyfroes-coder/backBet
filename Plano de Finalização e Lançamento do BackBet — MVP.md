@@ -68,3 +68,26 @@ base de um BackBet funcionando corretamente).
     `WalletService.atomicity.test.ts` — (1) `CONFLICT` transitório re-executa e conclui;
     (2) `CONFLICT` persistente esgota as 3 tentativas e rejeita sem gravar ledger;
     (3) erro não-`CONFLICT` não é re-tentado. 7/7 verdes.
+
+### Fase 1 — Repetibilidade · concluída (17/set/2026)
+
+Protocolo de execução no host (todas as 3 iterações **verdes**):
+
+| Iteração | Suíte hermética (unit) | Suíte integração real | `LOAD rejected` |
+|---|---|---|---|
+| 1 | 891 passed / 0 failed (99,7s) | 14 passed | **0** |
+| 2 | 891 passed / 0 failed (97,2s) | 14 passed | **0** |
+| 3 | 891 passed / 0 failed (104,2s) | 14 passed | **0** |
+
+- Total: **905 testes** (891 unit + 14 integração real) verdes em todas as execuções.
+  `LOAD rejected: 0` **não foi circunstancial**.
+- Observação ambiental: `npm run test` direto no host falha em 8 suítes por **timeout**
+  porque `.env` aponta `REDIS_URL=redis://…@redis:6379` (hostname interno docker,
+  irresolvível fora da rede) e suítes que sobem `createApiServer` com `NODE_ENV` não test
+  conectam Redis real (`getaddrinfo EAI_AGAIN redis`). Reproduzindo a condição do CI
+  (`REDIS_URL` apontando para o endpoint publicado → 54/54 das suítes-alvo verdes), o
+  problema desaparece. Não é regressão de código.
+- Estado de deploy encontrado (input da Fase 3): `withdrawal-worker` e `contact-worker` em
+  `Restarting (1)` — `MODULE_NOT_FOUND: dist/scripts/start-withdrawal-worker.js` /
+  `start-contact-worker.js` no container (`dist/` sem `scripts/`); app `backbet` saudável;
+  `dist/` local não existe (build ainda não executado no dev).
