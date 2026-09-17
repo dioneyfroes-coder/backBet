@@ -38,7 +38,17 @@ export class RedisClient {
     }
 
     if (!this.client) {
-      this.client = new Redis(cacheConfig.redisUrl);
+      // Fail-fast: com o Redis fora do ar, comandos não ficam enfileirados
+      // (enableOfflineQueue) nem são re-tentados internamente pela ioredis
+      // (maxRetriesPerRequest). Sem isso, get/set/del/ping penduram até a
+      // reconexão, travando requests e a readiness. O cliente continua
+      // reconectando em background e volta a operar quando o Redis retorna.
+      this.client = new Redis(cacheConfig.redisUrl, {
+        enableOfflineQueue: false,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+        commandTimeout: 2000,
+      });
       this.client.on('error', (err) => {
         console.error('Redis error', err);
         this.metrics.errors += 1;

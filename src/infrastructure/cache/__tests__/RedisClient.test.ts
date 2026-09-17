@@ -89,6 +89,23 @@ describe('RedisClient', () => {
     expect(Redis).not.toHaveBeenCalled();
   });
 
+  it('configures ioredis to fail fast when the connection is down', async () => {
+    const client = createClient();
+    redisMock.get.mockResolvedValueOnce(null);
+
+    await client.get('trigger');
+
+    expect(Redis).toHaveBeenCalledWith(
+      'redis://test',
+      expect.objectContaining({
+        enableOfflineQueue: false,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+        commandTimeout: 2000,
+      }),
+    );
+  });
+
   it('attaches error listener and counts emitted errors', async () => {
     const client = createClient();
     redisMock.get.mockResolvedValueOnce(null);

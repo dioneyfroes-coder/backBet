@@ -183,3 +183,46 @@ mesmo parâmetro `LOAD_SCALE`, mas cada operação toca **documento distinto**:
   (também aceita `npm run test:load:distributed` para rodar só o spec na infra atual).
 - O driver acumula resultados em `scripts/load-results/resumo.json` por `scale`+`mode`
   (pastas separadas por modo: contenção `scale-<N>` vs distribuída `scale-<N>-distributed`).
+
+### Fase 3 — Chaos / falhas reais · concluída (17/set/2026)
+
+**1. Suíte de falhas (T1–T6) revalidada** — `docker compose --profile tests run --rm
+integration-tests` (imagem `tests` reconstruída do fonte atual):
+
+| Spec | Resultado |
+|---|---|
+| `failure.integration.test.ts` (T1–T6) | PASS (25,2s) |
+| `load.concurrency.integration.test.ts` | PASS — `LOAD rejected: 0` |
+| `mongo-redis.integration.test.ts` | PASS |
+
+`Test Suites: 3 passed / Tests: 14 passed` — nenhuma regressão da correção de concorrência
+nem da idempotência (depósito, apostas, rollback, worker com entrega duplicada, premiação).
+
+**2. Falhas reais na produção local** (app `backbet` 3001, workers, Mongo `rs0`, Redis
+publicados; cenários executados com um usuário real de ponta a ponta e conferência do
+estado financeiro direto no Mongo):
+
+| Falha | Liveness `/health` | Readiness `/readiness` | Operação de negócio | Recuperação | Corrupção |
+|---|---|---|---|---|---|
+| **Redis down** (antes do fix) | 200 | **pendura indefinidamente** | **pendura** (depósito commitava no Mongo, mas a resposta nunca voltava) | — | nenhuma (ledger/ saldo exatos) |
+| **Redis down** (após o fix) | 200 | 503 em ~0,3s (`redis down`, breaker `OPEN`) | 201/200 rápidos (cache degrada, Mongo responde) | automática em ~9s (breaker `HALF_OPEN`→`CLOSED`, `ready:true`) | nenhuma |
+| **Mongo down** | 200 | 503 imediato (`mongo down`, `disconnected`) | 500 fail-closed, **sem** escrita parcial | automática em ~15s (`state:connected`, `ready:true`) | nenhuma |
+| **Restart do app** | healthy em ~12s | `ready:true` | depósito 201 pós-restart | automática | nenhuma (saldo/ledger idênticos) |
+| **Restart de worker** | — | — | novo saque 201 (distinto); replay do mesmo request deduplicado (`Idempotency-Replayed`) | worker reconecta Mongo/Redis e o recovery scan roda limpo | nenhuma |
+
+**Defeito real encontrado e corrigido (fail-slow do Redis).** Com o Redis fora, a ioredis
+usava os defaults (`enableOfflineQueue: true` + `retryStrategy` infinito), então `get/set/
+del/ping` ficavam enfileirados **para sempre**: `/readiness` e as requisições (inclusive o
+`flushWalletCache` pós-depósito) penduravam até o cliente estourar timeout. O depósito
+commitava atômico no Mongo (sem corrupção), mas o caller nunca recebia resposta — exatamente
+o oposto do "fecha em falha" coberto pelo T2 (que injeta erro imediato). Correção em
+`RedisClient.getRedis()`: `enableOfflineQueue: false`, `maxRetriesPerRequest: 1`,
+`connectTimeout: 2000`, `commandTimeout: 2000`. Agora comandos rejeitam rápido quando
+desconectado, o circuit breaker abre e a readiness responde 503; o cliente reconecta em
+background e volta sozinho. Regressão: novo teste em `RedisClient.test.ts` (config fail-fast)
+— 896 unit verdes.
+
+**3. Critérios de saída atendidos.** Sistema se recupera sozinho das 5 falhas reais
+(app/workers voltam `healthy`, readiness volta a `ready:true`, breaker fecha) e **sem
+corrupção financeira**: saldo e razão (ledger) conferidos no Mongo após cada cenário, com
+idempotência preservada (requests repetidos deduplicados, sem débito duplo).

@@ -49,12 +49,26 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
   - Preparação: 10ª aposta/usuário rejeitava por fundos insuficientes (saldo 981,25 < 10×100)
     → ajustado para 8 apostas cobrindo o saldo; log de motivos de rejeição adicionado.
 
-- [ ] **Fase 3 — Chaos / falhas reais** · PENDENTE (parte do deploy já resolvida acima)
-  - A suíte `src/integration/__tests__/failure.integration.test.ts` já cobre T1–T6 (Mongo cai,
-    Redis cai, idempotência, rollback, worker com entrega duplicada, premiação reentregue) e
-    passa — verificar novamente com `docker compose --profile tests run --rm integration-tests`.
-  - Complementar com falhas reais no ambiente de produção local: Redis indisponível, Mongo
-    indisponível, restart do container da app, restart de worker, recuperação pós-falha.
+- [x] **Fase 3 — Chaos / falhas reais** · concluída (17/set/2026)
+  - Suíte revalidada (`docker compose --profile tests run --rm integration-tests`, imagem
+    `tests` reconstruída): 3/3 suites, 14/14 testes, `LOAD rejected: 0`. T1–T6 verdes.
+  - Falhas reais na produção local (usuário real ponta a ponta + conferência no Mongo):
+    Redis down, Mongo down, restart do app, restart de worker, recuperação pós-falha.
+    - Redis down: liveness 200; readiness 503 fail-fast (~0,3s, breaker OPEN) **após fix**;
+      operações seguem funcionando (cache degrada, Mongo responde); recupera em ~9s.
+    - Mongo down: liveness 200; readiness 503 imediato; escrita fail-closed sem estado
+      parcial; recupera em ~15s.
+    - Restart do app: healthy em ~12s, saldo/ledger intactos, depósito 201.
+    - Restart de worker: reconecta Mongo/Redis, recovery scan limpo, saque novo OK e replay
+      deduplicado (sem débito duplo).
+  - **Defeito real corrigido (fail-slow do Redis)**: ioredis com defaults
+    (`enableOfflineQueue: true` + retry infinito) enfileirava comandos para sempre com o
+    Redis fora → `/readiness` e requests (flushWalletCache pós-depósito) penduravam (o
+    depósito commitava atômico, mas a resposta nunca voltava). Fix em
+    `RedisClient.getRedis()`: `enableOfflineQueue:false`, `maxRetriesPerRequest:1`,
+    `connectTimeout:2000`, `commandTimeout:2000`; regressão em `RedisClient.test.ts`.
+  - **Sem corrupção financeira** em nenhum cenário (saldo + ledger conferidos no Mongo).
+  - Unit: **896 passed / 0 failed** (17 skipped = integração real desligada no host).
 
 - [ ] **Fase 4 — Cobertura** · pendente
   - Meta: elevar cobertura com foco em `RiskService`, `MongooseBetRepository`,
@@ -62,19 +76,21 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
 
 ## Estado do repositório (pré-commit desta sessão)
 
-- Últimos commits pushados: `c830252` (fase 1), `96cb73c` (driver + LOAD_SCALE),
-  `07079fa` (teste-de-stress / fix de concorrência + `target: runtime`).
-- Não commitado nesta sessão (Fase 2b): spec novo
-  `src/integration/__tests__/load.distributed.integration.test.ts`,
-  `scripts/load-driver.cjs` (flag `--distributed`, parser DLOAD, merge do resumo, pasta por
-  modo), `package.json` (`test:load:distributed`), `Plano …MVP.md` (Fase 2b) e este `todo.txt`.
+- Últimos commits pushados: `1dd57ea` (fase 2b), `c830252` (fase 1), `96cb73c`
+  (driver + LOAD_SCALE), `07079fa` (teste-de-stress / fix de concorrência + `target: runtime`).
+- Não commitado nesta sessão (Fase 3): fix do fail-slow do Redis em
+  `src/infrastructure/cache/RedisClient.ts`, teste de regressão em
+  `src/infrastructure/cache/__tests__/RedisClient.test.ts`, `Plano …MVP.md` (Fase 3) e este
+  `todo.txt`.
 - `scripts/load-results/` está no `.gitignore` (dados brutos versionáveis se quiser).
 - `.env` aponta para hostnames internos do docker (`mongodb`, `redis`), que **não resolvem no host**.
+- Usuários/ledgers de teste das falhas reais foram removidos do Mongo ao final (ambiente limpo).
 
 ## Como retomar / comandos úteis
 
 - Suíte unit no host (condição CI; evita `EAI_AGAIN redis`):
-  `node /tmp/opencode/jest-host.cjs --silent` (wrapper que reescreve o host do `REDIS_URL`;
+  `node /tmp/opencode/jest-host.cjs --silent` (wrapper que força `NODE_ENV`/
+  `BACKBET_RUNTIME_ENV=test` e reescreve o host do `REDIS_URL` para o endpoint publicado;
   recriar em `/tmp/opencode/jest-host.cjs` se o tmp foi limpo).
 - Suíte de integração real (dentro da rede do compose):
   `docker compose --profile tests run --rm integration-tests`
