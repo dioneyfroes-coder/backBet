@@ -1,58 +1,76 @@
-Análise geral
+# BackBet — Handoff de execução do plano de finalização (atualizado 17/set/2026)
 
-O projeto está bem estruturado como backend de portfólio ou MVP avançado. A separação por bounded contexts, uso de DDD, interfaces de repositório, factories, testes, validação Zod, observabilidade e suporte a Mongo/Redis são pontos fortes.
+Arquivo de retomada. Plano completo em: `Plano de Finalização e Lançamento do BackBet — MVP.md`.
+Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/failure) → Fase 4 (cobertura).
 
-A base técnica está acima da média, mas eu ainda não classificaria o sistema como pronto para produção financeira. O principal problema é que algumas garantias estão implementadas apenas parcialmente ou dependem de Redis/cache, enquanto operações financeiras exigem persistência durável e atomicidade verificável.
+## Já feito
 
-Riscos mais importantes
+- [x] **Fase 0 — Congelar correção atual** · concluída · commit `252e910`
+  - Revisado o fix de concorrência (`735d7cb`): `WalletService.run()` envolve cada mutação
+    em transação Mongo e re-tenta a transação inteira até 3x em `AppError CONFLICT`
+    (optimistic lock), com backoff `10ms × tentativa`; erro não-CONFLICT propaga direto.
+  - Lacuna fechada: teste de regressão unitário do retry-on-CONFLICT adicionado em
+    `src/core/finance/domain/services/__tests__/WalletService.atomicity.test.ts`.
+- [x] **Fase 1 — Repetibilidade** · concluída · commit `c830252`
+  - Unit hermética: 891 passed / 0 failed em **3/3** execuções (~100s cada).
+  - Integração real: 14 passed em **3/3** execuções, `LOAD rejected: 0` sempre.
+  - Total **905** testes (891 unit + 14 integração) verdes nas 3 iterações.
 
-Saque Pix
+- [x] **Fase 2 — Carga progressiva** · concluída · commit desta fase (código + docs)
+  - Driver `scripts/load-driver.cjs` e parametrização `LOAD_SCALE` já em `96cb73c`.
+  - **Fix de concorrência descoberto na carga 2x**: `WalletService.run()`/`BetService.placeBet()`
+    agora re-executam a unidade inteira também em write-conflict do Mongo (`MongoServerError
+    112` / `TransientTransactionError`), via helper compartilhado
+    `src/core/shared/domain/errors/retryTransient.ts` (25 tentativas, backoff exp. 5→300ms
+    + jitter). Sem isso, 200+ operações na mesma carteira abortavam com 112 sem retry.
+  - **Bug de deploy resolvido**: imagem `backbet:latest` era construída do stage `tests`
+    (Dockerfile termina em `tests`; serviço `backbet` não declarava `target`) → app rodava
+    jest e workers crashavam `MODULE_NOT_FOUND dist/scripts/...`. Fix: `target: runtime` no
+    `docker-compose.yml`. App `healthy` (200) e workers up validados. **Sana o item da Fase 3.**
+  - Medições (ambiente limpo): [1x/2x/5x com LOAD rejected 0 sempre].
+    1x=14/14 (229s wall); 2x=14/14 (691s); 5x=13/14 — depósitos na MESMA carteira (500 ops)
+    não convergiram em 30min (timeout), mas 2500 apostas e saques ficaram 100% e sem rejeição.
+    **Teto**: contenção extrema single-carteira não converge acima de ~200 ops em 4 vCPUs.
+    Tabela e justificativa no `Plano …MVP.md`. Dados em `scripts/load-results/` (gitignored).
+  - Timeout por teste da suíte de carga: 600s → 1800s.
 
-O pagamento externo pode ser iniciado antes do débito interno.
-Uma falha posterior pode gerar pagamento sem débito correspondente.
-Falta reconciliação completa, webhook e estados como PENDING, FAILED e REVERSED.
-Idempotência
+- [ ] **Fase 3 — Chaos / falhas reais** · PENDENTE (parte do deploy já resolvida acima)
+  - A suíte `src/integration/__tests__/failure.integration.test.ts` já cobre T1–T6 (Mongo cai,
+    Redis cai, idempotência, rollback, worker com entrega duplicada, premiação reentregue) e
+    passa — verificar novamente com `docker compose --profile tests run --rm integration-tests`.
+  - Complementar com falhas reais no ambiente de produção local: Redis indisponível, Mongo
+    indisponível, restart do container da app, restart de worker, recuperação pós-falha.
 
-A chave ainda é opcional.
-O resultado fica no Redis, não em um registro financeiro único no Mongo.
-Expiração ou indisponibilidade do Redis pode permitir duplicidade.
-Risco
+- [ ] **Fase 4 — Cobertura** · pendente
+  - Meta: elevar cobertura com foco em `RiskService`, `MongooseBetRepository`,
+    `MongooseUserRepository`, `WithdrawalPayoutWorker`.
 
-canPlaceBet ainda segue padrão check-then-act.
-Apostas simultâneas podem ultrapassar limites de exposição.
-A exposição pode ser contada duas vezes: pelas apostas pendentes e pelo valor persistido.
-Dinheiro
+## Estado do repositório (pré-commit desta sessão)
 
-Money e BetAmount melhoraram bastante ao usar centavos internamente.
-Porém a fronteira inteira ainda usa number: DTOs, entidades, schemas Mongo e relatórios.
-Para produção financeira, o ideal é padronizar centavos como bigint, Decimal128 ou uma biblioteca decimal em todo o fluxo.
-Persistência
+- Últimos commits pushados: `c830252` (fase 1), `96cb73c` (driver + LOAD_SCALE).
+- Não commitado: fix de concorrência (WalletService/BetService + retryTransient + testes),
+  `docker-compose.yml` (target runtime), suíte de carga (timeout 1800s), `Plano …MVP.md`
+  (tabela Fase 2) e este `todo.txt`.
+- `scripts/load-results/` está no `.gitignore` (dados brutos versionáveis se quiser).
+- `.env` aponta para hostnames internos do docker (`mongodb`, `redis`), que **não resolvem no host**.
 
-Eventos e partidas ainda possuem adapters em memória.
-O histórico está embutido na Wallet.
-Ainda não há ledger financeiro imutável nem Outbox para efeitos externos.
-Segurança
+## Como retomar / comandos úteis
 
-pixKey aparece em metadata/logs e deveria ser mascarada.
-uploads parece estar exposto sem restrição de ambiente.
-O uso de X-Forwarded-For precisa depender de proxy confiável.
-O limite global de body de 10 MB é alto para todas as rotas.
-Testes
+- Suíte unit no host (condição CI; evita `EAI_AGAIN redis`):
+  `node /tmp/opencode/jest-host.cjs --silent` (wrapper que reescreve o host do `REDIS_URL`;
+  recriar em `/tmp/opencode/jest-host.cjs` se o tmp foi limpo).
+- Suíte de integração real (dentro da rede do compose):
+  `docker compose --profile tests run --rm integration-tests`
+  (após mexer em `src`, **rebuildar**: `docker compose build integration-tests`).
+- Carga progressiva: `node scripts/load-driver.cjs <escala>`.
+  - **Atenção**: 5x demora ~60min (depósitos single-carteira estouram 1800s). Para checar
+    convergência sem timeout: rodar só a suíte de carga com timeout maior ou aceitar o teto.
+- Rebuild de produção quando mexer no Dockerfile: `docker compose build backbet` (faz `target: runtime`).
+- Suíte direta `npm test` no host falha 8 suítes por timeout (hostnames internos), não por regressão.
 
-A cobertura funcional é boa, mas muitos testes usam mocks e adapters em memória.
-A suíte real MongoDB + Redis está preparada, mas ainda depende do outro computador.
-Ainda falta testar atomicidade real de Wallet + Bet + Risk em Mongo replica set.
-Minha opinião
+## Ambiente observado
 
-O projeto tem uma arquitetura boa e demonstra maturidade de engenharia. A nota alta em TypeScript, organização e arquitetura é coerente. A nota baixa em concorrência e “pronto para produção financeira” também é justa.
-
-O código está em um estágio de MVP robusto / backend de portfólio avançado, não de produção financeira definitiva. Os próximos trabalhos devem ser exclusivamente:
-
-executar os testes reais MongoDB + Redis;
-corrigir saque e reconciliação;
-persistir idempotência no Mongo;
-eliminar a dupla contagem de risco;
-padronizar dinheiro exato ponta a ponta;
-mascarar dados sensíveis;
-revisar documentação contra o comportamento real.
-Depois disso, o correto é parar de adicionar funcionalidades e concentrar-se em auditoria, testes de falha, segurança e operação.
+- Host: 4 vCPUs, load ~13 (wekan/microk8s/snapd/docker competindo) — usar timeouts generosos.
+- Infra de produção local: Mongo `192.168.22.250:27018` (rs0, member `mongodb:27017`), Redis
+  `192.168.22.250:6379`, app `backbet` (porta 3001→3000, **health 200 desde o target: runtime**),
+  workers up.

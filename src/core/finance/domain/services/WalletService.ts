@@ -5,10 +5,10 @@ import { ILedgerRepository } from '../repositories/ILedgerRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
-import { AppError } from '@/shared/errors/AppError';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
 import { randomUUID } from 'crypto';
+import { retryTransient } from '@/core/shared/domain/errors/retryTransient';
 import { depositsCounter, withdrawalsCounter } from '@/infrastructure/observability/metrics';
 
 export class WalletService {
@@ -20,41 +20,27 @@ export class WalletService {
   /**
    * Executa a operação financeira como uma unidade atômica: quando nenhuma
    * sessão foi fornecida pelo chamador e o repository suporta transações
-   * Mongo, a mutação da Wallet e a entrada do Ledger rodam na MESMA transação.
-   * Se alguma etapa falhar (inclusive appendLedger), tudo é revertido.
+   * Mongo, a mutação da Wallet e a entrada do Ledger rodam na MESMA transação,
+   * e a unidade inteira é re-executada em conflito transitório de concorrência
+   * (optimistic lock CONFLICT ou write-conflict do Mongo — ver
+   * `isTransientConcurrencyError`). Se alguma etapa falhar (inclusive
+   * appendLedger), tudo é revertido.
    */
-  private async run<T>(
+  private run<T>(
     work: (options?: WalletRepositoryOptions) => Promise<T>,
     givenOptions?: WalletRepositoryOptions,
   ): Promise<T> {
     if (givenOptions) return work(givenOptions);
 
-    if (!this.walletRepository.withTransaction) {
+    const walletRepository = this.walletRepository;
+    if (!walletRepository.withTransaction) {
       return work(undefined);
     }
 
-    const maxAttempts = 3;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        return await this.walletRepository.withTransaction((session) =>
-          work({ session }),
-        );
-      } catch (error: unknown) {
-        const isConflict =
-          error instanceof AppError &&
-          error.code === 'CONFLICT';
-
-        if (!isConflict || attempt === maxAttempts) {
-          throw error;
-        }
-
-        const delayMs = 10 * attempt;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-
-    throw new Error('Wallet transaction retry exhausted');
+    return retryTransient(() =>
+      walletRepository.withTransaction!((session) => work({ session })),
+      { label: 'WalletService.run' },
+    );
   }
 
   async createWallet(input: ICreateWalletDTO): Promise<Wallet> {

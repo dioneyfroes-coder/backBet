@@ -139,6 +139,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     image: backbet:latest
     restart: unless-stopped
     env_file:

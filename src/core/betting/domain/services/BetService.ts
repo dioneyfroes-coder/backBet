@@ -14,6 +14,7 @@ import { TransactionRunner, TransactionSession } from '@/core/shared/types/Trans
 import { WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 import { appConfig } from '@/shared/config/appConfig';
+import { retryTransient } from '@/core/shared/domain/errors/retryTransient';
 import {
   betsPlacedCounter,
   betsRejectedCounter,
@@ -113,9 +114,13 @@ export class BetService {
       }
       return bet;
     };
-    const bet = this.transactionRunner
-      ? await this.transactionRunner.withTransaction(operation)
-      : await operation();
+    const bet = await retryTransient(
+      () =>
+        this.transactionRunner
+          ? this.transactionRunner!.withTransaction(operation)
+          : operation(),
+      { label: 'BetService.placeBet' },
+    );
 
     betsPlacedCounter.inc();
     return bet;

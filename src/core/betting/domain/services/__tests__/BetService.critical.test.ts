@@ -173,4 +173,47 @@ describe('BetService — cenários críticos (Fase 20)', () => {
     const debitSum = debits.reduce((sum, entry) => sum + entry.amountCents, 0);
     expect(debitSum).toBe(100 * fulfilled.length * 100);
   });
+
+  it('write-conflict do Mongo na transação (MongoServerError 112): re-executa a aposta inteira', async () => {
+    const harness = createHarness();
+    let attempts = 0;
+    const writeConflict = () =>
+      Object.assign(new Error('Write conflict during plan execution and yielding is disabled.'), {
+        name: 'MongoServerError',
+        code: 112,
+      });
+    const runner: TransactionRunner = {
+      withTransaction: async (work) => {
+        attempts += 1;
+        if (attempts === 1) throw writeConflict();
+        return withRollback(harness, work);
+      },
+    };
+    const betService = new BetService(
+      harness.betRepo,
+      harness.eventRepo,
+      harness.walletService,
+      allowedRisk,
+      runner,
+    );
+
+    await harness.walletService.createWallet({ userId: USER_ID, currency: 'BRL' });
+    await harness.walletService.deposit(USER_ID, 1000, {
+      type: 'DEPOSIT',
+      referenceId: 'seed-write-conflict',
+      source: 'DEPOSIT',
+    });
+
+    const bet = await betService.placeBet(baseInput(USER_ID));
+
+    expect(attempts).toBe(2);
+    expect(bet.status).toBe('PENDING');
+
+    const wallet = await harness.walletService.findByUserId(USER_ID);
+    expect(wallet?.balance).toBe(900);
+    expect(wallet?.lockedBalance).toBe(0);
+    await expect(harness.betRepo.findByUserId(USER_ID)).resolves.toHaveLength(1);
+    const { entries } = await harness.walletService.getLedgerHistory(USER_ID, 500, 0);
+    expect(entries.filter((entry) => entry.type === 'BET_DEBIT')).toHaveLength(1);
+  });
 });

@@ -91,3 +91,50 @@ Protocolo de execução no host (todas as 3 iterações **verdes**):
   `Restarting (1)` — `MODULE_NOT_FOUND: dist/scripts/start-withdrawal-worker.js` /
   `start-contact-worker.js` no container (`dist/` sem `scripts/`); app `backbet` saudável;
   `dist/` local não existe (build ainda não executado no dev).
+
+### Fase 2 — Carga progressiva · concluída (17/set/2026)
+
+**Correções feitas durante a fase** (mudanças de código, commit desta fase):
+
+1. **Retry de concorrência transitória (write-conflict do Mongo)** — a escala 2x (200 ops
+   na mesma carteira) expôs que `WalletService.run()` só re-tentava o optimistic lock da
+   aplicação (`AppError CONFLICT`); sob acúmulo, o próprio WiredTiger aborta transações
+   concorrentes com `MongoServerError 112` (*Write conflict during plan execution*) e isso
+   **não** era re-tentado → rejeições. Novo helper compartilhado
+   `retryTransient()` em `src/core/shared/domain/errors/retryTransient.ts` re-executa a
+   unidade inteira (25 tentativas, backoff exponencial 5→300ms + jitter) para ambos:
+   `CONFLICT` e erros Mongo transitórios (`112`, `TransientTransactionError`,
+   `UnknownTransactionCommitResult`). Aplicado em `WalletService.run()` e em
+   `BetService.placeBet()` (que roda a aposta toda dentro de uma transação externa e
+   repassava a sessão ao wallet, pulando o retry interno).
+2. **Bug de deploy raiz resolvido**: `backbet:latest` estava sendo construída do **stage
+   `tests`** (o arquivo `Dockerfile` termina no target `tests` e o serviço `backbet` não
+   declarava `target`). Resultado: a imagem de "produção" era a de testes — `CMD
+   run-integration-tests.cjs`, **sem `dist/`** → app rodava jest no lugar da API e os
+   workers crash-loopavam `MODULE_NOT_FOUND dist/scripts/…`. Corrigido com
+   `target: runtime` no `docker-compose.yml`; imagem reconstruída, app `healthy` (200) e
+   os dois workers subindo normalmente. Isso **já sana o bug apontado para a Fase 3**.
+3. Timeout por teste da suíte de carga elevado de 600s → **1800s** (medida de carga real).
+
+**Medições (ambiente limpo — app/workers corretos; 4 vCPUs, host com load alto):**
+
+| Escala | ops depósito (1 carteira) | saques | apostas | `LOAD rejected` | Suite (jest) | wall |
+|---|---|---|---|---|---|---|
+| 1x (100) | 100/100 em 67,8s | 50 ok / 50 rej. em 37,6s | 500/500 em 70,6s | **0** | 14/14 (219,8s) | 229s |
+| 2x (200) | 200/200 em 402,9s | 50 ok / 150 rej. em 95,4s | 1000/1000 em 135,8s | **0** | 14/14 (677,3s) | 691s |
+| 5x (500) | **timeout >1800s** (não todos) | 50 ok / 450 rej. em 1049,5s | 2500/2500 em 678,7s | **0** | 13/14 (3583,0s) | 3605s |
+
+- Resultado-chave: em **todas** as escalas até 5x, **nenhuma operação é perdida nem
+  rejeitada por corrupção** (`LOAD rejected: 0`): saques e **2500 apostas simultâneas**
+  convergem com zero rejeições.
+- **Teto documentado**: o ponto de degradação é o teste patológico de **N depósitos
+  simultâneos numa única carteira**. À medida que N cresce (100→200→500), a escrita no
+  mesmo documento serializa e o throughput cai (1,5 → 0,5 → <0,4 ops/s); em **5x (500
+  ops) não converge dentro de 30min** no host atual (4 vCPUs, load ~13). Não é perda de
+  dado: é limite de tempo/durabilidade para esse cenário de contenção extrema.
+- Dados brutos em `scripts/load-results/scale-{1,2,5}/` (gitignored; `scale-10` não foi
+  executado — interrompido, seguia o mesmo padrão de timeout).
+- Ação de cross-check: fix do retry validado por 6 novos testes unitários
+  (`WalletService.atomicity`: 112 transitório re-executa, 112 persistente esgota 25
+  tentativas sem ledger, duplicate-key não re-tenta; `BetService.critical`:
+  write-conflict re-executa a aposta inteira com débito único).

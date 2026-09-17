@@ -63,7 +63,7 @@ const wallNow = (): { startedAt: number; mark: () => number } => {
 };
 
 describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
-  jest.setTimeout(600_000);
+  jest.setTimeout(1_800_000);
 
   const runId = randomUUID();
   const prefix = `load-${runId}`;

@@ -119,7 +119,78 @@ describe('WalletService — atomicidade Wallet + Ledger', () => {
       service.deposit('u-retry-fail', 50, { type: 'DEPOSIT', referenceId: 'ref-r2', source: 'CREDIT_PACKAGE' }),
     ).rejects.toMatchObject({ code: 'CONFLICT', statusCode: 409 });
 
-    expect(repo.withTransaction).toHaveBeenCalledTimes(3);
+    expect(repo.withTransaction).toHaveBeenCalledTimes(25);
+    expect(ledger.append).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it('MongoServerError 112 (write conflict) transitório: re-executa e conclui', async () => {
+    const wallet = new Wallet('u-m112-ok', 'BRL');
+    let attempts = 0;
+    const writeConflict = () =>
+      Object.assign(new Error('Write conflict during plan execution and yielding is disabled. Please retry your operation or multi-document transaction.'), {
+        name: 'MongoServerError',
+        code: 112,
+      });
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        attempts += 1;
+        if (attempts === 1) throw writeConflict();
+        return work({ id: 's-m112' });
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await service.deposit('u-m112-ok', 100, { type: 'DEPOSIT', referenceId: 'ref-r3', source: 'CREDIT_PACKAGE' });
+
+    expect(repo.withTransaction).toHaveBeenCalledTimes(2);
+    expect(ledger.append).toHaveBeenCalledTimes(1);
+    expect(wallet.balance).toBe(100);
+  });
+
+  it('MongoServerError 112 persistente esgota as tentativas e rejeita sem gravar o ledger', async () => {
+    const wallet = new Wallet('u-m112-fail', 'BRL');
+    const writeConflict = () =>
+      Object.assign(new Error('Write conflict during plan execution and yielding is disabled.'), {
+        name: 'MongoServerError',
+        code: 112,
+      });
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        throw writeConflict();
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await expect(service.deposit('u-m112-fail', 50)).rejects.toMatchObject({
+      name: 'MongoServerError',
+      code: 112,
+    });
+
+    expect(repo.withTransaction).toHaveBeenCalledTimes(25);
+    expect(ledger.append).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it('MongoServerError NÃO transitório (ex. duplicate key) não é re-tentado', async () => {
+    const wallet = new Wallet('u-m11000', 'BRL');
+    const repo = {
+      ...baseWalletRepoMock(wallet),
+      withTransaction: jest.fn(async <T>(work: (s: unknown) => Promise<T>) => {
+        throw Object.assign(new Error('E11000 duplicate key error'), { name: 'MongoServerError', code: 11000 });
+      }),
+    };
+    const ledger = baseLedgerMock();
+    const service = new WalletService(repo as never, ledger as never);
+
+    await expect(service.deposit('u-m11000', 10)).rejects.toMatchObject({
+      name: 'MongoServerError',
+      code: 11000,
+    });
+
+    expect(repo.withTransaction).toHaveBeenCalledTimes(1);
     expect(ledger.append).not.toHaveBeenCalled();
   });
 
