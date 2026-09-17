@@ -66,10 +66,12 @@ Ambientes, env vars e troubleshooting: `docs/QUICKSTART.mdx` e `docs/MONGODB_SET
 | `npm run test:coverage` | Unitária + cobertura |
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) |
 | `npm run test:integration` | Suíte real (MongoDB replica set + Redis via `docker-compose.test.yml`) |
+| `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) contra a infra real |
+| `npm run test:load:distributed` | Carga **distribuída** (N carteiras distintas, eixo horizontal) |
 | `npm run check` | `check:secrets` + lint + cobertura + build (gate completo) |
 | `npm run test:infra:reset` | Sobe infra de teste do zero |
 
-Guia completo: `docs/TESTING-ENV.mdx`; matriz de cenários críticos de dinheiro: `docs/MATRIX-CENARIOS-CRITICOS.mdx`.
+Guia completo: `docs/TESTING-ENV.mdx`; carga/concorrência: `docs/LOAD-TESTING.mdx`; matriz de cenários críticos de dinheiro: `docs/MATRIX-CENARIOS-CRITICOS.mdx`.
 
 ## Como usar a API
 
@@ -107,6 +109,7 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 
 - **Idempotência**: escritas críticas reservam a chave no Redis (`SET NX`); replay da mesma chave retorna o mesmo resultado (`Idempotency-Replayed: true`), payload diferente → `409`, reserva em andamento → `409`.
 - **Locking otimista**: `HouseWallet`/carteiras usam `version`; escrita com versão obsoleta retorna `409 CONFLICT` (retry do cliente).
+- **Retry transitório**: `WalletService.run()`/`BetService.placeBet()` re-executam a unidade inteira em `CONFLICT` **e** em write-conflict transitório do Mongo (`112`/`TransientTransactionError`), com backoff exponencial + jitter (`src/core/shared/domain/errors/retryTransient.ts`). Validado sob carga (ver `docs/LOAD-TESTING.mdx`).
 - **Filas**: operações assíncronas (contato, saque) vão para Bull; falhas são registradas e processadas posteriormente.
 - **Persistência transacional**: Mongo como replica set habilita transações (wallet/ledger/bet/treasury) atômicas.
 
@@ -135,7 +138,7 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 
 **Deploy & operação**: `docs/DEPLOY.mdx` · `docs/DOCKER.mdx` · `docs/BACKUP_RECOVERY.mdx` · `docs/SECRETS.mdx` · `docs/SECURITY-OPS.mdx` · `docs/AUDIT_RETENTION.mdx` · `docs/SIGAP_CONFORMIDADE.mdx`
 
-**Testes & QA**: `docs/TESTING-ENV.mdx` · `docs/MATRIX-CENARIOS-CRITICOS.mdx`
+**Testes & QA**: `docs/TESTING-ENV.mdx` · `docs/LOAD-TESTING.mdx` · `docs/MATRIX-CENARIOS-CRITICOS.mdx`
 
 **Governança**: `docs/CONTRIBUTING.mdx` · `docs/CONTRIBUTORS.mdx` · `docs/LICENSE.mdx`
 

@@ -34,6 +34,21 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
     Tabela e justificativa no `Plano …MVP.md`. Dados em `scripts/load-results/` (gitignored).
   - Timeout por teste da suíte de carga: 600s → 1800s.
 
+- [x] **Fase 2b — Carga distribuída (eixo horizontal)** · concluída (17/set/2026)
+  - Novo spec `src/integration/__tests__/load.distributed.integration.test.ts`: mesmo
+    `LOAD_SCALE`, mas cada operação toca **documento distinto** (`WALLETS = 100 × escala`
+    carteiras, cada uma com evento/mercado próprio; 25 depósitos + 25 saques por carteira;
+    8 apostas/usuário). Ondas de `min(WALLETS,100)` com operações sequenciais por doc.
+  - Flags novas no driver: `node scripts/load-driver.cjs --distributed 1 2 5 10`; pasta de
+    saída separada por modo (`scale-<N>-distributed`); `resumo.json` acumula por
+    `scale`+`mode`. Script npm `test:load:distributed`.
+  - Resultado: 3/3 verde e `DLOAD rejected: 0` em **1x/2x/5x/10x** (até 25000 depósitos +
+    25000 saques + 8000 apostas). Throughput ~constante (depósitos ~73→86/s, saques ~51/s,
+    apostas ~23/s) → **escala horizontal ~linear, sem timeout**. Prova que o teto de 5x era
+    contenção de doc único, não a aplicação. Tabela no `Plano …MVP.md` (Fase 2b).
+  - Preparação: 10ª aposta/usuário rejeitava por fundos insuficientes (saldo 981,25 < 10×100)
+    → ajustado para 8 apostas cobrindo o saldo; log de motivos de rejeição adicionado.
+
 - [ ] **Fase 3 — Chaos / falhas reais** · PENDENTE (parte do deploy já resolvida acima)
   - A suíte `src/integration/__tests__/failure.integration.test.ts` já cobre T1–T6 (Mongo cai,
     Redis cai, idempotência, rollback, worker com entrega duplicada, premiação reentregue) e
@@ -47,10 +62,12 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
 
 ## Estado do repositório (pré-commit desta sessão)
 
-- Últimos commits pushados: `c830252` (fase 1), `96cb73c` (driver + LOAD_SCALE).
-- Não commitado: fix de concorrência (WalletService/BetService + retryTransient + testes),
-  `docker-compose.yml` (target runtime), suíte de carga (timeout 1800s), `Plano …MVP.md`
-  (tabela Fase 2) e este `todo.txt`.
+- Últimos commits pushados: `c830252` (fase 1), `96cb73c` (driver + LOAD_SCALE),
+  `07079fa` (teste-de-stress / fix de concorrência + `target: runtime`).
+- Não commitado nesta sessão (Fase 2b): spec novo
+  `src/integration/__tests__/load.distributed.integration.test.ts`,
+  `scripts/load-driver.cjs` (flag `--distributed`, parser DLOAD, merge do resumo, pasta por
+  modo), `package.json` (`test:load:distributed`), `Plano …MVP.md` (Fase 2b) e este `todo.txt`.
 - `scripts/load-results/` está no `.gitignore` (dados brutos versionáveis se quiser).
 - `.env` aponta para hostnames internos do docker (`mongodb`, `redis`), que **não resolvem no host**.
 
@@ -62,9 +79,11 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
 - Suíte de integração real (dentro da rede do compose):
   `docker compose --profile tests run --rm integration-tests`
   (após mexer em `src`, **rebuildar**: `docker compose build integration-tests`).
-- Carga progressiva: `node scripts/load-driver.cjs <escala>`.
-  - **Atenção**: 5x demora ~60min (depósitos single-carteira estouram 1800s). Para checar
-    convergência sem timeout: rodar só a suíte de carga com timeout maior ou aceitar o teto.
+- Carga de CONTENÇÃO (mesma carteira): `node scripts/load-driver.cjs 1 2 5 10`.
+  - **Atenção**: 5x demora ~60min (depósitos single-carteira estouram 1800s) — teto conhecido.
+- Carga DISTRIBUÍDA (carteiras distintas): `node scripts/load-driver.cjs --distributed 1 2 5 10`.
+  - Escala 10x leva ~20min só de wall (25000 dep + 25000 saques + 8000 apostas), tudo verde.
+  - Requer `docker compose build integration-tests` após mudanças em `src`.
 - Rebuild de produção quando mexer no Dockerfile: `docker compose build backbet` (faz `target: runtime`).
 - Suíte direta `npm test` no host falha 8 suítes por timeout (hostnames internos), não por regressão.
 

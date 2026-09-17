@@ -7,16 +7,22 @@
  * Uso:
  *   node scripts/load-driver.cjs <scale>        (ex.: 1, 2, 5, 10)
  *   node scripts/load-driver.cjs 1 2 5 10       (sequencial)
+ *   node scripts/load-driver.cjs --distributed 1 2 5
+ *
+ * Por padrão roda a suíte de CONTENÇÃO (load.concurrency — N ops na mesma
+ * carteira). Com `--distributed` roda a suíte de carga distribuída
+ * (load.distributed — N carteiras distintas, eixo horizontal) e grava os
+ * resultados com os marcadores DLOAD*.
  *
  * Para cada escala:
  *   - inicia um amostrador de recursos em background (docker stats + opcounters
  *     MongoDB + INFO do Redis), sem expor segredos (lê credenciais do env interno
  *     dos containers de produção);
  *   - roda a suíte de integração real via `docker compose --profile tests run`,
- *     passando LOAD_SCALE=<escala>;
+ *     passando LOAD_SCALE=<escala> e o spec selecionado;
  *   - captura a saída e extrai: tempo, operações realizadas, rejeições, falhas;
- *   - grava CSVs + resumo por escala em scripts/load-results/scale-<N>/ e o
- *     agregado em scripts/load-results/resumo.json.
+ *   - grava CSVs + resumo por escala em scripts/load-results/scale-<N>-<mode>/ e o
+ *     agregado (por scale+mode) em scripts/load-results/resumo.json.
  */
 
 const { spawnSync, spawn } = require('child_process');
@@ -29,7 +35,13 @@ const MONGO = 'backbet-mongodb-1';
 const REDIS = 'backbet-redis-1';
 const APP = 'backbet-backbet-1';
 
-const scales = process.argv.slice(2).filter((a) => /^\d+$/.test(a)).map(Number);
+const SPEC_CONCURRENCY = 'src/integration/__tests__/load.concurrency.integration.test.ts';
+const SPEC_DISTRIBUTED = 'src/integration/__tests__/load.distributed.integration.test.ts';
+
+const argv = process.argv.slice(2);
+const distributed = argv.includes('--distributed');
+const spec = distributed ? SPEC_DISTRIBUTED : SPEC_CONCURRENCY;
+const scales = argv.filter((a) => /^\d+$/.test(a)).map(Number);
 if (scales.length === 0) scales.push(1);
 
 function sh(args, opts = {}) {
@@ -41,8 +53,8 @@ function runContainerName() {
   return (r.stdout || '').trim().split('\n').filter(Boolean);
 }
 
-function startSampler(scale) {
-  const dir = path.join(outRoot, `scale-${scale}`);
+function startSampler(dirName) {
+  const dir = path.join(outRoot, dirName);
   fs.mkdirSync(dir, { recursive: true });
   const cpuRam = path.join(dir, 'cpu-ram.csv');
   const mongoCsv = path.join(dir, 'mongo.csv');
@@ -102,11 +114,21 @@ function startSampler(scale) {
 
 function runSuite(scale) {
   return new Promise((resolve) => {
-    const child = spawn(
-      'docker',
-      ['compose', '--profile', 'tests', 'run', '--rm', '-e', `LOAD_SCALE=${scale}`, 'integration-tests'],
-      { cwd: root },
-    );
+    const args = [
+      'compose',
+      '--profile',
+      'tests',
+      'run',
+      '--rm',
+      '-e',
+      `LOAD_SCALE=${scale}`,
+      'integration-tests',
+      'node',
+      'scripts/run-integration-tests.cjs',
+      '--',
+      spec,
+    ];
+    const child = spawn('docker', args, { cwd: root });
     let output = '';
     const started = Date.now();
     child.stdout.on('data', (d) => { output += d; });
@@ -118,10 +140,26 @@ function runSuite(scale) {
 
 function parseOut(text, scale) {
   const res = {};
-  res['LOAD rejected'] = (text.match(/LOAD rejected:\s*(\d+)/) || [])[1];
-  res['deposits'] = (text.match(/LOAD deposits: ([^\n]+)/) || [])[1];
-  res['withdrawals'] = (text.match(/LOAD withdrawals: ([^\n]+)/) || [])[1];
-  res['bets'] = (text.match(/LOAD bets: ([^\n]+)/) || [])[1];
+  const loadOrDload = (key, digitsOnly) => {
+    const d = new RegExp(`DLOAD ${key}:\\s*([^\\n]+)`).exec(text);
+    if (d) return { source: 'DLOAD', match: d[1] };
+    const l = new RegExp(`LOAD ${key}:\\s*(${digitsOnly ? '\\d+' : '[^\\n]+'})`).exec(text);
+    if (l) return { source: 'LOAD', match: l[1] };
+    return undefined;
+  };
+
+  const rejected = loadOrDload('rejected', true);
+  if (rejected) res['LOAD rejected'] = rejected.match;
+
+  const deposits = loadOrDload('deposits');
+  if (deposits) res[`${deposits.source} deposits`] = deposits.match;
+  const withdrawals = loadOrDload('withdrawals');
+  if (withdrawals) res[`${withdrawals.source} withdrawals`] = withdrawals.match;
+  const bets = loadOrDload('bets');
+  if (bets) res[`${bets.source} bets`] = bets.match;
+  const total = new RegExp('DLOAD total ops: ([^\\n]+)').exec(text);
+  if (total) res['DLOAD total ops'] = total[1];
+
   res['Tests:'] = (text.match(/Tests:\s*([^\n]+)/) || [])[1];
   res['Test Suites:'] = (text.match(/Test Suites:\s*([^\n]+)/) || [])[1];
   res['jest Time:'] = (text.match(/Time:\s*([^\n]+)/) || [])[1];
@@ -188,10 +226,19 @@ function summarize(dir, res) {
 }
 
 async function main() {
-  const all = [];
+  const resumoPath = path.join(outRoot, 'resumo.json');
+  let all = [];
+  try {
+    if (fs.existsSync(resumoPath)) all = JSON.parse(fs.readFileSync(resumoPath, 'utf8'));
+  } catch {
+    all = [];
+  }
+  const mode = distributed ? 'distributed' : 'contention';
+  const label = distributed ? 'DISTRIBUÍDA' : 'CONTENÇÃO';
   for (const scale of scales) {
-    console.log(`\n===== CARGA PROGRESSIVA — LOAD_SCALE=${scale} =====`);
-    const sampler = startSampler(scale);
+    const dirName = `scale-${scale}-${mode}`;
+    console.log(`\n===== CARGA PROGRESSIVA ${label} — LOAD_SCALE=${scale} =====`);
+    const sampler = startSampler(dirName);
     const r = await runSuite(scale);
     sampler.stop();
 
@@ -202,20 +249,27 @@ async function main() {
     res.exit = r.status;
 
     const sum = summarize(sampler.dir, res);
-    const agg = { scale, ...res, ...sum };
-    all.push(agg);
+    const agg = { scale, mode, spec, ...res, ...sum };
+    const idx = all.findIndex((e) => e.scale === scale && e.mode === mode);
+    if (idx >= 0) all[idx] = agg;
+    else all.push(agg);
 
     fs.writeFileSync(
-      path.join(outRoot, `scale-${scale}`, 'resumo.json'),
+      path.join(outRoot, dirName, 'resumo.json'),
       JSON.stringify(agg, null, 2),
     );
-    fs.writeFileSync(path.join(outRoot, 'resumo.json'), JSON.stringify(all, null, 2));
+    fs.writeFileSync(resumoPath, JSON.stringify(all, null, 2));
 
-    console.log(`LOAD_SCALE=${scale} => exit=${r.status} wall=${res.wallSec}s`);
+    console.log(`LOAD_SCALE=${scale} (${distributed ? 'DLOAD' : 'LOAD'}) => exit=${r.status} wall=${res.wallSec}s`);
     console.log('  resultado suite:', {
       tests: res['Tests:'],
       suites: res['Test Suites:'],
       rejected: res['LOAD rejected'],
+      ops: {
+        deposits: res['DLOAD deposits'] ?? res['LOAD deposits'],
+        withdrawals: res['DLOAD withdrawals'] ?? res['LOAD withdrawals'],
+        bets: res['DLOAD bets'] ?? res['LOAD bets'],
+      },
     });
     console.log('  CPU média/pico:', sum.cpu);
     console.log('  Mongo opcounters:', sum.mongo);

@@ -138,3 +138,48 @@ Protocolo de execução no host (todas as 3 iterações **verdes**):
   (`WalletService.atomicity`: 112 transitório re-executa, 112 persistente esgota 25
   tentativas sem ledger, duplicate-key não re-tenta; `BetService.critical`:
   write-conflict re-executa a aposta inteira com débito único).
+
+### Fase 2b — Carga distribuída (eixo horizontal) · concluída (17/set/2026)
+
+**Motivação.** A suíte de contenção (`load.concurrency`) mede o eixo **vertical**: N
+operações no **mesmo documento** (carteira única). O timeout em 5x é o teto patológico
+desse cenário e **não** representa falha de escala da aplicação — é serialização de um
+documento no WiredTiger. Para medir o eixo **horizontal** (o que importa para lançamento)
+criou-se o spec `src/integration/__tests__/load.distributed.integration.test.ts`, com o
+mesmo parâmetro `LOAD_SCALE`, mas cada operação toca **documento distinto**:
+
+- `WALLETS = 100 × LOAD_SCALE` carteiras/usuários distintos; cada usuário tem **seu próprio
+  evento/mercado** (sem contenção de contador de risco).
+- Por carteira as operações são **sequenciais** (uma de cada vez naquele doc); carteiras
+  correm em paralelo em **ondas** de `min(WALLETS, 100)` (`runChains`). Assim nenhum
+  documento recebe escrita concorrente — mede-se throughput de docs independentes.
+- Carga: 25 depósitos + 25 saques por carteira; 8 apostas por usuário (800 ≤ saldo
+  pós-saques 981,25 → todas cobertas, rejeição legítima = 0).
+- Asserts de integridade: saldo exato por carteira, contagem de ledger (`DEPOSIT`,
+  `WITHDRAWAL_COMPLETED`, `BET_DEBIT`), exposição por usuário/evento/mercado, **0 rejeições**.
+
+**Medições (infra de produção local, 4 vCPUs, host com load alto):**
+
+| Escala | carteiras | depósitos (ops/s) | saques (ops/s) | apostas (ops/s) | `DLOAD rejected` | suite | wall |
+|---|---|---|---|---|---|---|---|
+| 1x | 100 | 2500 (72,9) | 2500 (51,4) | 800 (22,5) | **0** | 3/3 | 152s |
+| 2x | 200 | 5000 (77,9) | 5000 (51,0) | 1600 (22,1) | **0** | 3/3 | 265s |
+| 5x | 500 | 12500 (86,3) | 12500 (51,5) | 4000 (23,6) | **0** | 3/3 | 602s |
+| 10x | 1000 | 25000 (86,2) | 25000 (51,1) | 8000 (22,8) | **0** | 3/3 | 1188s |
+
+- **Resultado-chave**: o **throughput por fase fica ~constante** de 1x a 10x (depósitos
+  ~73→86/s, saques ~51/s, apostas ~23/s). O trabalho total escala linearmente com a
+  escala e **não há degradação nem timeout** — em contraste direto com o cenário de
+  contenção (que cai de 1,5 para <0,4 ops/s e estoura em 5x). Confirma que **o teto
+  anterior era contenção de documento único, não capacidade da aplicação/Mongo**.
+- CPU do Mongo ~27–32% médio (pico ~118%); conexões médias ~90–122; `queue_total` = 0
+  (nenhuma fila de lock no Mongo); Redis ocioso (~2 ops/s); app `backbet` ~2% médio.
+- Dados brutos em `scripts/load-results/scale-{1,2,5,10}-distributed/` (gitignored).
+
+**Como rodar:**
+
+- Driver com a nova flag (após `docker compose build integration-tests`):
+  `node scripts/load-driver.cjs --distributed 1 2 5 10`
+  (também aceita `npm run test:load:distributed` para rodar só o spec na infra atual).
+- O driver acumula resultados em `scripts/load-results/resumo.json` por `scale`+`mode`
+  (pastas separadas por modo: contenção `scale-<N>` vs distribuída `scale-<N>-distributed`).

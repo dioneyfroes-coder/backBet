@@ -192,6 +192,32 @@ forma **síncrona** (depósito/`confirmPayment`), sem rota de webhook. Não são
 testáveis antes de implementar a funcionalidade; entra no backlog da integração
 Pix real.
 
+## Testes de carga (Fase 2/2b)
+
+Os fluxos de dinheiro também são medidos sob **carga real** (Mongo replica set +
+transações), em dois eixos — **contenção** (N ops na mesma carteira) e
+**distribuída** (N carteiras distintas):
+
+```bash
+docker compose build integration-tests        # após mudar src/
+node scripts/load-driver.cjs 1 2 5 10          # contenção
+node scripts/load-driver.cjs --distributed 1 2 5 10   # distribuída
+# ou direto: npm run test:load / npm run test:load:distributed
+```
+
+Resultado-chave: a suíte distribuída manteve `rejected = 0` e throughput
+**~constante** de 1x a 10x (até 25000 depósitos + 25000 saques + 8000 apostas) —
+provando que o teto da suíte de contenção é serialização de documento único, não
+capacidade da aplicação. Metodologia completa, tabelas e como reproduzir em
+[`LOAD-TESTING.mdx`](./LOAD-TESTING.mdx).
+
+## Teste de repetibilidade (Fase 1)
+
+Antes das medições de carga, a suíte completa foi executada 3× para confirmar
+que os resultados não eram circunstanciais: 891 testes unitários herméticos
+(3/3 execuções verdes) + 14 de integração real (3/3 verdes), sempre com
+`LOAD rejected: 0` (`scripts/load-results/` e `Plano …MVP.md`).
+
 ## Troubleshooting
 
 | Sintoma | Causa / solução |
