@@ -24,6 +24,8 @@ lerna-debug.log*
 # Tests
 /coverage
 /.nyc_output
+# Resultados brutos da carga progressiva (Fase 2) — gerados pelo load-driver
+/scripts/load-results
 
 # IDEs and editors
 /.idea

@@ -27,6 +27,12 @@ const describeReal = runRealIntegration ? describe : describe.skip;
 
 const MAX_RETRIES = 10_000;
 
+// Carga progressiva (Fase 2): LOAD_SCALE multiplica usuários/apostas/operações
+// concorrentes (1 = carga base atual, idêntica à Fase 21; 2, 5, 10 = progressão).
+const parsedScale = Number(process.env.LOAD_SCALE ?? '1');
+const LOAD_SCALE = Number.isInteger(parsedScale) && parsedScale >= 1 ? parsedScale : 1;
+const CONCURRENT = 100 * LOAD_SCALE;
+
 const isConflict = (error: unknown): boolean =>
   !!error &&
   typeof error === 'object' &&
@@ -51,12 +57,17 @@ const retryOnConflict = async <T>(operation: () => Promise<T>): Promise<T> => {
   throw new Error('Concorrência não convergiu (limite de retries atingido)');
 };
 
+const wallNow = (): { startedAt: number; mark: () => number } => {
+  const startedAt = Date.now();
+  return { startedAt, mark: () => Date.now() - startedAt };
+};
+
 describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
   jest.setTimeout(600_000);
 
   const runId = randomUUID();
   const prefix = `load-${runId}`;
-  const USERS = 100;
+  const USERS = 100 * LOAD_SCALE;
   const BETS_PER_USER = 5;
   const STAKE = 100;
   const FUNDING = 1000;
@@ -166,12 +177,13 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
     expect(walletCount).toBe(USERS);
   });
 
-  it('100 depósitos concorrentes de R$ 1,25 na MESMA carteira: exatamente R$ 125,00', async () => {
+  it(`${CONCURRENT} depósitos concorrentes de R$ 1,25 na MESMA carteira: exatamente R$ ${1.25 * CONCURRENT}`, async () => {
+    const wall = wallNow();
     const amount = 1.25;
     await walletService.createWallet({ userId: depositUserId, currency: 'BRL' });
 
     const observedDepositBalances: number[] = [];
-    const depositOperations = Array.from({ length: 100 }, () =>
+    const depositOperations = Array.from({ length: CONCURRENT }, () =>
       retryOnConflict(async () => {
         const updated = await walletService.deposit(depositUserId, amount);
         observedDepositBalances.push(updated.balance);
@@ -180,27 +192,31 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
     );
     const results = await Promise.allSettled(depositOperations);
 
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(100);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(CONCURRENT);
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
     expect(observedDepositBalances.every((balance) => balance >= 0)).toBe(true);
 
     const wallet = await walletService.findByUserId(depositUserId);
-    expect(wallet!.balance).toBeCloseTo(125, 6);
+    expect(wallet!.balance).toBeCloseTo(1.25 * CONCURRENT, 6);
 
     const ledgerEntries = await LedgerEntryModel.countDocuments({
       userId: depositUserId,
       type: 'DEPOSIT',
     });
-    expect(ledgerEntries).toBe(100);
+    expect(ledgerEntries).toBe(CONCURRENT);
+    console.log(
+      `LOAD deposits: ${CONCURRENT} ops, fulfilled: ${results.filter((r) => r.status === 'fulfilled').length}, rejected: ${results.filter((r) => r.status === 'rejected').length}, elapsed_ms: ${wall.mark()}`,
+    );
   });
 
-  it('100 saques concorrentes de R$ 2,00 partindo de R$ 100,00: 50 aprovados, 50 rejeitados, saldo R$ 0,00', async () => {
+  it(`${CONCURRENT} saques concorrentes de R$ 2,00 partindo de R$ 100,00: 50 aprovados, ${CONCURRENT - 50} rejeitados, saldo R$ 0,00`, async () => {
+    const wall = wallNow();
     const withdrawal = 2;
     await walletService.createWallet({ userId: withdrawUserId, currency: 'BRL' });
     await walletService.deposit(withdrawUserId, 100);
 
     const observedWithdrawBalances: number[] = [];
-    const withdrawOperations = Array.from({ length: 100 }, () =>
+    const withdrawOperations = Array.from({ length: CONCURRENT }, () =>
       retryOnConflict(async () => {
         const updated = await walletService.withdraw(withdrawUserId, withdrawal);
         observedWithdrawBalances.push(updated.balance);
@@ -214,7 +230,7 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
       (r) => r.status === 'rejected' && isInsufficientFunds((r as PromiseRejectedResult).reason),
     );
     expect(approved).toHaveLength(50);
-    expect(rejectedInsufficient).toHaveLength(50);
+    expect(rejectedInsufficient).toHaveLength(CONCURRENT - 50);
     expect(observedWithdrawBalances.length).toBe(50);
     expect(observedWithdrawBalances.every((balance) => balance >= 0)).toBe(true);
 
@@ -227,14 +243,19 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
       type: 'WITHDRAWAL_COMPLETED',
     });
     expect(ledgerEntries).toBe(50);
+    console.log(
+      `LOAD withdrawals: ${CONCURRENT} ops, approved: ${approved.length}, rejected_insufficient: ${rejectedInsufficient.length}, elapsed_ms: ${wall.mark()}`,
+    );
   });
 
-  it('500 apostas simultâneas: 100 usuários × 5 apostas de R$ 100,00 — nenhuma perda nem duplicação', async () => {
+  it(`${USERS * BETS_PER_USER} apostas simultâneas: ${USERS} usuários × ${BETS_PER_USER} apostas de R$ ${STAKE},00 — nenhuma perda nem duplicação`, async () => {
+    const wall = wallNow();
     const fundingOperations = betUserIds.map((userId) =>
       retryOnConflict(() => walletService.deposit(userId, FUNDING)),
     );
     const funding = await Promise.allSettled(fundingOperations);
     expect(funding.filter((r) => r.status === 'fulfilled')).toHaveLength(USERS);
+    const fundingElapsed = wall.mark();
 
     const betOperations: Array<() => Promise<unknown>> = [];
     for (let i = 0; i < USERS; i += 1) {
@@ -256,6 +277,7 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
     expect(betOperations).toHaveLength(USERS * BETS_PER_USER);
 
     const results = await Promise.allSettled(betOperations.map((op) => retryOnConflict(op)));
+    const betsElapsed = wall.mark();
 
     const rejected = results.filter(
       (r): r is PromiseRejectedResult => r.status === 'rejected',
@@ -270,6 +292,9 @@ describeReal('Fase 21 — Teste de carga (MongoDB real)', () => {
         code: r.reason?.code,
         statusCode: r.reason?.statusCode,
       })),
+    );
+    console.log(
+      `LOAD bets: ${USERS * BETS_PER_USER} ops, funded: ${funding.filter((r) => r.status === 'fulfilled').length}, fulfilled: ${results.filter((r) => r.status === 'fulfilled').length}, rejected: ${rejected.length}, funding_ms: ${fundingElapsed}, bets_ms: ${betsElapsed}, total_ms: ${wall.mark()}`,
     );
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(USERS * BETS_PER_USER);
