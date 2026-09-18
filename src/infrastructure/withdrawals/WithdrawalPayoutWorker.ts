@@ -9,6 +9,7 @@ import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithd
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 import type { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import type { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
+import type { AuditService } from '@/core/audit/domain/services/AuditService';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService } from '@/shared/services/IdempotencyService';
@@ -36,6 +37,7 @@ export async function processWithdrawalPayloadOnce(
   payload: WithdrawalPayoutPayload,
   paymentAdapter?: IPaymentPort,
   service?: WithdrawalRequestService,
+  auditService?: AuditService,
 ): Promise<void> {
   const adapter = paymentAdapter ?? createPaymentAdapter();
 
@@ -85,6 +87,32 @@ export async function processWithdrawalPayloadOnce(
     requestId: payload.requestId,
     tx: res.transactionId,
   });
+
+  // The external payout already succeeded. Emit exactly one best-effort audit
+  // event BEFORE the state update; a queue retry is idempotent-guarded upstream
+  // (idempotencyService), so the event is never duplicated, while 'record'
+  // mis-fires never rethrow and thus never double-pay the user.
+  if (auditService) {
+    await auditService.record({
+      type: 'FINANCIAL',
+      action: 'withdrawal.payout.succeeded',
+      actorUserId: payload.userId,
+      actorRole: 'system',
+      resourceType: 'withdrawalRequest',
+      resourceId: payload.requestId,
+      before: undefined,
+      after: { transactionId: res.transactionId, amount: payload.amount, currency: payload.currency },
+      reason: undefined,
+      ip: undefined,
+      requestId: undefined,
+      severity: 'INFO',
+      metadata: {
+        tx: res.transactionId,
+        amount: payload.amount,
+        currency: payload.currency,
+      },
+    });
+  }
 
   // The external payout already succeeded. Update the request to COMPLETED and
   // debit the locked funds. Any state-update failure is logged but NOT rethrown,
