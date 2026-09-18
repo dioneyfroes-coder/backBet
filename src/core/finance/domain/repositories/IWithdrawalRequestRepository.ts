@@ -8,7 +8,7 @@ export interface IWithdrawalRequestRepository {
     request: WithdrawalRequest,
     options?: WithdrawalRequestRepositoryOptions,
   ): Promise<WithdrawalRequest>;
-  update(request: WithdrawalRequest): Promise<WithdrawalRequest>;
+  update(request: WithdrawalRequest, options?: WithdrawalRequestRepositoryOptions): Promise<WithdrawalRequest>;
   findById(id: string): Promise<WithdrawalRequest | null>;
   findByUserId(userId: string): Promise<WithdrawalRequest[]>;
   listPending(limit?: number, offset?: number): Promise<WithdrawalRequest[]>;

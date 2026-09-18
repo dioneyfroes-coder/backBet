@@ -68,14 +68,12 @@ const auditEventSchema = new Schema<IAuditEventDocument>(
       type: Date,
       required: true,
       default: Date.now,
-      index: true,
     },
   },
   { timestamps: true, collection: 'auditevents' },
 );
 
 auditEventSchema.index({ createdAt: 1 });
-
 export const AuditEventModel = mongoose.model<IAuditEventDocument>(
   'AuditEvent',
   auditEventSchema,

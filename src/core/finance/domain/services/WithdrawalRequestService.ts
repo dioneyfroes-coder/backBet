@@ -195,22 +195,37 @@ export class WithdrawalRequestService {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
     // Debit the locked amount only now, when the payout actually succeeded.
-    try {
-      await this.walletService.withdrawLocked(request.userId, request.amount, {
+    // Wallet debit + request update rodam na MESMA transação quando o repo
+    // suporta (Mongo): crash no meio reverte tudo, sem wallet debitada e
+    // request PRESA em PROCESSING.
+    const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
+      const context = {
         type: 'WITHDRAWAL_COMPLETED',
         referenceId: request.id,
         source: 'WITHDRAWAL',
-      });
-    } catch (err) {
+      } as const;
       try {
-        withdrawalRequestProcessingFailedCounter.inc();
-      } catch (incErr) {
-        console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+        if (session) {
+          await this.walletService.withdrawLocked(request.userId, request.amount, context, { session });
+        } else {
+          await this.walletService.withdrawLocked(request.userId, request.amount, context);
+        }
+      } catch (err) {
+        try {
+          withdrawalRequestProcessingFailedCounter.inc();
+        } catch (incErr) {
+          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+        }
+        throw err;
       }
-      throw err;
-    }
-    request.completePayout();
-    return this.withdrawalRequestRepository.update(request);
+      request.completePayout();
+      return session
+        ? this.withdrawalRequestRepository.update(request, { session })
+        : this.withdrawalRequestRepository.update(request);
+    };
+
+    const runner = this.withdrawalRequestRepository.withTransaction;
+    return runner ? await runner(persist) : await persist(undefined);
   }
 
   async failPayout(requestId: string): Promise<WithdrawalRequest> {
@@ -219,23 +234,38 @@ export class WithdrawalRequestService {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
     // Return the held amount to the available balance; payout never happened.
-    try {
-      await this.walletService.unlock(request.userId, request.amount, {
+    // Unlock + request update rodam na MESMA transação quando o repo suporta
+    // (Mongo): crash no meio reverte tudo, sem saldo devolvido 2x nem request
+    // PRESA em PROCESSING.
+    const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
+      const context = {
         type: 'WITHDRAWAL_REVERSED',
         referenceId: request.id,
         source: 'WITHDRAWAL',
-      });
-      withdrawalRequestProcessingFailedCounter.inc();
-    } catch (err) {
+      } as const;
       try {
+        if (session) {
+          await this.walletService.unlock(request.userId, request.amount, context, { session });
+        } else {
+          await this.walletService.unlock(request.userId, request.amount, context);
+        }
         withdrawalRequestProcessingFailedCounter.inc();
-      } catch (incErr) {
-        console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+      } catch (err) {
+        try {
+          withdrawalRequestProcessingFailedCounter.inc();
+        } catch (incErr) {
+          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+        }
+        throw err;
       }
-      throw err;
-    }
-    request.failPayout();
-    return this.withdrawalRequestRepository.update(request);
+      request.failPayout();
+      return session
+        ? this.withdrawalRequestRepository.update(request, { session })
+        : this.withdrawalRequestRepository.update(request);
+    };
+
+    const runner = this.withdrawalRequestRepository.withTransaction;
+    return runner ? await runner(persist) : await persist(undefined);
   }
 
   async cancelWithdrawal(requestId: string): Promise<WithdrawalRequest> {

@@ -44,6 +44,7 @@ const betSchema = new Schema<IBetDocument>(
     marketId: {
       type: String,
       required: true,
+      index: true,
     },
     oddId: {
       type: String,

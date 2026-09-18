@@ -1,5 +1,8 @@
 import { WithdrawalRequest } from '../entities/WithdrawalRequest';
-import { IWithdrawalRequestRepository } from './IWithdrawalRequestRepository';
+import {
+  IWithdrawalRequestRepository,
+  WithdrawalRequestRepositoryOptions,
+} from './IWithdrawalRequestRepository';
 
 export class WithdrawalRequestRepository implements IWithdrawalRequestRepository {
   private requests: WithdrawalRequest[] = [];
@@ -9,7 +12,10 @@ export class WithdrawalRequestRepository implements IWithdrawalRequestRepository
     return request;
   }
 
-  async update(request: WithdrawalRequest): Promise<WithdrawalRequest> {
+  async update(
+    request: WithdrawalRequest,
+    _options?: WithdrawalRequestRepositoryOptions,
+  ): Promise<WithdrawalRequest> {
     const index = this.requests.findIndex((r) => r.id === request.id);
     if (index >= 0) {
       this.requests[index] = request;

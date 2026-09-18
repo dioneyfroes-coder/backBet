@@ -78,6 +78,10 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
   { timestamps: true },
 );
 
+withdrawalRequestSchema.index({ userId: 1, requestedAt: -1 });
+withdrawalRequestSchema.index({ status: 1, requestedAt: -1 });
+withdrawalRequestSchema.index({ status: 1, processingAt: 1 });
+
 export const WithdrawalRequestModel = mongoose.model<IWithdrawalRequestDocument>(
   'WithdrawalRequest',
   withdrawalRequestSchema,

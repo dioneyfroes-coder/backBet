@@ -59,8 +59,11 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     }
   }
 
-  async update(request: WithdrawalRequest): Promise<WithdrawalRequest> {
-    const updated = await WithdrawalRequestModel.findOneAndUpdate(
+  async update(
+    request: WithdrawalRequest,
+    options?: WithdrawalRequestRepositoryOptions,
+  ): Promise<WithdrawalRequest> {
+    const query = WithdrawalRequestModel.findOneAndUpdate(
       { requestId: request.id },
       {
         status: request.status,
@@ -69,7 +72,11 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
         approvalLogs: request.approvalLogs,
       },
       { new: true },
-    ).lean<IWithdrawalRequestDocument>();
+    );
+    if (options?.session) {
+      query.session(options.session as never);
+    }
+    const updated = await query.lean<IWithdrawalRequestDocument>();
 
     if (!updated) {
       throw new Error('Withdrawal request could not be updated');
