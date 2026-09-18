@@ -74,12 +74,13 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
   - Meta: elevar cobertura com foco em `RiskService`, `MongooseBetRepository`,
     `MongooseUserRepository`, `WithdrawalPayoutWorker`.
 
-## Estado do repositório (pré-commit desta sessão)
+## Estado do repositório (atualizado após Fase 3)
 
-- Últimos commits pushados: `1dd57ea` (fase 2b), `c830252` (fase 1), `96cb73c`
+- Últimos commits pushados: `1ad741a` (doc atualização), `c74b6e1` (fix fail-slow do
+  Redis + Fase 3 chaos/falhas reais), `1dd57ea` (fase 2b), `c830252` (fase 1), `96cb73c`
   (driver + LOAD_SCALE), `07079fa` (teste-de-stress / fix de concorrência + `target: runtime`).
-- Não commitado nesta sessão (Fase 3): fix do fail-slow do Redis em
-  `src/infrastructure/cache/RedisClient.ts`, teste de regressão em
+- Nada pendente de commit (árvore limpa). Fase 3 concluída e consolidada: fix do fail-slow
+  do Redis em `src/infrastructure/cache/RedisClient.ts`, regressão em
   `src/infrastructure/cache/__tests__/RedisClient.test.ts`, `Plano …MVP.md` (Fase 3) e este
   `todo.txt`.
 - `scripts/load-results/` está no `.gitignore` (dados brutos versionáveis se quiser).
