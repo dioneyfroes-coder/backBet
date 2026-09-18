@@ -3,6 +3,7 @@ import { ICreateBetDTO } from '../../types/bet.types';
 import { Bet } from '../../domain/entities/Bet';
 import { executeWithBetErrorMapping } from '../errors/BetErrorMapper';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { restoreBet } from './restoreBet';
 import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 
@@ -36,7 +37,7 @@ export class PlaceBetUseCase {
     }
     const { value, replayed } = await this.idempotency.executeWithMeta(
       `${input.userId}:bet:${idempotencyKey}`,
-      JSON.stringify(input),
+      canonicalFingerprint(input),
       operation,
       restoreBet,
     );

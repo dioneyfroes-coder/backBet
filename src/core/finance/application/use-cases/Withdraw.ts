@@ -3,6 +3,7 @@ import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 
@@ -28,7 +29,7 @@ export class Withdraw {
     }
     const { value, replayed } = await this.idempotency.executeWithMeta(
       `${userId}:withdraw:${idempotencyKey}`,
-      JSON.stringify({ userId, amount, currency, pixKey, description }),
+      canonicalFingerprint({ userId, amount, currency, pixKey, description }),
       operation,
     );
     return { ...value, replayed };

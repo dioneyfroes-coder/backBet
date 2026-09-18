@@ -13,7 +13,8 @@ import type { IWithdrawalRequestRepository } from '@/core/finance/domain/reposit
 import type { AuditService } from '@/core/audit/domain/services/AuditService';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { getRedisUrl } from '@/shared/config/connections';
 
 async function markProcessingBestEffort(
@@ -138,8 +139,10 @@ export async function processWithdrawalPayload(
 ): Promise<void> {
   await idempotencyService.execute(
     `withdrawal-payout:${payload.requestId}`,
-    JSON.stringify(payload),
+    canonicalFingerprint(payload),
     () => processWithdrawalPayloadOnce(payload, paymentAdapter, service),
+    undefined,
+    IDEMPOTENCY_PROCESSING_RECOVERY_MS,
   );
 }
 
@@ -177,11 +180,13 @@ export async function recoverWithdrawalProcessing(
   if (info.status === 'PAID') {
     await idempotencyService.execute(
       `withdrawal-recover-paid:${payload.requestId}`,
-      JSON.stringify(payload),
+      canonicalFingerprint(payload),
       async () => {
         await service.completePayout(payload.requestId);
         return 'paid';
       },
+      undefined,
+      IDEMPOTENCY_PROCESSING_RECOVERY_MS,
     );
     return 'paid';
   }
@@ -189,11 +194,13 @@ export async function recoverWithdrawalProcessing(
   if (info.status === 'FAILED') {
     await idempotencyService.execute(
       `withdrawal-recover-failed:${payload.requestId}`,
-      JSON.stringify(payload),
+      canonicalFingerprint(payload),
       async () => {
         await service.failPayout(payload.requestId);
         return 'failed';
       },
+      undefined,
+      IDEMPOTENCY_PROCESSING_RECOVERY_MS,
     );
     return 'failed';
   }

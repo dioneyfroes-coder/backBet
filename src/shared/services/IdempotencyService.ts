@@ -86,17 +86,27 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
   }
 }
 
-class RedisIdempotencyStore implements IdempotencyStore {
+export class RedisIdempotencyStore implements IdempotencyStore {
+  private readonly defaultTtlSeconds = 24 * 60 * 60;
+
   get<T>(key: string): Promise<IdempotencyRecord<T> | null> {
     return redisClient.get<IdempotencyRecord<T>>(key);
   }
 
   setIfAbsent<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<boolean> {
-    return redisClient.setIfAbsent(key, value, ttlSeconds);
+    return redisClient.setIfAbsent(
+      key,
+      { ...value, processingAt: Date.now() } as IdempotencyRecord<T>,
+      ttlSeconds,
+    );
   }
 
   set<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<void> {
-    return redisClient.set(key, value, ttlSeconds);
+    return redisClient.set(
+      key,
+      { ...value, processingAt: Date.now() } as IdempotencyRecord<T>,
+      ttlSeconds,
+    );
   }
 
   delete(key: string): Promise<void> {
@@ -105,7 +115,7 @@ class RedisIdempotencyStore implements IdempotencyStore {
 
   // Best effort não-atômico (Redis simples): como o retry só ocorre para
   // operações financeiras com idempotência no ledger, o re-executar não duplica
-  // valores; serve para destravar rows PROCESSING de cache.
+  // valores; serve para destravar rows PROCESSING quando a resposta se perdeu.
   async reclaimStaleProcessing<T>(
     key: string,
     olderThanMs: number,
@@ -118,6 +128,12 @@ class RedisIdempotencyStore implements IdempotencyStore {
     if (Date.now() - processingAt < olderThanMs) {
       return null;
     }
+    // Renova o processingAt para impedir que outro worker reivindique em paralelo.
+    await redisClient.set(
+      key,
+      { ...existing, processingAt: Date.now() } as IdempotencyRecord<T>,
+      this.defaultTtlSeconds,
+    );
     return existing;
   }
 }
@@ -257,9 +273,15 @@ export class IdempotencyService {
         { key },
       );
     }
-    if (existing.status === 'COMPLETED' && existing.result !== undefined) {
+    // COMPLETED => a operação terminou com sucesso. Faz replay SEMPRE, inclusive
+    // para operações que resolvem `undefined` (ex.: payout worker / contact
+    // worker, que retornam Promise<void>): exigir `result !== undefined` aqui
+    // fazia esses replays caírem em 409 espúrio. O resultado (ou undefined) é
+    // devolvido tal qual foi persistido.
+    if (existing.status === 'COMPLETED') {
+      const result = existing.result as T;
       return {
-        value: restoreResult ? restoreResult(existing.result) : existing.result,
+        value: restoreResult ? restoreResult(result) : result,
         replayed: true,
       };
     }

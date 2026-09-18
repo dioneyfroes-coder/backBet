@@ -2,10 +2,9 @@ import { WalletService } from '../../domain/services/WalletService';
 import { executeWithWalletErrorMapping } from '../errors/WalletErrorMapper';
 import { PixProviderPort } from '../../domain/ports/PixProviderPort';
 import { Currency } from '../../domain/value-objects/Currency';
-import {
-  IdempotencyService,
-  IDEMPOTENCY_PROCESSING_RECOVERY_MS,
-} from '@/shared/services/IdempotencyService';
+import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { MoneySecurityService } from '../../domain/services/MoneySecurityService';
 import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 
@@ -31,7 +30,7 @@ export class Deposit {
     }
     const { value, replayed } = await this.idempotency.executeWithMeta(
       `${userId}:deposit:${idempotencyKey}`,
-      JSON.stringify({ userId, amount, currency, description }),
+      canonicalFingerprint({ userId, amount, currency, description }),
       operation,
       undefined,
       IDEMPOTENCY_PROCESSING_RECOVERY_MS,

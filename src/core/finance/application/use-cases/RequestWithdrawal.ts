@@ -8,6 +8,7 @@ import { UserService } from '@/core/user/domain/services/UserService';
 import { appConfig } from '@/shared/config/appConfig';
 import { AppError } from '@/shared/errors/AppError';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { ComplianceService } from '@/core/compliance/domain/services/ComplianceService';
 import { createHash } from 'crypto';
 
@@ -78,7 +79,7 @@ export class RequestWithdrawal {
     }
     return this.idempotency.execute(
       `${userId}:withdrawal-request:${idempotencyKey}`,
-      JSON.stringify({ userId, amount, currency, notes }),
+      canonicalFingerprint({ userId, amount, currency, notes }),
       operation,
       (raw) =>
         new WithdrawalRequest(

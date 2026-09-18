@@ -101,7 +101,7 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
       compliance,
     ),
     new GetWithdrawalRequests(withdrawalRequestService),
-    new ProcessWithdrawalRequest(withdrawalRequestService),
+    new ProcessWithdrawalRequest(withdrawalRequestService, idempotencyService),
   );
 
   router.get(

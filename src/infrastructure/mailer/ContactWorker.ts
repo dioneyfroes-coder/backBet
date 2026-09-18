@@ -5,6 +5,7 @@ import type { Queue as BullQueue } from 'bull';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { getRedisUrl } from '@/shared/config/connections';
 
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
@@ -40,7 +41,7 @@ async function processContactPayloadOnce(payload: ContactPayload): Promise<void>
 export async function processContactPayload(payload: ContactPayload): Promise<void> {
   await idempotencyService.execute(
     `contact-email:${payload.ticketId}`,
-    JSON.stringify(payload),
+    canonicalFingerprint(payload),
     () => processContactPayloadOnce(payload),
     undefined,
     IDEMPOTENCY_PROCESSING_RECOVERY_MS,

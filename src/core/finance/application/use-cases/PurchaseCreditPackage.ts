@@ -5,6 +5,7 @@ import {
   IdempotencyService,
   IDEMPOTENCY_PROCESSING_RECOVERY_MS,
 } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { CreditPackage } from '@/core/finance/domain/entities/CreditPackage';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
 
@@ -37,7 +38,7 @@ export class PurchaseCreditPackage {
     }
     return this.idempotency.execute(
       `${userId}:package-purchase:${idempotencyKey}`,
-      JSON.stringify({ userId, packageId }),
+      canonicalFingerprint({ userId, packageId }),
       operation,
       (raw) => ({
         creditPackage: new CreditPackage(

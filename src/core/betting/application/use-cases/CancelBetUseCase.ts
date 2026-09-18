@@ -3,6 +3,7 @@ import { BetService } from '../../domain/services/BetService';
 import { ICancelBetDTO } from '../../types/bet.types';
 import { executeWithBetErrorMapping } from '../errors/BetErrorMapper';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { restoreBet } from './restoreBet';
 
 export class CancelBetUseCase {
@@ -21,7 +22,7 @@ export class CancelBetUseCase {
     }
     const { value, replayed } = await this.idempotency.executeWithMeta(
       `${input.betId}:bet-cancel:${idempotencyKey}`,
-      JSON.stringify(input),
+      canonicalFingerprint(input),
       operation,
       restoreBet,
     );

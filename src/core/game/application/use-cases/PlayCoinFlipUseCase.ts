@@ -1,6 +1,7 @@
 import { CoinFlipChoice, GameRound } from '../../domain/entities/GameRound';
 import { CoinFlipGameService } from '../../domain/services/CoinFlipGameService';
 import { IdempotencyService } from '@/shared/services/IdempotencyService';
+import { canonicalFingerprint } from '@/shared/services/fingerprint';
 
 export type PlayCoinFlipDTO = {
   userId: string;
@@ -25,7 +26,7 @@ export class PlayCoinFlipUseCase {
     }
     return this.idempotency.execute(
       `${input.userId}:coin-flip:${idempotencyKey}`,
-      JSON.stringify(input),
+      canonicalFingerprint(input),
       operation,
       (raw) => new GameRound(
         raw.id,

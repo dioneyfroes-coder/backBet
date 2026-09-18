@@ -76,9 +76,9 @@ describe('WithdrawalPayoutWorker — cenários críticos (Fase 20)', () => {
     const payload: WithdrawalPayoutPayload = { requestId, userId, amount: 100, currency: 'BRL' };
 
     await expect(processWithdrawalPayload(payload, adapter, harness.service)).resolves.toBeUndefined();
-    await expect(processWithdrawalPayload(payload, adapter, harness.service)).rejects.toMatchObject({
-      code: 'CONFLICT',
-    });
+    // Fase 8: replay seguro (mesma key + fingerprint) resolve undefined em vez de
+    // disparar 409; o payout NÃO é reexecutado.
+    await expect(processWithdrawalPayload(payload, adapter, harness.service)).resolves.toBeUndefined();
 
     expect(adapter.attempts).toBe(1);
     const wallet = await harness.walletService.findByUserId(userId);
