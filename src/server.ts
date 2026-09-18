@@ -24,7 +24,15 @@ import { SigapService } from '@/core/sigap/domain/services/SigapService';
 import { SigapTransmissionJob } from '@/infrastructure/jobs/SigapTransmissionJob';
 import { createSigapProviders } from '@/infrastructure/sigap/sigapFactory';
 import { startContactWorker } from '@/infrastructure/mailer/ContactWorker';
-import { startWithdrawalWorker } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
+import { startWithdrawalWorker, startWithdrawalRecovery } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
+import { createWithdrawalQueue } from '@/infrastructure/withdrawals/withdrawalQueueFactory';
+import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
+import { WalletService } from '@/core/finance/domain/services/WalletService';
+import {
+  createWalletRepository,
+  createWithdrawalRequestRepository,
+  createLedgerRepository,
+} from '@/infrastructure/persistence/factory';
 import type { Queue as BullQueue } from 'bull';
 // route creators are loaded dynamically (may be async factories)
 
@@ -210,9 +218,23 @@ async function main() {
     // Optionally start the withdrawal payout worker in-process when requested via env
     if (process.env.START_WITHDRAWAL_WORKER === 'true') {
       try {
-        withdrawalQueue = startWithdrawalWorker();
+        const withdrawalRequestRepository = await createWithdrawalRequestRepository();
+        const walletRepository = await createWalletRepository();
+        const ledgerRepository = await createLedgerRepository();
+        const walletService = new WalletService(walletRepository, ledgerRepository);
+        const withdrawalRequestService = new WithdrawalRequestService(
+          withdrawalRequestRepository,
+          walletService,
+        );
+        withdrawalQueue = startWithdrawalWorker(withdrawalRequestService);
+        const withdrawalRecovery = startWithdrawalRecovery({
+          repository: withdrawalRequestRepository,
+          service: withdrawalRequestService,
+          withdrawalQueue: await createWithdrawalQueue(),
+        });
         const closeWithdrawal = async () => {
           try {
+            withdrawalRecovery.stop();
             await withdrawalQueue?.close();
           } catch (err) {
             // ignore

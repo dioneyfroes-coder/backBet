@@ -123,4 +123,16 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
       .lean<IWithdrawalRequestDocument[]>();
     return docs.map((doc) => this.toDomain(doc as IWithdrawalRequestDocument));
   }
+
+  async listStuckApproved(approvedBefore: Date, limit?: number): Promise<WithdrawalRequest[]> {
+    const docs = await WithdrawalRequestModel.find({
+      status: 'APPROVED',
+      processingAt: { $exists: false },
+      processedAt: { $lt: approvedBefore },
+    })
+      .sort({ processedAt: 1 })
+      .limit(limit || 20)
+      .lean<IWithdrawalRequestDocument[]>();
+    return docs.map((doc) => this.toDomain(doc as IWithdrawalRequestDocument));
+  }
 }

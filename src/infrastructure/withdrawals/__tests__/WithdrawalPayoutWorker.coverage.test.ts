@@ -98,6 +98,7 @@ describe('WithdrawalPayoutWorker — falha das métricas é best-effort', () => 
 describe('WithdrawalPayoutWorker — runWithdrawalRecovery isola item que lança', () => {
   it('conta erro e segue para o próximo item', async () => {
     const repository = {
+      listStuckApproved: jest.fn(async () => []),
       listStuckProcessing: jest.fn(async () => [
         { id: randomUUID(), userId: 'user-x', amount: 100, currency: 'BRL' },
       ]),
@@ -124,6 +125,7 @@ describe('WithdrawalPayoutWorker — runWithdrawalRecovery isola item que lança
 
   it('PSP sem registro (UNKNOWN): contabiliza unknown sem mutação', async () => {
     const repository = {
+      listStuckApproved: jest.fn(async () => []),
       listStuckProcessing: jest.fn(async () => [
         { id: randomUUID(), userId: 'user-x', amount: 100, currency: 'BRL' },
       ]),
@@ -148,6 +150,7 @@ describe('WithdrawalPayoutWorker — runWithdrawalRecovery isola item que lança
 
   it('consulta ao PSP falha: outcome error contabilizado como error', async () => {
     const repository = {
+      listStuckApproved: jest.fn(async () => []),
       listStuckProcessing: jest.fn(async () => [
         { id: randomUUID(), userId: 'user-x', amount: 100, currency: 'BRL' },
       ]),
@@ -171,6 +174,7 @@ describe('WithdrawalPayoutWorker — runWithdrawalRecovery isola item que lança
 
   it('usando defaults (minProcessingAgeMs/limit) quando não passados', async () => {
     const repository = {
+      listStuckApproved: jest.fn(async () => []),
       listStuckProcessing: jest.fn(async () => [
         { id: randomUUID(), userId: 'user-x', amount: 100, currency: 'BRL' },
       ]),

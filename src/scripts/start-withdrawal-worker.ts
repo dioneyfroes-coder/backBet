@@ -3,6 +3,7 @@ import {
   startWithdrawalWorker,
   startWithdrawalRecovery,
 } from '@/infrastructure/withdrawals/WithdrawalPayoutWorker';
+import { createWithdrawalQueue } from '@/infrastructure/withdrawals/withdrawalQueueFactory';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import { WalletService } from '@/core/finance/domain/services/WalletService';
 import {
@@ -33,9 +34,13 @@ async function main() {
 
     console.log('Starting Withdrawal worker...');
     const queue = startWithdrawalWorker(withdrawalRequestService);
+    // Producer separado usado pela recovery para re-enfileirar jobs de payout
+    // perdidos (APPROVED presos). Compartilha a mesma fila/job name do worker.
+    const producer = await createWithdrawalQueue();
     const recovery = startWithdrawalRecovery({
       repository: withdrawalRequestRepository,
       service: withdrawalRequestService,
+      withdrawalQueue: producer,
     });
 
     process.on('SIGINT', async () => {

@@ -6,6 +6,7 @@ import {
   withdrawalPayoutFailedCounter,
 } from '@/infrastructure/observability/metrics';
 import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithdrawalQueue';
+import type IWithdrawalQueue from '@/core/finance/domain/ports/IWithdrawalQueue';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
 import type { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import type { IWithdrawalRequestRepository } from '@/core/finance/domain/repositories/IWithdrawalRequestRepository';
@@ -206,31 +207,90 @@ export async function recoverWithdrawalProcessing(
 }
 
 /**
- * Varre withdrawals em PROCESSING há mais de `minProcessingAgeMs` e — para cada
- * um — consulta o PSP em vez de refazer o pagamento. Barra uma operação por
- * vez; falha de item é logada e segue para o próximo.
+ * Recupera um withdrawal aprovado e preso (job de payout perdido: nunca foi
+ * processado após o approve, ex.: enqueue perdido / worker morto antes de
+ * marcar PROCESSING). Re-enfileira o job reutilizando o mesmo jobId=requestId,
+ * que é idempotente na fila (Bull) e tem o processamento deduplicado pelo
+ * idempotencyService no processWithdrawalPayload. Não consulta o PSP porque o
+ * pagamento só acontece depois de markProcessing.
+ */
+export async function recoverStuckApproved(
+  payload: WithdrawalPayoutPayload,
+  withdrawalQueue?: IWithdrawalQueue,
+): Promise<WithdrawalRecoveryOutcome | 'requeued'> {
+  if (!withdrawalQueue) {
+    writeStructuredLog({
+      event: 'withdrawal_recovery_requeue_skipped',
+      requestId: payload.requestId,
+      reason: 'no_queue',
+    });
+    return 'unknown';
+  }
+
+  try {
+    await withdrawalQueue.enqueuePayout(payload);
+    writeStructuredLog({
+      event: 'withdrawal_recovery_requeued',
+      requestId: payload.requestId,
+    });
+    return 'requeued';
+  } catch (err) {
+    writeStructuredLog({
+      event: 'withdrawal_recovery_requeue_failed',
+      requestId: payload.requestId,
+      err,
+    });
+    return 'error';
+  }
+}
+
+/**
+ * Varre withdrawals em PROCESSING há mais de `minProcessingAgeMs` e aprovados
+ * em `APPROVED` (job perdido) há mais de `minApprovedAgeMs`. Para PROCESSING
+ * consulta o PSP (nunca refaz o pagamento); para APPROVED re-enfileira o job.
+ * Barra uma operação por vez; falha de item é logada e segue para o próximo.
  */
 export async function runWithdrawalRecovery(options: {
   repository: IWithdrawalRequestRepository;
   service: WithdrawalRequestService;
   paymentAdapter?: IPaymentPort;
   minProcessingAgeMs?: number;
+  minApprovedAgeMs?: number;
   limit?: number;
   now?: Date;
-}): Promise<{ scanned: number; paid: number; failed: number; unknown: number; errors: number }> {
+  withdrawalQueue?: IWithdrawalQueue;
+}): Promise<{
+  scanned: number;
+  paid: number;
+  failed: number;
+  unknown: number;
+  errors: number;
+  approved: number;
+  requeued: number;
+}> {
   const {
     repository,
     service,
     paymentAdapter,
     minProcessingAgeMs = 5 * 60 * 1000,
+    minApprovedAgeMs = 5 * 60 * 1000,
     limit = 50,
     now = new Date(),
+    withdrawalQueue,
   } = options;
 
   const processingBefore = new Date(now.getTime() - minProcessingAgeMs);
   const stuck = await repository.listStuckProcessing(processingBefore, limit);
 
-  const summary = { scanned: stuck.length, paid: 0, failed: 0, unknown: 0, errors: 0 };
+  const summary = {
+    scanned: stuck.length,
+    paid: 0,
+    failed: 0,
+    unknown: 0,
+    errors: 0,
+    approved: 0,
+    requeued: 0,
+  };
   for (const request of stuck) {
     const payload: WithdrawalPayoutPayload = {
       requestId: request.id,
@@ -254,6 +314,32 @@ export async function runWithdrawalRecovery(options: {
     }
   }
 
+  const approvedBefore = new Date(now.getTime() - minApprovedAgeMs);
+  const stuckApproved = await repository.listStuckApproved(approvedBefore, limit);
+  summary.approved = stuckApproved.length;
+
+  for (const request of stuckApproved) {
+    const payload: WithdrawalPayoutPayload = {
+      requestId: request.id,
+      userId: request.userId,
+      amount: request.amount,
+      currency: request.currency,
+    };
+    try {
+      const outcome = await recoverStuckApproved(payload, withdrawalQueue);
+      if (outcome === 'requeued') summary.requeued += 1;
+      else if (outcome === 'error') summary.errors += 1;
+      else summary.unknown += 1;
+    } catch (err) {
+      summary.errors += 1;
+      writeStructuredLog({
+        event: 'withdrawal_recovery_approved_failed',
+        requestId: request.id,
+        err,
+      });
+    }
+  }
+
   writeStructuredLog({
     event: 'withdrawal_recovery_run',
     scanned: summary.scanned,
@@ -261,6 +347,8 @@ export async function runWithdrawalRecovery(options: {
     failed: summary.failed,
     unknown: summary.unknown,
     errors: summary.errors,
+    approved: summary.approved,
+    requeued: summary.requeued,
   });
   return summary;
 }
@@ -271,24 +359,33 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 /**
- * Scheduler periódico para recuperar withdrawals presos em PROCESSING (worker
- * morto, timeout do provedor etc). Consulta o PSP — nunca refaz o pagamento.
+ * Scheduler periódico para recuperar withdrawals presos em PROCESSING (consulta
+ * o PSP — nunca refaz o pagamento) e APPROVED com job perdido (re-enfileira via
+ * withdrawalQueue quando disponível). Permite retomada após kill -9: no restart
+ * os jobs ainda não processados voltam a ser enfileirados.
  */
 export function startWithdrawalRecovery(options: {
   repository: IWithdrawalRequestRepository;
   service: WithdrawalRequestService;
   paymentAdapter?: IPaymentPort;
+  withdrawalQueue?: IWithdrawalQueue;
   intervalMs?: number;
   minProcessingAgeMs?: number;
+  minApprovedAgeMs?: number;
   limit?: number;
 }): { stop(): void } {
   const {
     repository,
     service,
     paymentAdapter,
+    withdrawalQueue,
     intervalMs = parsePositiveInt(process.env.WITHDRAWAL_RECOVERY_INTERVAL_MS, 5 * 60 * 1000),
     minProcessingAgeMs = parsePositiveInt(
       process.env.WITHDRAWAL_RECOVERY_MIN_AGE_MS,
+      5 * 60 * 1000,
+    ),
+    minApprovedAgeMs = parsePositiveInt(
+      process.env.WITHDRAWAL_RECOVERY_MIN_APPROVED_AGE_MS,
       5 * 60 * 1000,
     ),
     limit = 50,
@@ -301,7 +398,15 @@ export function startWithdrawalRecovery(options: {
     }
     running = true;
     try {
-      await runWithdrawalRecovery({ repository, service, paymentAdapter, minProcessingAgeMs, limit });
+      await runWithdrawalRecovery({
+        repository,
+        service,
+        paymentAdapter,
+        withdrawalQueue,
+        minProcessingAgeMs,
+        minApprovedAgeMs,
+        limit,
+      });
     } catch (err) {
       writeStructuredLog({ event: 'withdrawal_recovery_scan_failed', err });
     } finally {

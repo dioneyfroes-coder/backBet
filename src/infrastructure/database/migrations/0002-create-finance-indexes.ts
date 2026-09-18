@@ -11,6 +11,7 @@ export const ensureFinanceIndexesMigration: MigrationDefinition = {
       WithdrawalRequestModel.collection.createIndex({ userId: 1, requestedAt: -1 }, { background: true }),
       WithdrawalRequestModel.collection.createIndex({ status: 1, requestedAt: -1 }, { background: true }),
       WithdrawalRequestModel.collection.createIndex({ status: 1, processingAt: 1 }, { background: true }),
+      WithdrawalRequestModel.collection.createIndex({ status: 1, processedAt: 1 }, { background: true }),
       LedgerEntryModel.collection.createIndex({ userId: 1, createdAt: -1 }, { background: true }),
       BetModel.collection.createIndex({ marketId: 1 }, { background: true }),
     ]);

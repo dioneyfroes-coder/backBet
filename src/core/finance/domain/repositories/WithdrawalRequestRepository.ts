@@ -47,4 +47,17 @@ export class WithdrawalRequestRepository implements IWithdrawalRequestRepository
     );
     return stuck.slice(0, limit ?? stuck.length);
   }
+
+  async listStuckApproved(approvedBefore: Date, limit?: number): Promise<WithdrawalRequest[]> {
+    const stuck = this.requests
+      .filter(
+        (r) =>
+          r.status === 'APPROVED' &&
+          r.processingAt === undefined &&
+          r.processedAt !== undefined &&
+          r.processedAt < approvedBefore,
+      )
+      .sort((a, b) => (a.processedAt?.getTime() ?? 0) - (b.processedAt?.getTime() ?? 0));
+    return stuck.slice(0, limit ?? stuck.length);
+  }
 }
