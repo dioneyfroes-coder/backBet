@@ -141,3 +141,53 @@ describe('MongooseUserRepository (mocked model)', () => {
     });
   });
 });
+
+describe('MongooseUserRepository — cobertura adicional (mocked model)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('findById retorna null quando não existe', async () => {
+    jest.spyOn(UserModel, 'findById').mockReturnValue(chain(null) as never);
+
+    const repo = new MongooseUserRepository();
+    await expect(repo.findById('missing')).resolves.toBeNull();
+  });
+
+  it('findByEmail mapeia document para domínio', async () => {
+    jest.spyOn(UserModel, 'findOne').mockReturnValue(chain(USER_DOC) as never);
+
+    const repo = new MongooseUserRepository();
+    const user = await repo.findByEmail('test@example.com');
+    expect(user).not.toBeNull();
+    expect(user?.username).toBe('tester');
+  });
+
+  it('findByPixKey mapeia documentos', async () => {
+    jest.spyOn(UserModel, 'find').mockReturnValue(
+      chain([USER_DOC, { ...USER_DOC, _id: 'user-2' }]) as never,
+    );
+
+    const repo = new MongooseUserRepository();
+    const users = await repo.findByPixKey('  chave-pix  ');
+    expect(users).toHaveLength(2);
+    expect(users[0].id).toBe('user-1');
+    expect(users[1].id).toBe('user-2');
+  });
+
+  it('findByRecoveryToken retorna usuário quando o token existe', async () => {
+    jest.spyOn(UserModel, 'findOne').mockResolvedValue(USER_DOC as never);
+
+    const repo = new MongooseUserRepository();
+    const user = await repo.findByRecoveryToken('token-valido');
+    expect(user).not.toBeNull();
+    expect(user?.email.toString()).toBe('test@example.com');
+  });
+
+  it('findByRecoveryToken retorna null quando o token não existe', async () => {
+    jest.spyOn(UserModel, 'findOne').mockResolvedValue(null as never);
+
+    const repo = new MongooseUserRepository();
+    await expect(repo.findByRecoveryToken('token-inexistente')).resolves.toBeNull();
+  });
+});

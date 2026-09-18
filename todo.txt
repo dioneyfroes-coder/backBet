@@ -70,9 +70,26 @@ Ordem: Fase 1 (repetibilidade) → Fase 2 (carga progressiva) → Fase 3 (chaos/
   - **Sem corrupção financeira** em nenhum cenário (saldo + ledger conferidos no Mongo).
   - Unit: **896 passed / 0 failed** (17 skipped = integração real desligada no host).
 
-- [ ] **Fase 4 — Cobertura** · pendente
-  - Meta: elevar cobertura com foco em `RiskService`, `MongooseBetRepository`,
-    `MongooseUserRepository`, `WithdrawalPayoutWorker`.
+- [x] **Fase 4 — Cobertura** · concluída (17/set/2026)
+  - 4 módulos-alvo levados a **100% stmts / fns / branches** (0 cobertura gap bancas):
+    - `RiskService` (incluso `críticas novas`: velocity *banal*, whitelist/blacklist, limite por
+      evento/mercado, `recalculate*` com e sem repositórios, fallback exposição via
+      `betRepository`, passagem de `options` em `reserveExposure`/`registerExposure`/
+      `reserveCounter`). Eram linhas 39–42,65,85-86,97,117-118,127,137-138,150,157-158,170,
+      197-199,236,248,261,319,334-340,360-364,369-383 + 2 funções anônimas.
+    - `MongooseBetRepository` (100/100/100): happy-paths de `create/update/findById(+session)`/
+      `findBy*`/`exists/delete`, `CONFLICT` por versão, `default-arg` de `version=1`/`findAll`
+      sem filtro, rethrow virgem de erros transientes (WriteConflict 112) em todos os métodos.
+    - `MongooseUserRepository` (100/100/100): happy-paths de `findById/findByEmail/
+      findByPixKey/findByRecoveryToken`, nulos não-encontrados, erro de banco mapeado.
+    - `WithdrawalPayoutWorker` (100/100/100): `runWithdrawalRecovery` com itens PAID/FAILED/
+      UNKNOWN/erro (isolamento de item que lança), defaults de env inválido→fallback,
+      guard de reentrada (`running`), falha do PSP não paga/refaz nada, métricas best-effort
+      quando o `.inc` das métricas lança (console.debug sem mascarar erro).
+  - **Verificação**: as 4 suítes (82 testes) + suíte hermética completa re-rodadas após as
+    edições — **950 passed / 17 skipped (integração real desligada no host) / 0 falhas**;
+    `npm run typecheck` e `npm run lint` limpos. Cobertura medida em
+    `coverage/coverage-final.json` (por alvo ≥ 100/100/100).
 
 ## Estado do repositório (atualizado após Fase 3)
 

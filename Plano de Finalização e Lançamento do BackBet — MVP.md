@@ -226,3 +226,24 @@ background e volta sozinho. Regressão: novo teste em `RedisClient.test.ts` (con
 (app/workers voltam `healthy`, readiness volta a `ready:true`, breaker fecha) e **sem
 corrupção financeira**: saldo e razão (ledger) conferidos no Mongo após cada cenário, com
 idempotência preservada (requests repetidos deduplicados, sem débito duplo).
+
+---
+
+## Fase 4 — Cobertura · concluída (17/set/2026)
+
+Metas e alvos definidos na linha 26/linha 37 da tabela de fases (`RiskService`,
+`MongooseBetRepository`, `MongooseUserRepository`, `WithdrawalPayoutWorker`). Resultado
+medido com **Istanbul (coverage-final.json) e suíte hermética (sem integração no host)**:
+
+| Alvo | stmts | fns | branches | verificação (suíte hermética) |
+|---|---|---|---|---|
+| `RiskService.ts` | **100%** | **100%** | **100%** | antes apresentava múltiplos gaps (novas regras de risco) → agora 0 |
+| `MongooseBetRepository.ts` | **100%** | **100%** | **100%** | antes 75,7% stmts (2 falhas de teste real sinalizadas) → 100% |
+| `MongooseUserRepository.ts` | **100%** | **100%** | **100%** | antes ~78% → agora 0 gaps |
+| `WithdrawalPayoutWorker.ts` | **100%** | **100%** | **100%** | antes 32,7% stmts (bloco de recovery não exercitado) → 100% |
+
+- Mudanças: `RiskService.test.ts`, `MongooseBetRepository.test.ts`,
+  `MongooseUserRepository.test.ts` (testes estendidos) e novo
+  `WithdrawalPayoutWorker.coverage.test.ts`.
+- Verificação: suíte hermética completa **950 passed / 17 skipped (integração real
+  desligada) / 0 falhas**; `npm run typecheck` e `npm run lint` limpos.

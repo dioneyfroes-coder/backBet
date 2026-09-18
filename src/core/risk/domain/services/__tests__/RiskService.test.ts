@@ -1,5 +1,6 @@
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { Bet } from '@/core/betting/domain/entities/Bet';
 import { Money } from '@/core/shared/domain/value-objects/Money';
@@ -191,5 +192,201 @@ describe('RiskService (in-memory)', () => {
       expect(result.counters).toHaveLength(3);
       expect(result.counters.every((c) => c.reconciled)).toBe(true);
     });
+  });
+});
+
+const pendingBet = (
+  id: string,
+  userId: string,
+  eventId: string,
+  marketId: string,
+  amountBRL: number,
+  oddsValue: number,
+  createdAt: Date = new Date(Date.now() - 1000),
+): Bet =>
+  new Bet(
+    id,
+    userId,
+    eventId,
+    marketId,
+    new Money(amountBRL, 'BRL'),
+    new Odds(oddsValue),
+    'PENDING',
+    'SINGLE',
+    createdAt,
+    new Date(0),
+    '',
+  );
+
+describe('RiskService — fallback via betRepository', () => {
+  it('getExposureForUser computa liability de apostas pendentes quando não há riskRepository', async () => {
+    const betRepo = { findByUserId: jest.fn(async () => [pendingBet('b1', 'user-fb', 'evt', 'mkt', 50, 2)]) } as any;
+    const rs = new RiskService(undefined, betRepo);
+    expect(await rs.getExposureForUser('user-fb')).toBe(50);
+  });
+
+  it('getExposureForUser ignora apostas não pendentes', async () => {
+    const betRepo = {
+      findByUserId: jest.fn(async () => [
+        pendingBet('b1', 'user-fb2', 'evt', 'mkt', 50, 2),
+        new Bet('b2', 'user-fb2', 'evt', 'mkt', new Money(200, 'BRL'), new Odds(1.5), 'WON', 'SINGLE', new Date(), new Date(), ''),
+      ]),
+    } as any;
+    const rs = new RiskService(undefined, betRepo);
+    expect(await rs.getExposureForUser('user-fb2')).toBe(50);
+  });
+});
+
+describe('RiskService — sem repositório (fallback in-memory)', () => {
+  it('counter de evento/mercado retorna 0 e reserves retornam true', async () => {
+    const rs = new RiskService();
+    expect(await rs.getEventExposure('evt')).toBe(0);
+    expect(await rs.getMarketExposure('mkt')).toBe(0);
+    expect(await rs.reserveEventExposure('evt', 100)).toBe(true);
+    expect(await rs.reserveMarketExposure('mkt', 100)).toBe(true);
+  });
+
+  it('reduceExposure em perfil inexistente é no-op', async () => {
+    const rs = new RiskService();
+    await expect(rs.reduceExposure('missing', 100)).resolves.toBeUndefined();
+  });
+
+  it('recalculateUserExposure corrige exposição in-memory divergente', async () => {
+    const betRepo = { findByUserId: jest.fn(async () => [pendingBet('b1', 'user-rc', 'evt', 'mkt', 50, 2)]) } as any;
+    const rs = new RiskService(undefined, betRepo);
+    await rs.registerExposure('user-rc', 999900);
+
+    const result = await rs.recalculateUserExposure('user-rc');
+    expect(result.reconciled).toBe(true);
+    expect(result.expectedExposureCents).toBe(5000);
+    expect(result.actualExposureCents).toBe(999900);
+    expect(await rs.recalculateUserExposure('user-rc')).toEqual(
+      expect.objectContaining({ expectedExposureCents: 5000, actualExposureCents: 5000, reconciled: false }),
+    );
+  });
+
+  it('recalculateCounter sem betRepository não ajusta nada', async () => {
+    const rs = new RiskService();
+    const res = await rs.recalculateCounter('EVENT', 'evt');
+    expect(res.reconciled).toBe(false);
+    expect(res.expectedExposureCents).toBe(0);
+  });
+
+  it('recalculateCounter fallback usa findByEventId/findByMarketId', async () => {
+    const betRepo = {
+      findByEventId: jest.fn(async () => [pendingBet('b1', 'u1', 'evt', 'mkt', 10, 2)]),
+      findByMarketId: jest.fn(async () => [pendingBet('b2', 'u2', 'evt', 'mkt', 5, 1.5)]),
+    } as any;
+    const rs = new RiskService(undefined, betRepo);
+    const ev = await rs.recalculateCounter('EVENT', 'evt');
+    const mk = await rs.recalculateCounter('MARKET', 'mkt');
+    expect(ev.reconciled).toBe(true);
+    expect(ev.expectedExposureCents).toBe(1000);
+    expect(mk.reconciled).toBe(true);
+    expect(mk.expectedExposureCents).toBe(250);
+  });
+});
+
+describe('RiskService.canPlaceBet — políticas', () => {
+  const savedWhitelist = [...RISK_CONFIG.WHITELIST_USER_IDS];
+  const savedBlacklist = [...RISK_CONFIG.BLACKLIST_USER_IDS];
+
+  afterEach(() => {
+    (RISK_CONFIG as any).WHITELIST_USER_IDS = savedWhitelist;
+    (RISK_CONFIG as any).BLACKLIST_USER_IDS = savedBlacklist;
+  });
+
+  it('whitelist ignora limites', async () => {
+    (RISK_CONFIG as any).WHITELIST_USER_IDS = ['wl-1'];
+    const rs = new RiskService();
+    expect(await rs.canPlaceBet('wl-1', 2000, 2)).toBe(true);
+  });
+
+  it('blacklist bloqueia', async () => {
+    (RISK_CONFIG as any).BLACKLIST_USER_IDS = ['bl-1'];
+    const rs = new RiskService();
+    expect(await rs.canPlaceBet('bl-1', 10, 2)).toBe(false);
+  });
+
+  it('limite de velocidade rejeita apostas recentes', async () => {
+    const bets = Array.from({ length: RISK_CONFIG.MAX_BETS_PER_WINDOW }, (_, i) =>
+      pendingBet(`b${i}`, 'v-1', 'e', 'm', 10, 2, new Date(Date.now() - 1000)),
+    );
+    const rs = new RiskService(undefined, { findByUserId: jest.fn(async () => bets) } as any);
+    expect(await rs.canPlaceBet('v-1', 10, 2)).toBe(false);
+  });
+
+  it('limite de exposição por evento rejeita', async () => {
+    const riskRepo = new InMemoryRiskRepository();
+    await riskRepo.setCounterExposure('EVENT', 'evt-x', RISK_CONFIG.MAX_EXPOSURE_PER_EVENT * 100);
+    const rs = new RiskService(riskRepo, { findByUserId: jest.fn(async () => []) } as any);
+    expect(await rs.canPlaceBet('u', 10, 2, 'evt-x')).toBe(false);
+  });
+
+  it('limite de exposição por mercado rejeita', async () => {
+    const riskRepo = new InMemoryRiskRepository();
+    await riskRepo.setCounterExposure('MARKET', 'mkt-x', RISK_CONFIG.MAX_EXPOSURE_PER_MARKET * 100);
+    const rs = new RiskService(riskRepo, { findByUserId: jest.fn(async () => []) } as any);
+    expect(await rs.canPlaceBet('u', 10, 2, undefined, 'mkt-x')).toBe(false);
+  });
+
+  it('stake acima do máximo rejeita por single_stake', async () => {
+    const rs = new RiskService();
+    expect(await rs.canPlaceBet('u', RISK_CONFIG.MAX_SINGLE_STAKE + 1, 2)).toBe(false);
+  });
+
+  it('aposta permitida passa por todas as checagens sem repositórios', async () => {
+    const rs = new RiskService();
+    expect(await rs.canPlaceBet('u', 10, 2, 'evt', 'mkt')).toBe(true);
+  });
+});
+
+describe('RiskService — registerExposure/reduceExposure com riskRepository', () => {
+  it('repassa options (session) para o repositório', async () => {
+    const riskRepo = {
+      increaseExposure: jest.fn().mockResolvedValue(undefined),
+      decreaseExposure: jest.fn().mockResolvedValue(undefined),
+      reserveExposure: jest.fn().mockResolvedValue(true),
+    } as any;
+    const rs = new RiskService(riskRepo);
+
+    await rs.registerExposure('u', 100, { session: {} } as any);
+    expect(riskRepo.increaseExposure).toHaveBeenCalledWith('u', 100, { session: {} });
+
+    await rs.registerExposure('u', 100);
+    expect(riskRepo.increaseExposure).toHaveBeenCalledWith('u', 100);
+
+    await rs.reduceExposure('u', 100, { session: {} } as any);
+    expect(riskRepo.decreaseExposure).toHaveBeenCalledWith('u', 100, { session: {} });
+
+    await rs.reduceExposure('u', 100);
+    expect(riskRepo.decreaseExposure).toHaveBeenCalledWith('u', 100);
+
+    await rs.reserveExposure('u', 100, { session: {} } as any);
+    expect(riskRepo.reserveExposure).toHaveBeenCalledWith('u', 100, { session: {} });
+  });
+
+  it('reserve/reduce sem options e de contadores repassam ao repositório', async () => {
+    const riskRepo = {
+      reserveExposure: jest.fn().mockResolvedValue(true),
+      reserveCounter: jest.fn().mockResolvedValue(true),
+      decreaseCounter: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const rs = new RiskService(riskRepo);
+
+    await rs.reserveExposure('u', 100);
+    expect(riskRepo.reserveExposure).toHaveBeenCalledWith('u', 100);
+
+    await rs.reserveEventExposure('evt', 100, { session: {} } as any);
+    expect(riskRepo.reserveCounter).toHaveBeenCalledWith('EVENT', 'evt', 100, { session: {} });
+
+    await rs.reserveMarketExposure('mkt', 100, { session: {} } as any);
+    expect(riskRepo.reserveCounter).toHaveBeenCalledWith('MARKET', 'mkt', 100, { session: {} });
+
+    await rs.reduceEventExposure('evt', 100, { session: {} } as any);
+    expect(riskRepo.decreaseCounter).toHaveBeenCalledWith('EVENT', 'evt', 100, { session: {} });
+
+    await rs.reduceMarketExposure('mkt', 100, { session: {} } as any);
+    expect(riskRepo.decreaseCounter).toHaveBeenCalledWith('MARKET', 'mkt', 100, { session: {} });
   });
 });
