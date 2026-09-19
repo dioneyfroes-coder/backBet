@@ -5,6 +5,10 @@ import {
   withdrawalPayoutSuccessCounter,
   withdrawalPayoutFailedCounter,
 } from '@/infrastructure/observability/metrics';
+import {
+  observeWorkerJob,
+  recordWorkerRetry,
+} from '@/infrastructure/observability/workerMetrics';
 import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithdrawalQueue';
 import type IWithdrawalQueue from '@/core/finance/domain/ports/IWithdrawalQueue';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';
@@ -435,9 +439,18 @@ export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQ
   const queue = new Queue('withdrawal_payouts', getRedisUrl()) as BullQueue;
 
   queue.process('payout', async (job) => {
-    return processWithdrawalPayload(job.data as WithdrawalPayoutPayload, undefined, service).then(
-      () => Promise.resolve(),
-    );
+    const started = process.hrtime();
+    if (job.attemptsMade > 0) {
+      recordWorkerRetry('withdrawal_payouts');
+    }
+    try {
+      await processWithdrawalPayload(job.data as WithdrawalPayoutPayload, undefined, service);
+      observeWorkerJob('withdrawal_payouts', 'payout', 'succeeded', jobElapsedMs(started));
+      return Promise.resolve();
+    } catch (err) {
+      observeWorkerJob('withdrawal_payouts', 'payout', 'failed', jobElapsedMs(started));
+      throw err;
+    }
   });
 
   queue.on('failed', (job, err) => {
@@ -450,5 +463,10 @@ export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQ
 
   return queue;
 }
+
+const jobElapsedMs = (started: [number, number]): number => {
+  const delta = process.hrtime(started);
+  return delta[0] * 1000 + delta[1] / 1e6;
+};
 
 export default startWithdrawalWorker;
