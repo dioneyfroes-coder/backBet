@@ -1,0 +1,99 @@
+name: Nightly — cargas pesadas
+
+# Fase 16 — CI/CD.
+#
+# Cargas pesadas NÃO rodam em todo PR (o PR gate é o ci.yml: secrets,
+# typecheck, lint, unit, coverage, build, audit critical, integração).
+# Este workflow roda os testes pesados que precisam de mais tempo/infra:
+#
+#   Nightly (agendado 03:00 UTC e manual via workflow_dispatch)
+#   ├─ distributed 1x / 5x / 10x   (LOAD_SCALE — 100/500/1000 carteiras)
+#   └─ agendados/manuais
+#      ├─ Chaos  (crash testing — Fase 14)
+#      ├─ Load   (contention — Fase 4)
+#      └─ Backup drill (backup/restore/reconciliação — Fase 15)
+#
+# Cada job sobe a SUA própria infra de teste (docker-compose.test.yml:
+# MongoDB replica set + Redis) num runner isolado — sem cargas paralelas
+# dividindo o mesmo banco.
+
+on:
+  schedule:
+    # 03:00 UTC todos os dias (01:00 no fuso -03).
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  distributed-load:
+    name: Load distribuído ${{ matrix.scale }}x
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        scale: [1, 5, 10]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Start test infrastructure (MongoDB replica set + Redis)
+        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
+
+      - name: Carga distribuída ${{
+          matrix.scale }}x
+        run: LOAD_SCALE=${{ matrix.scale }} npm run test:load:distributed
+
+      - name: Teardown test infrastructure
+        run: docker compose -f docker-compose.test.yml down
+        if: always()
+
+  scheduled-suite:
+    name: ${{ matrix.suite.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - name: Chaos (crash testing — Fase 14)
+            script: test:crash
+          - name: Load (contention — Fase 4)
+            script: test:load
+          - name: Backup drill (Fase 15)
+            script: test:backup
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Start test infrastructure (MongoDB replica set + Redis)
+        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
+
+      - name: ${{ matrix.suite.name }}
+        run: npm run ${{ matrix.suite.script }}
+
+      - name: Teardown test infrastructure
+        run: docker compose -f docker-compose.test.yml down
+        if: always()
