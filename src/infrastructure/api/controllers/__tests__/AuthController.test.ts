@@ -4,6 +4,9 @@ import { AuthenticatedRequest } from '../../middleware/AuthMiddleware';
 import { User } from '@core/user/domain/entities/User';
 import { Email } from '@core/user/domain/value-objects/Email';
 import { randomUUID } from 'crypto';
+import { SessionService } from '@/core/auth/domain/services/SessionService';
+import { InMemorySessionRepository } from '@/core/auth/domain/repositories/InMemorySessionRepository';
+import { ChangePassword } from '@/core/user/application/use-cases/ChangePassword';
 
 jest.mock('crypto', () => ({
   randomUUID: jest.fn(() => 'session-uuid'),
@@ -80,11 +83,13 @@ describe('AuthController', () => {
     verifyRefreshToken: jest.fn(),
   };
 
-  const buildController = () =>
+  const buildController = (extra?: { changePasswordUseCase?: ChangePassword }) =>
     new AuthController(
       registerUserUseCase as unknown as any,
       userService as unknown as any,
       jwtService as unknown as any,
+      new SessionService(new InMemorySessionRepository()),
+      extra?.changePasswordUseCase,
     );
 
   beforeEach(() => {
@@ -288,10 +293,16 @@ describe('AuthController', () => {
 
   it('refreshToken returns renewed tokens and profile', async () => {
     const controller = buildController();
+    // Cria a sessão emitida no login; o mock de crypto força sessionId=jwtId.
+    await (controller as any).sessionService.openSession('user-1');
     const res = createResponse();
     const req = createRequest({ body: { refreshToken: 'token' } });
     const user = makeUser();
-    jwtService.verifyRefreshToken.mockReturnValue({ userId: 'user-1', sessionId: undefined });
+    jwtService.verifyRefreshToken.mockReturnValue({
+      userId: 'user-1',
+      sessionId: 'session-uuid',
+      jti: 'session-uuid',
+    });
     userService.findById.mockResolvedValue(user);
     jwtService.signAccessToken.mockReturnValue('new-access');
     jwtService.signRefreshToken.mockReturnValue('new-refresh');
@@ -310,6 +321,28 @@ describe('AuthController', () => {
         lastName: 'user',
       },
     });
+  });
+
+  it('refreshToken revokes the session when the presented jti is reused', async () => {
+    const controller = buildController();
+    // Sessão ativa com jwtId 'session-uuid'; o jti apresentado é 'old-jti'.
+    await (controller as any).sessionService.openSession('user-1');
+    const res = createResponse();
+    const req = createRequest({ body: { refreshToken: 'stolen-token' } });
+    const user = makeUser();
+    jwtService.verifyRefreshToken.mockReturnValue({
+      userId: 'user-1',
+      sessionId: 'session-uuid',
+      jti: 'old-jti',
+    });
+    userService.findById.mockResolvedValue(user);
+
+    await controller.refreshToken(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    const session = await (controller as any).sessionService.findSession('session-uuid');
+    expect(session?.status).toBe('REVOKED');
+    expect(session?.revokedReason).toBe('REUSE_DETECTED');
   });
 
   it('me requires authentication and user existence', async () => {

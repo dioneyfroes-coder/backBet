@@ -1,11 +1,11 @@
 import { Email } from '../value-objects/Email';
 import { IUserDTO, UserStatus } from '../../types/user.types';
+import bcrypt from 'bcryptjs';
 
 export class User {
   // ...
   setPassword(newPassword: string) {
-    // Aqui deveria ser feito o hash, mas para teste simples:
-    this.passwordHash = newPassword;
+    this.passwordHash = bcrypt.hashSync(newPassword, 12);
   }
   constructor(
     public readonly id: string,

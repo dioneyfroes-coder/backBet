@@ -1,3 +1,7 @@
+process.env.BACKBET_RUNTIME_ENV = 'test';
+process.env.USE_MONGOOSE_PERSISTENCE = 'false';
+process.env.NODE_ENV = 'test';
+
 import { UserService } from '../UserService';
 import { User } from '../../entities/User';
 import { IUserRepository } from '../../repositories/IUserRepository';

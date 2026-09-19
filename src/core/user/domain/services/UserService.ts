@@ -5,6 +5,7 @@ import { ICreateUserDTO, UserStatus } from '../../types/user.types';
 import { AppError } from '@/shared/errors/AppError';
 import { userConfig } from '../../config/user-config';
 import bcrypt from 'bcryptjs';
+import { getSessionService } from '@/core/auth/domain/services/SessionServiceSingleton';
 
 export class UserService {
   constructor(private userRepository: IUserRepository) {}
@@ -59,6 +60,9 @@ export class UserService {
 
     user.status = 'SUSPENDED';
     await this.userRepository.update(user);
+    // Token emitidos antes da suspensão deixam de valer imediatamente (Fase 9).
+    const sessionService = await getSessionService();
+    await sessionService.revokeAllForUser(userId);
   }
 
   async activateUser(userId: string): Promise<void> {

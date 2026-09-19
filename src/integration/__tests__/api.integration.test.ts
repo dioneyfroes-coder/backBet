@@ -1,3 +1,6 @@
+process.env.BACKBET_RUNTIME_ENV = 'test';
+process.env.USE_MONGOOSE_PERSISTENCE = 'false';
+
 import request from 'supertest';
 import { createApiServer } from '@/infrastructure/api/ApiServer';
 import express, { Router } from 'express';

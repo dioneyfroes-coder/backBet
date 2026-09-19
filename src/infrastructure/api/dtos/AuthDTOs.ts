@@ -45,6 +45,16 @@ export const LogoutDTO = z.object({
 export type LogoutDTOType = z.infer<typeof LogoutDTO>;
 
 /**
+ * Schema para troca de senha
+ */
+export const ChangePasswordDTO = z.object({
+  currentPassword: z.string().min(1, 'Senha atual é requerida'),
+  newPassword: z.string().min(8, 'Nova senha deve ter pelo menos 8 caracteres'),
+});
+
+export type ChangePasswordDTOType = z.infer<typeof ChangePasswordDTO>;
+
+/**
  * Response de autenticação
  */
 export const AuthResponseDTO = z.object({

@@ -1,24 +1,36 @@
 import { Request, Response, CookieOptions } from 'express';
 import { BaseController } from './BaseController';
 import { AuthenticatedRequest, getRequestUserId } from '../middleware/AuthMiddleware';
-import { RegisterDTO, LoginDTO, RefreshTokenDTO } from '../dtos/AuthDTOs';
+import {
+  RegisterDTO,
+  LoginDTO,
+  RefreshTokenDTO,
+  LogoutDTO,
+  ChangePasswordDTO,
+} from '../dtos/AuthDTOs';
 import { RegisterUser } from '@core/user/application/use-cases/RegisterUser';
 import { UserService } from '@core/user/domain/services/UserService';
 import { User } from '@core/user/domain/entities/User';
 import { JwtService } from '@/shared/services/JwtService';
-import { randomUUID } from 'crypto';
 import { UserStatus } from '@core/user/types/user.types';
 import { appConfig } from '@/shared/config/appConfig';
+import { SessionService } from '@/core/auth/domain/services/SessionService';
+import { getSessionService } from '@/core/auth/domain/services/SessionServiceSingleton';
+import { ChangePassword } from '@core/user/application/use-cases/ChangePassword';
+import { Session } from '@/core/auth/domain/entities/Session';
 
 /**
  * Controller de autenticação
- * Gerencia registro/autenticação local com JWT
+ * Gerencia registro/autenticação local com JWT e ciclo de vida das sessões
+ * (rotação de refresh token, revogação em logout/mudança de senha/suspensão).
  */
 export class AuthController extends BaseController {
   constructor(
     private registerUserUseCase: RegisterUser,
     private userService: UserService,
     private jwtService: JwtService,
+    private sessionService: SessionService | (() => Promise<SessionService>) = getSessionService,
+    private changePasswordUseCase?: ChangePassword,
   ) {
     super();
   }
@@ -76,7 +88,7 @@ export class AuthController extends BaseController {
       const accountStatus = result.user.status;
       const isActive = this.isAccountActive(accountStatus);
       const canOperate = this.canOperate(accountStatus);
-      const tokens = canOperate ? this.issueSessionTokens(res, result.user.id) : null;
+      const tokens = canOperate ? await this.issueSessionTokens(res, result.user.id) : null;
       const walletSummary = {
         id: result.wallet.userId,
         userId: result.wallet.userId,
@@ -161,7 +173,7 @@ export class AuthController extends BaseController {
         );
       }
 
-      const tokens = this.issueSessionTokens(res, user.id);
+      const tokens = await this.issueSessionTokens(res, user.id);
 
       return this.ok(res, {
         ...tokens,
@@ -218,7 +230,15 @@ export class AuthController extends BaseController {
         });
       }
 
-      const tokens = this.issueSessionTokens(res, user.id, decoded.sessionId);
+      // Rotação do refresh token: o jti apresentado é comparado com o vigente.
+      // Reuso de token antigo/roubado revoga a família de sessão (401).
+      const session = await (await this.sessionSvc()).rotate(
+        decoded.userId,
+        decoded.sessionId as string,
+        decoded.jti,
+      );
+
+      const tokens = await this.issueSessionTokens(res, user.id, session);
       return this.ok(res, {
         ...tokens,
         user: this.buildUserProfile(user),
@@ -297,10 +317,52 @@ export class AuthController extends BaseController {
    *               $ref: '#/components/schemas/UnauthorizedError'
    */
   async logout(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+    const payload = this.validateSchema(LogoutDTO, req.body ?? {});
+    const sessionId = payload?.sessionId || req.authContext?.sessionId;
+
+    if (sessionId && userId) {
+      // Revoga a sessão servidor-side (best-effort e idempotente): logout é
+      // sempre bem-sucedido mesmo se a sessão já expirou ou foi revogada.
+      await (await this.sessionSvc()).revokeOwnSession(sessionId, userId);
+    }
+
     this.clearAuthCookies(res);
     return this.ok(res, {
       message: 'Logout realizado com sucesso',
     });
+  }
+
+  async changePassword(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return this.unauthorized(res, 'Autenticação requerida');
+      }
+      if (!this.changePasswordUseCase) {
+        return this.internalError(res, 'Operação indisponível');
+      }
+
+      const payload = this.validateSchema(ChangePasswordDTO, req.body);
+      if (!payload) {
+        return this.badRequest(res, 'Dados inválidos');
+      }
+
+      await this.changePasswordUseCase.execute({
+        userId,
+        currentPassword: payload.currentPassword,
+        newPassword: payload.newPassword,
+      });
+
+      // Após a troca, as sessões foram revogadas; encerra a sessão do cliente.
+      this.clearAuthCookies(res);
+
+      return this.ok(res, {
+        message: 'Senha alterada com sucesso. Faça login novamente.',
+      });
+    } catch (error) {
+      return this.handleError(error, res);
+    }
   }
 
   async registrationStatus(req: Request<{ userId: string }>, res: Response): Promise<Response> {
@@ -342,12 +404,20 @@ export class AuthController extends BaseController {
     return status !== 'SUSPENDED';
   }
 
-  private issueSessionTokens(res: Response, userId: string, existingSessionId?: string) {
-    const sessionId = existingSessionId || randomUUID();
-    const accessToken = this.jwtService.signAccessToken(userId, sessionId);
-    const refreshToken = this.jwtService.signRefreshToken(userId, sessionId);
-    this.setAuthCookies(res, { refreshToken, sessionId });
-    return { accessToken, refreshToken, sessionId };
+  private async sessionSvc(): Promise<SessionService> {
+    if (typeof this.sessionService === 'function') {
+      return this.sessionService();
+    }
+    return this.sessionService;
+  }
+
+  private async issueSessionTokens(res: Response, userId: string, existingSession?: Session) {
+    const session =
+      existingSession ?? (await (await this.sessionSvc()).openSession(userId));
+    const accessToken = this.jwtService.signAccessToken(userId, session.sessionId);
+    const refreshToken = this.jwtService.signRefreshToken(userId, session.sessionId, session.jwtId);
+    this.setAuthCookies(res, { refreshToken, sessionId: session.sessionId });
+    return { accessToken, refreshToken, sessionId: session.sessionId };
   }
 
   private setAuthCookies(

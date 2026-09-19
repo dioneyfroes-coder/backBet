@@ -254,6 +254,42 @@ describe('Admin Operations Routes (Fase 28)', () => {
     expect(user?.status).toBe('ACTIVE');
   });
 
+  describe('Matriz de autorização (Fase 9)', () => {
+    const financeUserId = 'finance-user';
+
+    it('permite a role finance acessar treasury (admin | finance)', async () => {
+      appConfig.finance.allowedUserIds = [financeUserId];
+      const financeToken = jwtService.signAccessToken(financeUserId, 'session-test');
+
+      const response = await request(app)
+        .get('/api/admin/treasury/summary')
+        .set('Authorization', `Bearer ${financeToken}`);
+
+      expect(response.status).toBe(200);
+    });
+
+    it('nega treasury para usuário sem role admin/finance', async () => {
+      const nonAdminToken = jwtService.signAccessToken(targetUserId, 'session-test');
+
+      const response = await request(app)
+        .get('/api/admin/treasury/summary')
+        .set('Authorization', `Bearer ${nonAdminToken}`);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('role finance não acessa gestão de usuário (admin-only)', async () => {
+      appConfig.finance.allowedUserIds = [financeUserId];
+      const financeToken = jwtService.signAccessToken(financeUserId, 'session-test');
+
+      const response = await request(app)
+        .get(`/api/admin/users/${targetUserId}`)
+        .set('Authorization', `Bearer ${financeToken}`);
+
+      expect(response.status).toBe(403);
+    });
+  });
+
   describe('GET /reports/daily-financial-summary (Fase 33)', () => {
     const seedReportData = async () => {
       await riskRepository.upsert(new RiskProfile(targetUserId, 10000, 500000));

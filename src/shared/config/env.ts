@@ -126,6 +126,7 @@ type AppEnv = NodeJS.ProcessEnv & {
   APP_NAME?: string;
   SERVICE_NAME?: string;
   ADMIN_USER_IDS?: string;
+  FINANCE_USER_IDS?: string;
   AUTO_ACTIVATE_SIGNUPS?: string;
   LOG_LEVEL?: string;
   LOG_FILE_ENABLED?: string;
@@ -145,6 +146,8 @@ type AppEnv = NodeJS.ProcessEnv & {
   JWT_SECRET: string;
   JWT_ISSUER?: string;
   JWT_AUDIENCE?: string;
+  JWT_ACCESS_SECRET?: string;
+  JWT_REFRESH_SECRET?: string;
   JWT_EXPIRATION?: string;
   JWT_REFRESH_EXPIRATION?: string;
   ALLOW_DEV_BEARER_BYPASS?: string;

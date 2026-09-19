@@ -16,6 +16,8 @@ import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRep
 import { JwtService } from '@/shared/services/JwtService';
 import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { appConfig } from '@/shared/config/appConfig';
+import { ChangePassword } from '@core/user/application/use-cases/ChangePassword';
+import { getSessionService } from '@/core/auth/domain/services/SessionServiceSingleton';
 
 export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
@@ -55,9 +57,17 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
 
   // Use-cases
   const registerUserUseCase = new RegisterUser(userService, walletService);
+  const changePasswordUseCase = new ChangePassword(userRepository);
+  const sessionService = await getSessionService();
 
   // Instanciar controller
-  const authController = new AuthController(registerUserUseCase, userService, jwtService);
+  const authController = new AuthController(
+    registerUserUseCase,
+    userService,
+    jwtService,
+    sessionService,
+    changePasswordUseCase,
+  );
 
   /**
    * POST /auth/register
@@ -114,6 +124,16 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
     '/logout',
     protectedRoute,
     asyncHandler((req: AuthenticatedRequest, res: Response) => authController.logout(req, res)),
+  );
+
+  /**
+   * POST /auth/change-password
+   * Troca a senha do usuário autenticado e revoga todas as sessões
+   */
+  router.post(
+    '/change-password',
+    protectedRoute,
+    asyncHandler((req: AuthenticatedRequest, res: Response) => authController.changePassword(req, res)),
   );
 
   return router;

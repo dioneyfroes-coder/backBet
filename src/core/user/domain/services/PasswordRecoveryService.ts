@@ -22,7 +22,7 @@ export class PasswordRecoveryService {
     return token;
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<void> {
+  async resetPassword(token: string, newPassword: string): Promise<string> {
     const user = await this.userRepository.findByRecoveryToken(token);
     if (!user || !user.passwordRecovery || user.passwordRecovery.token !== token)
       throw new AppError('NOT_FOUND', 'Token inválido', 404);
@@ -31,5 +31,6 @@ export class PasswordRecoveryService {
     user.setPassword(newPassword);
     user.passwordRecovery = undefined;
     await this.userRepository.update(user);
+    return user.id;
   }
 }

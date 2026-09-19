@@ -4,6 +4,7 @@ import {
   AuthenticatedRequest,
   protectedRoute,
   requireAdminRole,
+  requireAnyRole,
 } from '../middleware/AuthMiddleware';
 import {
   createBetRepository,
@@ -274,7 +275,7 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   router.post(
     '/bets/:betId/settle',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => adminController.settleBet(req, res)),
   );
 
@@ -288,28 +289,28 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   router.get(
     '/treasury/summary',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.getSummary(req, res)),
   );
 
   router.get(
     '/treasury/ledger',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.getLedger(req, res)),
   );
 
   router.post(
     '/treasury/profit',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.recordProfit(req, res)),
   );
 
   router.post(
     '/treasury/profit-to-prize',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) =>
       treasuryController.transferProfitToPrize(req, res),
     ),
@@ -318,7 +319,7 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   router.post(
     '/treasury/prize-to-profit',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) =>
       treasuryController.transferPrizeToProfit(req, res),
     ),
@@ -327,14 +328,14 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   router.post(
     '/treasury/rebalance',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.rebalance(req, res)),
   );
 
   router.post(
     '/treasury/reconcile',
     protectedRoute,
-    requireAdminRole,
+    requireAnyRole(['admin', 'finance']),
     asyncHandler((req: AuthenticatedRequest, res) => treasuryController.reconcile(req, res)),
   );
 

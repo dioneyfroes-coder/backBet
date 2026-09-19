@@ -1,3 +1,7 @@
+process.env.BACKBET_RUNTIME_ENV = 'test';
+process.env.USE_MONGOOSE_PERSISTENCE = 'false';
+process.env.NODE_ENV = 'test';
+
 import request from 'supertest';
 import express from 'express';
 import { createApiRouter } from '../index';
@@ -10,12 +14,6 @@ describe('PasswordRecovery API', () => {
   let userRepository: any;
 
   beforeEach(async () => {
-    jest.resetModules();
-    process.env.NODE_ENV = 'test';
-    process.env.BACKBET_RUNTIME_ENV = 'test';
-    process.env.USE_MONGOOSE_PERSISTENCE = 'false';
-    delete process.env.REDIS_URL;
-
     userRepository = new UserRepository();
     app = express();
     app.use(express.json());

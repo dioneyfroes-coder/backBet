@@ -186,6 +186,9 @@ export const appConfig = {
   admin: {
     allowedUserIds: parseList(env.ADMIN_USER_IDS, []),
   },
+  finance: {
+    allowedUserIds: parseList(env.FINANCE_USER_IDS, []),
+  },
   rateLimit: {
     windowMs: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 600000), // 10 minutos
     max: parsePositiveInt(env.RATE_LIMIT_MAX, 5000), // alto para ambiente dev
@@ -401,6 +404,9 @@ export const appConfig = {
   jwt: {
     secret: env.JWT_SECRET as string,
     issuer: env.JWT_ISSUER || 'backbet',
+    audience: env.JWT_AUDIENCE || 'backbet-api',
+    accessSecret: env.JWT_ACCESS_SECRET || (env.JWT_SECRET as string),
+    refreshSecret: env.JWT_REFRESH_SECRET || (env.JWT_SECRET as string),
     accessTokenExpiration: env.JWT_EXPIRATION || '15m',
     refreshTokenExpiration: env.JWT_REFRESH_EXPIRATION || '7d',
   },

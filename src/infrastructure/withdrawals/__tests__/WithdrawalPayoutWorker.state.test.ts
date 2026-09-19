@@ -1,3 +1,7 @@
+process.env.BACKBET_RUNTIME_ENV = 'test';
+process.env.USE_MONGOOSE_PERSISTENCE = 'false';
+process.env.NODE_ENV = 'test';
+
 import { processWithdrawalPayload, processWithdrawalPayloadOnce } from '../WithdrawalPayoutWorker';
 import { WithdrawalRequestService } from '@/core/finance/domain/services/WithdrawalRequestService';
 import type IPaymentPort from '@/core/finance/domain/ports/IPaymentPort';

@@ -77,7 +77,7 @@ describe('ApiServer authentication bootstrap', () => {
       const token = jwt.sign(
         { userId: 'jwt-user', sessionId: 'session-1', kind: 'access' },
         'test-secret',
-        { issuer: 'backbet', expiresIn: '15m' },
+        { issuer: 'backbet', audience: 'backbet-api', expiresIn: '15m' },
       );
 
       await request(app)
