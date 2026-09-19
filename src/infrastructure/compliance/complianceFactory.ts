@@ -2,7 +2,7 @@ import { IKycProviderPort } from '@/core/compliance/domain/ports/IKycProviderPor
 import { IGeolocationProviderPort } from '@/core/compliance/domain/ports/IGeolocationProviderPort';
 import { IDeviceIntegrityProviderPort } from '@/core/compliance/domain/ports/IDeviceIntegrityProviderPort';
 import { appConfig } from '@/shared/config/appConfig';
-import { MockKycProvider } from './MockKycProvider';
+import { MockKycProvider } from '@/core/compliance/domain/providers/MockKycProvider';
 import { NoopGeolocationProvider } from './NoopGeolocationProvider';
 import { NoopDeviceIntegrityProvider } from './NoopDeviceIntegrityProvider';
 

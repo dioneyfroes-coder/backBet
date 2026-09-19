@@ -1,9 +1,6 @@
 import { appConfig } from '@/shared/config/appConfig';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import {
-  sigapSubmissionCounter,
-  sigapSubmissionFailureCounter,
-} from '@/infrastructure/observability/metrics';
+import { IMetricsPort, noopMetrics } from '@/shared/observability/IMetricsPort';
 import { SigapSubmission } from '../entities/SigapSubmission';
 import { ISigapSubmissionRepository } from '../repositories/ISigapSubmissionRepository';
 import { ISigapTransmissionPort } from '../ports/ISigapTransmissionPort';
@@ -33,6 +30,7 @@ export interface SigapServiceOptions {
   submissionRepository: ISigapSubmissionRepository;
   transmissionProvider: ISigapTransmissionPort;
   impedimentProvider?: ISigapImpedimentPort;
+  metrics?: IMetricsPort;
 }
 
 export interface SigapQueryOptions {
@@ -54,6 +52,10 @@ export interface SigapQueryOptions {
  */
 export class SigapService {
   constructor(private readonly options: SigapServiceOptions) {}
+
+  private get metrics(): IMetricsPort {
+    return this.options.metrics ?? noopMetrics;
+  }
 
   get submissionRepository(): ISigapSubmissionRepository {
     return this.options.submissionRepository;
@@ -261,9 +263,9 @@ export class SigapService {
   ): void {
     try {
       if (label === 'failed') {
-        sigapSubmissionFailureCounter.inc({ fileType });
+        this.metrics.sigapSubmissionFailure.inc({ fileType });
       } else {
-        sigapSubmissionCounter.inc({ fileType });
+        this.metrics.sigapSubmission.inc({ fileType });
       }
     } catch (err) {
       console.debug(`sigap metric inc failed (${label})`, err);

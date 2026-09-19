@@ -18,7 +18,10 @@ import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { appConfig } from '@/shared/config/appConfig';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { complianceBlockedCounter } from '@/infrastructure/observability/metrics';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 /**
  * ComplianceService — preparação modular de compliance (Fase 14).
@@ -40,6 +43,7 @@ export class ComplianceService {
     private readonly kycProvider?: IKycProviderPort,
     private readonly geolocationProvider?: IGeolocationProviderPort,
     private readonly deviceIntegrityProvider?: IDeviceIntegrityProviderPort,
+    private readonly metrics: IMetricsPort = noopMetrics,
   ) {}
 
   async verifyIdentity(input: KycVerificationInput): Promise<IdentityVerification> {
@@ -147,7 +151,7 @@ export class ComplianceService {
     details: Record<string, unknown>,
   ): never {
     try {
-      complianceBlockedCounter.inc({ rule: code });
+      this.metrics.complianceBlocked.inc({ rule: code });
     } catch (err) {
       console.debug('complianceBlockedCounter inc failed', err);
     }

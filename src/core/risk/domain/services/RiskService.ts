@@ -9,9 +9,9 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { RiskRepositoryOptions } from '../repositories/IRiskRepository';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import {
-  riskRejectionsCounter,
-  riskReconciliationMismatchCounter,
-} from '@/infrastructure/observability/metrics';
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export class RiskService {
   // If repository is provided, use it; otherwise fallback to in-memory map for compatibility/tests
@@ -20,6 +20,7 @@ export class RiskService {
   constructor(
     private riskRepository?: IRiskRepository,
     private betRepository?: IBetRepository,
+    private metrics: IMetricsPort = noopMetrics,
   ) {}
 
   getMaxExposure(): number {
@@ -82,7 +83,7 @@ export class RiskService {
   ): Promise<boolean> {
     // Basic checks: single stake limit
     if (stake > RISK_CONFIG.MAX_SINGLE_STAKE) {
-      riskRejectionsCounter.inc({ reason: 'single_stake' });
+      this.metrics.riskRejections.inc({ reason: 'single_stake' });
       return false;
     }
 
@@ -97,7 +98,7 @@ export class RiskService {
       return true;
     }
     if (RISK_CONFIG.BLACKLIST_USER_IDS.includes(userId)) {
-      riskRejectionsCounter.inc({ reason: 'blacklist' });
+      this.metrics.riskRejections.inc({ reason: 'blacklist' });
       writeStructuredLog({ event: 'risk_reject', userId, reason: 'blacklist' }, 'warn');
       return false;
     }
@@ -114,7 +115,7 @@ export class RiskService {
         (b) => b.status === 'PENDING' && b.createdAt.getTime() >= windowStart,
       );
       if (recentPending.length + 1 > RISK_CONFIG.MAX_BETS_PER_WINDOW) {
-        riskRejectionsCounter.inc({ reason: 'velocity_limit' });
+        this.metrics.riskRejections.inc({ reason: 'velocity_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -134,7 +135,7 @@ export class RiskService {
     if (eventId) {
       const eventExposureCents = await this.getCounterExposureCents('EVENT', eventId);
       if (eventExposureCents + liabilityCents > RISK_CONFIG.MAX_EXPOSURE_PER_EVENT * 100) {
-        riskRejectionsCounter.inc({ reason: 'event_exposure_limit' });
+        this.metrics.riskRejections.inc({ reason: 'event_exposure_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -154,7 +155,7 @@ export class RiskService {
     if (marketId) {
       const marketExposureCents = await this.getCounterExposureCents('MARKET', marketId);
       if (marketExposureCents + liabilityCents > RISK_CONFIG.MAX_EXPOSURE_PER_MARKET * 100) {
-        riskRejectionsCounter.inc({ reason: 'market_exposure_limit' });
+        this.metrics.riskRejections.inc({ reason: 'market_exposure_limit' });
         writeStructuredLog(
           {
             event: 'risk_reject',
@@ -174,7 +175,7 @@ export class RiskService {
     const currentExposureCents = Math.round(currentExposure * 100);
     const maxExposureCents = Math.round(maxExposure * 100);
     if (currentExposureCents + liabilityCents > maxExposureCents) {
-      riskRejectionsCounter.inc({ reason: 'exceeds_max_exposure' });
+      this.metrics.riskRejections.inc({ reason: 'exceeds_max_exposure' });
       writeStructuredLog(
         {
           event: 'risk_reject',
@@ -320,7 +321,7 @@ export class RiskService {
     }
 
     if (actualCents !== expectedCents) {
-      riskReconciliationMismatchCounter.inc({ kind: 'user' });
+      this.metrics.riskReconciliationMismatch.inc({ kind: 'user' });
       if (this.riskRepository) {
         const profile = await this.riskRepository.getByUserId(userId);
         await this.riskRepository.upsert(
@@ -372,7 +373,7 @@ export class RiskService {
     const actualCents = counter?.exposureCents ?? 0;
 
     if (actualCents !== expectedCents) {
-      riskReconciliationMismatchCounter.inc({ kind: 'counter' });
+      this.metrics.riskReconciliationMismatch.inc({ kind: 'counter' });
       if (this.riskRepository) {
         await this.riskRepository.setCounterExposure(scope, refId, expectedCents);
       }

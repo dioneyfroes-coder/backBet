@@ -13,7 +13,7 @@ import { WalletRepository } from '@/core/finance/domain/repositories/WalletRepos
 import { BetRepository } from '@/core/betting/domain/repositories/BetRepository';
 import { EventRepository } from '@/core/betting/domain/repositories/EventRepository';
 import { InMemoryLedgerRepository } from '@/core/finance/domain/repositories/InMemoryLedgerRepository';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { HouseTreasuryRepository } from '@/core/treasury/domain/repositories/HouseTreasuryRepository';
 import { ResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/ResponsibleGamblingRepository';
 import { JwtService } from '@/shared/services/JwtService';

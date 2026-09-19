@@ -3,13 +3,15 @@ import rateLimit from 'express-rate-limit';
 import { CreateContactMessage } from '@/core/contact/application/use-cases/CreateContactMessage';
 import { ContactController } from '@/infrastructure/api/controllers/ContactController';
 import { asyncHandler } from '@/infrastructure/api/middleware/asyncHandler';
+import { queueMailerPort } from '@/infrastructure/mailer/ports';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 export type ContactRoutesDeps = Record<string, unknown>;
 
 export async function createContactRoutes(_deps: ContactRoutesDeps = {}): Promise<Router> {
   const router = Router();
 
-  const createContactUseCase = new CreateContactMessage();
+  const createContactUseCase = new CreateContactMessage(queueMailerPort, coreMetrics);
   const contactController = new ContactController(createContactUseCase);
 
   // Rate limit: 10 requests per hour per IP

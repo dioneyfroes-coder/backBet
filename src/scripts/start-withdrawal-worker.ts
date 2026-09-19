@@ -16,6 +16,7 @@ import {
   createWithdrawalRequestRepository,
   createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 async function main() {
   try {
@@ -26,10 +27,12 @@ async function main() {
     const withdrawalRequestRepository = await createWithdrawalRequestRepository();
     const walletRepository = await createWalletRepository();
     const ledgerRepository = await createLedgerRepository();
-    const walletService = new WalletService(walletRepository, ledgerRepository);
+    const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
     const withdrawalRequestService = new WithdrawalRequestService(
       withdrawalRequestRepository,
       walletService,
+      undefined,
+      coreMetrics,
     );
 
     console.log('Starting Withdrawal worker...');

@@ -24,11 +24,13 @@ import { createPixProvider } from '@/infrastructure/payments/pix';
 import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
 import { UserService } from '@core/user/domain/services/UserService';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
 import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
 import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 import { createResponsibleGamblingRepository } from '@/infrastructure/persistence/factory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
 
 /**
  * Factory para criar rotas de carteira com injeção de dependências
@@ -48,15 +50,23 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     deps.walletRepository ?? (await createWalletRepository());
   const ledgerRepository: ILedgerRepository =
     deps.ledgerRepository ?? (await createLedgerRepository());
-  const walletService = new WalletService(walletRepository, ledgerRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
   const pixProvider: PixProviderPort = deps.pixProvider ?? (await createPixProvider());
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
-  const userService = new UserService(userRepository);
-  const moneySecurity = new MoneySecurityService(ledgerRepository, userRepository);
+  const userService = new UserService(userRepository, directMailerPort);
+  const moneySecurity = new MoneySecurityService(
+    ledgerRepository,
+    userRepository,
+    undefined,
+    coreMetrics,
+  );
 
   const responsibleGamblingRepository: IResponsibleGamblingRepository =
     deps.responsibleGamblingRepository ?? (await createResponsibleGamblingRepository());
-  const responsibleGambling = new ResponsibleGamblingService(responsibleGamblingRepository);
+  const responsibleGambling = new ResponsibleGamblingService(
+    responsibleGamblingRepository,
+    coreMetrics,
+  );
 
   // Use-cases
   const getWalletUseCase = new GetWallet(walletService);

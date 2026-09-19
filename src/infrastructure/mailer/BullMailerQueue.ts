@@ -1,6 +1,6 @@
 import Queue from 'bull';
 import type { Queue as BullQueue } from 'bull';
-import { ContactPayload } from './InMemoryMailerQueue';
+import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { getRedisUrl } from '@/shared/config/connections';

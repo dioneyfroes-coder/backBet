@@ -16,12 +16,9 @@ import { UniqueId } from '@/core/shared/domain/value-objects/UniqueId';
 import { appConfig } from '@/shared/config/appConfig';
 import { retryTransient } from '@/core/shared/domain/errors/retryTransient';
 import {
-  betsPlacedCounter,
-  betsRejectedCounter,
-  betsWonCounter,
-  betsLostCounter,
-  riskRejectionsCounter,
-} from '@/infrastructure/observability/metrics';
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export class BetService {
   constructor(
@@ -30,6 +27,7 @@ export class BetService {
     private walletService: IWalletService,
     private riskService?: RiskService,
     private transactionRunner?: TransactionRunner,
+    private metrics: IMetricsPort = noopMetrics,
   ) {}
 
   async placeBet(input: ICreateBetDTO): Promise<Bet> {
@@ -51,7 +49,7 @@ export class BetService {
         input.marketId,
       );
       if (!allowed) {
-        betsRejectedCounter.inc();
+        this.metrics.betsRejected.inc();
         throw new DomainError({ code: 'RISK_REJECTED', message: 'Bet rejected by risk rules' });
       }
     }
@@ -103,8 +101,8 @@ export class BetService {
           riskOptions,
         );
         if (!userReserved || !eventReserved || !marketReserved) {
-          riskRejectionsCounter.inc({ reason: 'exposure_limit' });
-          betsRejectedCounter.inc();
+          this.metrics.riskRejections.inc({ reason: 'exposure_limit' });
+          this.metrics.betsRejected.inc();
           throw new DomainError({
             code: 'RISK_LIMIT_EXCEEDED',
             message: 'Bet rejected: exposure limit would be exceeded',
@@ -122,7 +120,7 @@ export class BetService {
       { label: 'BetService.placeBet' },
     );
 
-    betsPlacedCounter.inc();
+    this.metrics.betsPlaced.inc();
     return bet;
   }
 
@@ -213,8 +211,8 @@ export class BetService {
       ? await this.transactionRunner.withTransaction(operation)
       : await operation();
 
-    if (resolvedBet.status === 'WON') betsWonCounter.inc();
-    else if (resolvedBet.status === 'LOST') betsLostCounter.inc();
+    if (resolvedBet.status === 'WON') this.metrics.betsWon.inc();
+    else if (resolvedBet.status === 'LOST') this.metrics.betsLost.inc();
     return resolvedBet;
   }
 

@@ -6,9 +6,16 @@ import { AppError } from '@/shared/errors/AppError';
 import { userConfig } from '../../config/user-config';
 import bcrypt from 'bcryptjs';
 import { getSessionService } from '@/core/auth/domain/services/SessionServiceSingleton';
+import {
+  IMailerPort,
+  noopMailer,
+} from '@/core/contact/domain/ports/IMailerPort';
 
 export class UserService {
-  constructor(private userRepository: IUserRepository) {}
+  constructor(
+    private userRepository: IUserRepository,
+    private mailer: IMailerPort = noopMailer,
+  ) {}
 
   async registerUser(input: ICreateUserDTO): Promise<User> {
     const emailExists = await this.userRepository.findByEmail(input.email);
@@ -93,8 +100,7 @@ export class UserService {
 
     // Envia email de confirmação para o novo endereço
     try {
-      const { processContactPayload } = await import('@/infrastructure/mailer/ContactWorker');
-      await processContactPayload({
+      await this.mailer.sendContact({
         ticketId: `confirm-email-${userId}`,
         name: user.username,
         email: newEmail,

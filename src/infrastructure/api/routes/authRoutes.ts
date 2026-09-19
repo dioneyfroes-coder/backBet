@@ -18,6 +18,8 @@ import { createRouteRateLimiter } from '../middleware/routeRateLimiter';
 import { appConfig } from '@/shared/config/appConfig';
 import { ChangePassword } from '@core/user/application/use-cases/ChangePassword';
 import { getSessionService } from '@/core/auth/domain/services/SessionServiceSingleton';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 export type AuthRoutesDeps = {
   userRepository?: IUserRepository;
@@ -51,8 +53,8 @@ export async function createAuthRoutes(deps: AuthRoutesDeps = {}): Promise<Route
     deps.ledgerRepository ?? (await createLedgerRepository());
 
   // Instanciar serviços
-  const userService = new UserService(userRepository);
-  const walletService = new WalletService(walletRepository, ledgerRepository);
+  const userService = new UserService(userRepository, directMailerPort);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
   const jwtService = deps.jwtService ?? new JwtService();
 
   // Use-cases

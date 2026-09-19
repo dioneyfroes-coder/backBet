@@ -1,6 +1,6 @@
 import { ComplianceService } from '../ComplianceService';
 import { IdentityVerificationRepository } from '../../repositories/IdentityVerificationRepository';
-import { MockKycProvider } from '@/infrastructure/compliance/MockKycProvider';
+import { MockKycProvider } from '@/core/compliance/domain/providers/MockKycProvider';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 
 describe('ComplianceService — Fase 14: KYC/identidade', () => {

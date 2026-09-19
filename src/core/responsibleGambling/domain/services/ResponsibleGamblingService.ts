@@ -3,7 +3,10 @@ import { IResponsibleGamblingRepository } from '../repositories/IResponsibleGamb
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { appConfig } from '@/shared/config/appConfig';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { responsibleGamblingBlockedCounter } from '@/infrastructure/observability/metrics';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 /**
  * ResponsibleGamblingService — regras de jogo responsável (Fase 14).
@@ -13,7 +16,10 @@ import { responsibleGamblingBlockedCounter } from '@/infrastructure/observabilit
  * liberado (política de compliance padrão).
  */
 export class ResponsibleGamblingService {
-  constructor(private readonly repository: IResponsibleGamblingRepository) {}
+  constructor(
+    private readonly repository: IResponsibleGamblingRepository,
+    private readonly metrics: IMetricsPort = noopMetrics,
+  ) {}
 
   async assertCanDeposit(userId: string, amountCents: number): Promise<void> {
     if (!appConfig.responsibleGambling.enabled) {
@@ -147,7 +153,7 @@ export class ResponsibleGamblingService {
 
   private block(code: string, userId: string, status: number, details: Record<string, unknown>): never {
     try {
-      responsibleGamblingBlockedCounter.inc({ rule: code });
+      this.metrics.responsibleGamblingBlocked.inc({ rule: code });
     } catch (err) {
       console.debug('responsibleGamblingBlockedCounter inc failed', err);
     }

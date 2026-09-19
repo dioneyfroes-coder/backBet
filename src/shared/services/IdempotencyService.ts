@@ -1,8 +1,8 @@
 import { AppError } from '@/shared/errors/AppError';
-import { cacheConfig } from '@/shared/config/cacheConfig';
-import { redisClient } from '@/infrastructure/cache/RedisClient';
-import { idempotencyClaimCounter } from '@/infrastructure/observability/metrics';
-import { MongoIdempotencyStore } from '@/infrastructure/persistence/mongoose/stores/MongoIdempotencyStore';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export type IdempotencyRecord<T> = {
   fingerprint: string;
@@ -86,62 +86,11 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
   }
 }
 
-export class RedisIdempotencyStore implements IdempotencyStore {
-  private readonly defaultTtlSeconds = 24 * 60 * 60;
-
-  get<T>(key: string): Promise<IdempotencyRecord<T> | null> {
-    return redisClient.get<IdempotencyRecord<T>>(key);
-  }
-
-  setIfAbsent<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<boolean> {
-    return redisClient.setIfAbsent(
-      key,
-      { ...value, processingAt: Date.now() } as IdempotencyRecord<T>,
-      ttlSeconds,
-    );
-  }
-
-  set<T>(key: string, value: IdempotencyRecord<T>, ttlSeconds: number): Promise<void> {
-    return redisClient.set(
-      key,
-      { ...value, processingAt: Date.now() } as IdempotencyRecord<T>,
-      ttlSeconds,
-    );
-  }
-
-  delete(key: string): Promise<void> {
-    return redisClient.del(key);
-  }
-
-  // Best effort não-atômico (Redis simples): como o retry só ocorre para
-  // operações financeiras com idempotência no ledger, o re-executar não duplica
-  // valores; serve para destravar rows PROCESSING quando a resposta se perdeu.
-  async reclaimStaleProcessing<T>(
-    key: string,
-    olderThanMs: number,
-  ): Promise<IdempotencyRecord<T> | null> {
-    const existing = await this.get<T>(key);
-    const processingAt = (existing as { processingAt?: number } | null)?.processingAt;
-    if (!existing || existing.status !== 'PROCESSING' || processingAt === undefined) {
-      return null;
-    }
-    if (Date.now() - processingAt < olderThanMs) {
-      return null;
-    }
-    // Renova o processingAt para impedir que outro worker reivindique em paralelo.
-    await redisClient.set(
-      key,
-      { ...existing, processingAt: Date.now() } as IdempotencyRecord<T>,
-      this.defaultTtlSeconds,
-    );
-    return existing;
-  }
-}
-
 export class IdempotencyService {
   constructor(
     private readonly store: IdempotencyStore,
     private readonly ttlSeconds = 24 * 60 * 60,
+    private readonly metrics: IMetricsPort = noopMetrics,
   ) {}
 
   async execute<T>(
@@ -182,7 +131,7 @@ export class IdempotencyService {
           );
         }
       }
-      idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'replay' });
+      this.metrics.idempotencyClaim.inc({ operation: this.operationFromKey(normalizedKey), result: 'replay' });
       return this.resolveExistingMeta(storageKey, existing, fingerprint, restoreResult);
     }
 
@@ -204,7 +153,7 @@ export class IdempotencyService {
           );
         }
       }
-      idempotencyClaimCounter.inc({ operation: this.operationFromKey(normalizedKey), result: 'conflict' });
+      this.metrics.idempotencyClaim.inc({ operation: this.operationFromKey(normalizedKey), result: 'conflict' });
       const concurrent = await this.store.get<T>(storageKey);
       if (concurrent) {
         return this.resolveExistingMeta(storageKey, concurrent, fingerprint, restoreResult);
@@ -237,7 +186,7 @@ export class IdempotencyService {
     operation: () => Promise<T>,
     claimResult: 'claimed' | 'recovered',
   ): Promise<IdempotencyExecutionResult<T>> {
-    idempotencyClaimCounter.inc({
+    this.metrics.idempotencyClaim.inc({
       operation: this.operationFromKey(normalizedKey),
       result: claimResult,
     });
@@ -288,15 +237,3 @@ export class IdempotencyService {
     throw new AppError('CONFLICT', 'A operação com esta Idempotency-Key já está em processamento', 409);
   }
 }
-
-const idempotencyRuntimeEnv = process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || 'development';
-const useMongooseStore =
-  process.env.USE_MONGOOSE_PERSISTENCE === 'true' && idempotencyRuntimeEnv !== 'test';
-
-export const idempotencyService = new IdempotencyService(
-  useMongooseStore
-    ? new MongoIdempotencyStore()
-    : cacheConfig.enabled
-      ? new RedisIdempotencyStore()
-      : new InMemoryIdempotencyStore(),
-);

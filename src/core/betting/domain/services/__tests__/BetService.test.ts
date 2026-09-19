@@ -4,7 +4,7 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { Event, Market } from '../../entities/Event';
 import { TransactionRunner } from '@/core/shared/types/Transaction';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';

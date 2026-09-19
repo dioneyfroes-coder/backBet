@@ -4,7 +4,10 @@ import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { appConfig } from '@/shared/config/appConfig';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { moneySecurityBlockedCounter } from '@/infrastructure/observability/metrics';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 /**
  * MoneySecurityService — Segurança específica de dinheiro (Fase 13).
@@ -27,6 +30,7 @@ export class MoneySecurityService {
     private readonly ledgerRepository: ILedgerRepository,
     private readonly userRepository: IUserRepository,
     private readonly withdrawalRequestRepository?: IWithdrawalRequestRepository,
+    private readonly metrics: IMetricsPort = noopMetrics,
   ) {}
 
   async assertDepositAllowed(userId: string, amount: number): Promise<void> {
@@ -193,7 +197,7 @@ export class MoneySecurityService {
 
   private block(code: string, userId: string, status: number, details: Record<string, unknown>): never {
     try {
-      moneySecurityBlockedCounter.inc({ rule: code });
+      this.metrics.moneySecurityBlocked.inc({ rule: code });
     } catch (err) {
       console.debug('moneySecurityBlockedCounter inc failed', err);
     }

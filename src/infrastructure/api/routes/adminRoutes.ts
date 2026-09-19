@@ -42,7 +42,7 @@ import { TransferPrizeToProfit } from '@/core/treasury/application/use-cases/Tra
 import { RebalanceTreasury } from '@/core/treasury/application/use-cases/RebalanceTreasury';
 import { ReconcileTreasury } from '@/core/treasury/application/use-cases/ReconcileTreasury';
 import { appConfig } from '@/shared/config/appConfig';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { AuditService } from '@/core/audit/domain/services/AuditService';
 import { IAuditEventRepository } from '@/core/audit/domain/repositories/IAuditEventRepository';
 import { createAuditEventRepository } from '@/infrastructure/persistence/factory';
@@ -57,6 +57,8 @@ import { GetDailyFinancialSummary } from '@/core/reports/application/use-cases/G
 import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
 import { createSigapSubmissionRepository } from '@/infrastructure/persistence/factory';
 import { createSigapProviders } from '@/infrastructure/sigap/sigapFactory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
 
 export type AdminRoutesDeps = {
   betRepository?: IBetRepository;
@@ -88,8 +90,8 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
   const withdrawalRepository: IWithdrawalRequestRepository =
     deps.withdrawalRepository ?? (await createWithdrawalRequestRepository());
 
-  const walletService = new WalletService(walletRepository, ledgerRepository);
-  const riskService = new RiskService(riskRepository, betRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
+  const riskService = new RiskService(riskRepository, betRepository, coreMetrics);
   const eventCatalogService = new EventCatalogService(eventRepository);
   const transactionRunner = walletRepository.withTransaction
     ? { withTransaction: walletRepository.withTransaction.bind(walletRepository) }
@@ -100,8 +102,9 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
     walletService,
     riskService,
     transactionRunner,
+    coreMetrics,
   );
-  const userService = new UserService(userRepository);
+  const userService = new UserService(userRepository, directMailerPort);
   const treasuryService = new HouseTreasuryService(houseTreasuryRepository, {
     walletId: appConfig.treasury.walletId,
     currency: appConfig.treasury.currency,
@@ -120,6 +123,7 @@ export async function createAdminRoutes(deps: AdminRoutesDeps = {}): Promise<Rou
       submissionRepository: sigapSubmissionRepository,
       transmissionProvider: sigapProviders.transmission,
       impedimentProvider: sigapProviders.impediment,
+      metrics: coreMetrics,
     });
     const sigap = new SigapController(
       new TransmitSigapFile(sigapService),

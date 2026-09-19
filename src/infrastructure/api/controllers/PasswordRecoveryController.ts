@@ -2,13 +2,14 @@ import { Request, Response } from 'express';
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
 import { RequestPasswordRecovery } from '@core/user/application/use-cases/RequestPasswordRecovery';
 import { ResetPassword } from '@core/user/application/use-cases/ResetPassword';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
 
 export class PasswordRecoveryController {
   constructor(private userRepository: IUserRepository) {}
 
   async requestRecovery(req: Request, res: Response) {
     const { email } = req.body;
-    const useCase = new RequestPasswordRecovery(this.userRepository);
+    const useCase = new RequestPasswordRecovery(this.userRepository, directMailerPort);
     await useCase.execute(email);
     res.status(200).json({ message: 'Se o email existir, um link de recuperação foi enviado.' });
   }

@@ -24,10 +24,11 @@ import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepo
 import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { appConfig } from '@/shared/config/appConfig';
 import { IRiskRepository } from '@/core/risk/domain/repositories/IRiskRepository';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
 import { ResponsibleGamblingService } from '@/core/responsibleGambling/domain/services/ResponsibleGamblingService';
 import { createResponsibleGamblingRepository } from '@/infrastructure/persistence/factory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 export type BetRoutesDeps = {
   betRepository?: IBetRepository;
@@ -47,10 +48,10 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
     deps.walletRepository ?? (await createWalletRepository());
   const ledgerRepository: ILedgerRepository =
     deps.ledgerRepository ?? (await createLedgerRepository());
-  const walletService = new WalletService(walletRepository, ledgerRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
 
   const riskRepository: IRiskRepository = deps.riskRepository ?? (await createRiskRepository());
-  const riskService = new RiskService(riskRepository, betRepository);
+  const riskService = new RiskService(riskRepository, betRepository, coreMetrics);
 
   const transactionRunner = walletRepository.withTransaction
     ? { withTransaction: walletRepository.withTransaction.bind(walletRepository) }
@@ -61,12 +62,16 @@ export async function createBetRoutes(deps: BetRoutesDeps = {}): Promise<Router>
     walletService,
     riskService,
     transactionRunner,
+    coreMetrics,
   );
 
   // use-cases (thin wrappers / orchestration)
   const responsibleGamblingRepository: IResponsibleGamblingRepository =
     deps.responsibleGamblingRepository ?? (await createResponsibleGamblingRepository());
-  const responsibleGambling = new ResponsibleGamblingService(responsibleGamblingRepository);
+  const responsibleGambling = new ResponsibleGamblingService(
+    responsibleGamblingRepository,
+    coreMetrics,
+  );
 
   const placeBetUseCase = new PlaceBetUseCase(
     betService,

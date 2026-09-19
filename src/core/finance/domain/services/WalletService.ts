@@ -9,12 +9,16 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { WalletRepositoryOptions } from '../repositories/IWalletRepository';
 import { randomUUID } from 'crypto';
 import { retryTransient } from '@/core/shared/domain/errors/retryTransient';
-import { depositsCounter, withdrawalsCounter } from '@/infrastructure/observability/metrics';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export class WalletService {
   constructor(
     private walletRepository: IWalletRepository,
     private ledgerRepository?: ILedgerRepository,
+    private metrics: IMetricsPort = noopMetrics,
   ) {}
 
   /**
@@ -75,7 +79,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    depositsCounter.inc({ type: context?.type ?? 'DEPOSIT' });
+    this.metrics.deposits.inc({ type: context?.type ?? 'DEPOSIT' });
     await this.appendLedger(userId, amount, wallet.currency, context, 'DEPOSIT', options);
     this.logWalletAction('deposit', wallet, amount, context);
     return wallet;
@@ -116,7 +120,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    withdrawalsCounter.inc();
+    this.metrics.withdrawals.inc();
     await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw', wallet, amount, context);
     return wallet;
@@ -180,7 +184,7 @@ export class WalletService {
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
-    withdrawalsCounter.inc();
+    this.metrics.withdrawals.inc();
     await this.appendLedger(userId, amount, wallet.currency, context, 'WITHDRAWAL_COMPLETED', options);
     this.logWalletAction('withdraw_locked', wallet, amount, context);
     return wallet;

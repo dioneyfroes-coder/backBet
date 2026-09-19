@@ -4,14 +4,20 @@
  * Provenance-ID: ML-C4E8
  */
 // ML-C4E8
-import { ContactDTOType } from '@/infrastructure/api/dtos/ContactDTOs';
 import { randomUUID } from 'crypto';
-import { getMailerQueue } from '@/infrastructure/mailer';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import {
-  contactSpamCounter,
-  contactValidationCounter,
-} from '@/infrastructure/observability/metrics';
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
+import {
+  IMailerPort,
+  noopMailer,
+} from '@/core/contact/domain/ports/IMailerPort';
+import type {
+  ContactMessageInput,
+  ContactPayload,
+} from '@/core/contact/domain/types/ContactMessage';
 
 function sanitizeMessage(input: string): string {
   // Simple sanitization: strip HTML tags and trim
@@ -39,15 +45,16 @@ async function verifyRecaptchaIfEnabled(token?: string): Promise<boolean> {
 }
 
 export class CreateContactMessage {
-  async execute(payload: ContactDTOType): Promise<{ ticketId: string }> {
+  constructor(
+    private readonly mailer: IMailerPort = noopMailer,
+    private readonly metrics: IMetricsPort = noopMetrics,
+  ) {}
+
+  async execute(payload: ContactMessageInput): Promise<{ ticketId: string }> {
     // Optional recaptcha verification
-    const recaptchaOk = await verifyRecaptchaIfEnabled((payload as any).recaptchaToken);
+    const recaptchaOk = await verifyRecaptchaIfEnabled(payload.recaptchaToken);
     if (!recaptchaOk) {
-      try {
-        contactValidationCounter.inc();
-      } catch (err) {
-        // ignore metric increment failures in environments without metrics
-      }
+      this.metrics.contactValidation.inc();
       throw new (await import('@/shared/errors/AppError')).AppError(
         'BAD_REQUEST',
         'reCAPTCHA verification failed',
@@ -64,11 +71,7 @@ export class CreateContactMessage {
     const lower = sanitized.toLowerCase();
     const found = FORBIDDEN_WORDS.find((w) => lower.includes(w));
     if (found) {
-      try {
-        contactSpamCounter.inc();
-      } catch (err) {
-        // ignore metric increment failures
-      }
+      this.metrics.contactSpam.inc();
       throw new (await import('@/shared/errors/AppError')).AppError(
         'BAD_REQUEST',
         'Mensagem bloqueada por conteúdo',
@@ -76,7 +79,7 @@ export class CreateContactMessage {
       );
     }
 
-    const entry = {
+    const entry: ContactPayload = {
       ticketId,
       name: payload.name ?? null,
       email: payload.email ?? null,
@@ -85,8 +88,7 @@ export class CreateContactMessage {
     };
 
     // Enqueue to mailer/worker
-    const queue = getMailerQueue();
-    await (queue as any).enqueueContact(entry);
+    await this.mailer.sendContact(entry);
 
     // Log for observability/audit
     writeStructuredLog({ event: 'contact_created', ticketId, email: entry.email });

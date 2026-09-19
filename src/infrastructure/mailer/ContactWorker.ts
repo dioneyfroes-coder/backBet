@@ -1,10 +1,11 @@
 import nodemailer from 'nodemailer';
-import type { ContactPayload } from './InMemoryMailerQueue';
+import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
 import Queue from 'bull';
 import type { Queue as BullQueue } from 'bull';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { getRedisUrl } from '@/shared/config/connections';
 

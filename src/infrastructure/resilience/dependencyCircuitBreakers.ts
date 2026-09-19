@@ -1,4 +1,4 @@
-import { CircuitBreaker } from './circuitBreaker';
+import { CircuitBreaker } from '@/shared/resilience/circuitBreaker';
 import {
   recordCircuitBreakerOpen,
   recordCircuitBreakerState,

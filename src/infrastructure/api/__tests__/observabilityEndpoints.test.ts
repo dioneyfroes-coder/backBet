@@ -17,7 +17,7 @@ import {
 import {
   redisCircuitBreaker,
   mongoCircuitBreaker,
-} from '@/shared/resilience/dependencyCircuitBreakers';
+} from '@/infrastructure/resilience/dependencyCircuitBreakers';
 
 describe('Observability endpoints', () => {
   let app: Express;

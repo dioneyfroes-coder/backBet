@@ -34,6 +34,8 @@ import {
   createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
 import type { Queue as BullQueue } from 'bull';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
+import { registerDefaultSessionRepositoryResolver } from '@/infrastructure/persistence/sessionRepositoryFactory';
 // route creators are loaded dynamically (may be async factories)
 
 /**
@@ -68,6 +70,10 @@ async function main() {
   };
 
   try {
+    // Registrar o resolver de repositório de sessões (Mongoose/Redis em produção,
+    // in-memory sob teste) antes de qualquer primeiro uso do singleton.
+    registerDefaultSessionRepositoryResolver();
+
     // Obter port da variável de ambiente
     const port = appConfig.server.port;
 
@@ -173,6 +179,7 @@ async function main() {
         submissionRepository: sigapSubmissionRepository,
         transmissionProvider: sigapProviders.transmission,
         impedimentProvider: sigapProviders.impediment,
+        metrics: coreMetrics,
       });
       const betRepository = await createBetRepository();
       sigapTransmissionJob = new SigapTransmissionJob(sigapService, {
@@ -221,10 +228,12 @@ async function main() {
         const withdrawalRequestRepository = await createWithdrawalRequestRepository();
         const walletRepository = await createWalletRepository();
         const ledgerRepository = await createLedgerRepository();
-        const walletService = new WalletService(walletRepository, ledgerRepository);
+        const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
         const withdrawalRequestService = new WithdrawalRequestService(
           withdrawalRequestRepository,
           walletService,
+          undefined,
+          coreMetrics,
         );
         withdrawalQueue = startWithdrawalWorker(withdrawalRequestService);
         const withdrawalRecovery = startWithdrawalRecovery({

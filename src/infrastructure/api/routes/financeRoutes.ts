@@ -25,7 +25,7 @@ import { IWalletRepository } from '@/core/finance/domain/repositories/IWalletRep
 import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
 import { IUserRepository } from '@/core/user/domain/repositories/IUserRepository';
 import { UserService } from '@/core/user/domain/services/UserService';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { MoneySecurityService } from '@/core/finance/domain/services/MoneySecurityService';
 import { IIdentityVerificationRepository } from '@/core/compliance/domain/repositories/IIdentityVerificationRepository';
 import { ComplianceService } from '@/core/compliance/domain/services/ComplianceService';
@@ -34,6 +34,8 @@ import {
 } from '@/infrastructure/persistence/factory';
 import { createComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
 import type { ComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
 
 export type FinanceRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -52,7 +54,7 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
     deps.walletRepository ?? (await createWalletRepository());
   const ledgerRepository: ILedgerRepository =
     deps.ledgerRepository ?? (await createLedgerRepository());
-  const walletService = new WalletService(walletRepository, ledgerRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
 
   const creditPackageRepository: ICreditPackageRepository =
     deps.creditPackageRepository ?? (await createCreditPackageRepository());
@@ -69,14 +71,16 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
     withdrawalRequestRepository,
     walletService,
     withdrawalQueue,
+    coreMetrics,
   );
 
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
-  const userService = new UserService(userRepository);
+  const userService = new UserService(userRepository, directMailerPort);
   const moneySecurity = new MoneySecurityService(
     ledgerRepository,
     userRepository,
     withdrawalRequestRepository,
+    coreMetrics,
   );
 
   const identityVerificationRepository: IIdentityVerificationRepository =
@@ -88,6 +92,7 @@ export async function createFinanceRoutes(deps: FinanceRoutesDeps = {}): Promise
     complianceProviders.kyc,
     complianceProviders.geolocation,
     complianceProviders.deviceIntegrity,
+    coreMetrics,
   );
 
   const financeController = new FinanceController(

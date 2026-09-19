@@ -17,7 +17,8 @@ import type { IWithdrawalRequestRepository } from '@/core/finance/domain/reposit
 import type { AuditService } from '@/core/audit/domain/services/AuditService';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
-import { idempotencyService, IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { getRedisUrl } from '@/shared/config/connections';
 

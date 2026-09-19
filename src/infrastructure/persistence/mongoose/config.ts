@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { retryWithBackoff } from '@/shared/resilience/retryPolicy';
-import { mongoCircuitBreaker } from '@/shared/resilience/dependencyCircuitBreakers';
+import { mongoCircuitBreaker } from '@/infrastructure/resilience/dependencyCircuitBreakers';
 import {
   recordRetryAttempt,
   recordRetryFailure,

@@ -6,16 +6,16 @@ import { IWithdrawalRequestRepository } from '../repositories/IWithdrawalRequest
 import { WalletService } from './WalletService';
 import IWithdrawalQueue from '../ports/IWithdrawalQueue';
 import {
-  withdrawalRequestCreatedCounter,
-  withdrawalRequestApprovedCounter,
-  withdrawalRequestProcessingFailedCounter,
-} from '@/infrastructure/observability/metrics';
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export class WithdrawalRequestService {
   constructor(
     private readonly withdrawalRequestRepository: IWithdrawalRequestRepository,
     private readonly walletService: WalletService,
     private readonly withdrawalQueue?: IWithdrawalQueue,
+    private readonly metrics: IMetricsPort = noopMetrics,
   ) {}
 
   async createRequest(
@@ -78,7 +78,7 @@ export class WithdrawalRequestService {
       const runner = this.withdrawalRequestRepository.withTransaction;
       const created = runner ? await runner(persist) : await persist(undefined);
       try {
-        withdrawalRequestCreatedCounter.inc();
+        this.metrics.withdrawalRequestCreated.inc();
       } catch (e) {
         console.debug('withdrawalRequestCreatedCounter inc failed', e);
       }
@@ -142,7 +142,7 @@ export class WithdrawalRequestService {
         } catch (err) {
           // enqueue failed — metrics increment and log
           try {
-            withdrawalRequestProcessingFailedCounter.inc();
+            this.metrics.withdrawalRequestProcessingFailed.inc();
           } catch (incErr) {
             console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
           }
@@ -155,7 +155,7 @@ export class WithdrawalRequestService {
         });
       }
       try {
-        withdrawalRequestApprovedCounter.inc();
+        this.metrics.withdrawalRequestApproved.inc();
       } catch (incErr) {
         console.debug('withdrawalRequestApprovedCounter inc failed', incErr);
       }
@@ -168,7 +168,7 @@ export class WithdrawalRequestService {
         });
       } catch (err) {
         try {
-          withdrawalRequestProcessingFailedCounter.inc();
+          this.metrics.withdrawalRequestProcessingFailed.inc();
         } catch (incErr) {
           console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
         }
@@ -212,7 +212,7 @@ export class WithdrawalRequestService {
         }
       } catch (err) {
         try {
-          withdrawalRequestProcessingFailedCounter.inc();
+          this.metrics.withdrawalRequestProcessingFailed.inc();
         } catch (incErr) {
           console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
         }
@@ -249,10 +249,10 @@ export class WithdrawalRequestService {
         } else {
           await this.walletService.unlock(request.userId, request.amount, context);
         }
-        withdrawalRequestProcessingFailedCounter.inc();
+        this.metrics.withdrawalRequestProcessingFailed.inc();
       } catch (err) {
         try {
-          withdrawalRequestProcessingFailedCounter.inc();
+          this.metrics.withdrawalRequestProcessingFailed.inc();
         } catch (incErr) {
           console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
         }

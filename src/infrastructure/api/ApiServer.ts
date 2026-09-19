@@ -30,7 +30,7 @@ import {
 import {
   mongoCircuitBreaker,
   redisCircuitBreaker,
-} from '@/shared/resilience/dependencyCircuitBreakers';
+} from '@/infrastructure/resilience/dependencyCircuitBreakers';
 import {
   recordRetryAttempt,
   recordRetryFailure,

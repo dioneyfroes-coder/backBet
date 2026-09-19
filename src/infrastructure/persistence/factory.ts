@@ -14,6 +14,7 @@ import { IIdentityVerificationRepository } from '@/core/compliance/domain/reposi
 import { IResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/IResponsibleGamblingRepository';
 import { IAuditEventRepository } from '@/core/audit/domain/repositories/IAuditEventRepository';
 import { ISigapSubmissionRepository } from '@/core/sigap/domain/repositories/ISigapSubmissionRepository';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 const runtimeEnv = env.BACKBET_RUNTIME_ENV || env.NODE_ENV || 'development';
 const USE_MONGOOSE = process.env.USE_MONGOOSE_PERSISTENCE === 'true' && runtimeEnv !== 'test';
@@ -107,7 +108,9 @@ export async function createRiskRepository(): Promise<IRiskRepository> {
     );
     return new MongooseRiskRepository();
   }
-  const { InMemoryRiskRepository } = await import('./inmemory/repositories/InMemoryRiskRepository');
+  const { InMemoryRiskRepository } = await import(
+    '@/core/risk/domain/repositories/InMemoryRiskRepository'
+  );
   return new InMemoryRiskRepository();
 }
 
@@ -129,7 +132,7 @@ export async function createHouseTreasuryRepository(): Promise<IHouseTreasuryRep
   const { HouseTreasuryRepository } = await import(
     '@/core/treasury/domain/repositories/HouseTreasuryRepository'
   );
-  return new HouseTreasuryRepository();
+  return new HouseTreasuryRepository(coreMetrics);
 }
 
 export async function createIdentityVerificationRepository(): Promise<IIdentityVerificationRepository> {

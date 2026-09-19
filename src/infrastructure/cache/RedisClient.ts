@@ -1,7 +1,7 @@
 import Redis from 'ioredis';
 import { retryWithBackoff } from '@/shared/resilience/retryPolicy';
 import { cacheConfig } from '@/shared/config/cacheConfig';
-import { redisCircuitBreaker } from '@/shared/resilience/dependencyCircuitBreakers';
+import { redisCircuitBreaker } from '@/infrastructure/resilience/dependencyCircuitBreakers';
 import {
   recordRetryAttempt,
   recordRetryFailure,

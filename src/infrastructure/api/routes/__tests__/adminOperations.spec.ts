@@ -17,7 +17,7 @@ import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@/core/odds/domain/value-objects/Odds';
 import { JwtService } from '@/shared/services/JwtService';
 import { appConfig } from '@/shared/config/appConfig';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { HouseTreasuryRepository } from '@/core/treasury/domain/repositories/HouseTreasuryRepository';
 import { HouseWallet } from '@/core/treasury/domain/entities/HouseWallet';

@@ -27,6 +27,8 @@ import {
 } from '@/infrastructure/persistence/factory';
 import { createComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
 import type { ComplianceProviders } from '@/infrastructure/compliance/complianceFactory';
+import { directMailerPort } from '@/infrastructure/mailer/ports';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 /**
  * Factory para criar rotas de usuário com injeção de dependências
@@ -42,7 +44,7 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
   const router = Router();
 
   const userRepository: IUserRepository = deps.userRepository ?? (await createUserRepository());
-  const userService = new UserService(userRepository);
+  const userService = new UserService(userRepository, directMailerPort);
 
   // Compliance (KYC) + jogo responsável — deps opcionais, compartilhadas com
   // as rotas financeiras/apostas quando injetadas em testes (mesma instância).
@@ -58,10 +60,11 @@ export async function createUserRoutes(deps: UserRoutesDeps = {}): Promise<Route
     complianceProviders.kyc,
     complianceProviders.geolocation,
     complianceProviders.deviceIntegrity,
+    coreMetrics,
   );
   const responsibleGamblingService = new (
     await import('@core/responsibleGambling/domain/services/ResponsibleGamblingService')
-  ).ResponsibleGamblingService(responsibleGamblingRepository);
+  ).ResponsibleGamblingService(responsibleGamblingRepository, coreMetrics);
 
   const getIdentityVerificationUseCase = new GetIdentityVerification(complianceService);
   const verifyUserIdentityUseCase = new VerifyUserIdentity(complianceService);

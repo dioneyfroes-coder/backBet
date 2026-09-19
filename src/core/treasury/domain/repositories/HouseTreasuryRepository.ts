@@ -1,10 +1,15 @@
 import { IHouseTreasuryRepository } from './IHouseTreasuryRepository';
 import { HouseWallet } from '../entities/HouseWallet';
 import { AppError } from '@/shared/errors/AppError';
-import { optimisticLockConflictCounter } from '@/infrastructure/observability/metrics';
+import {
+  IMetricsPort,
+  noopMetrics,
+} from '@/shared/observability/IMetricsPort';
 
 export class HouseTreasuryRepository implements IHouseTreasuryRepository {
   private store = new Map<string, HouseWallet>();
+
+  constructor(private readonly metrics: IMetricsPort = noopMetrics) {}
 
   async getById(walletId: string): Promise<HouseWallet | null> {
     const wallet = this.store.get(walletId);
@@ -22,7 +27,7 @@ export class HouseTreasuryRepository implements IHouseTreasuryRepository {
       throw new AppError('NOT_FOUND', 'Tesouraria não encontrada', 404);
     }
     if (current.version !== wallet.version - 1) {
-      optimisticLockConflictCounter.inc({ resource: 'house_treasury' });
+      this.metrics.optimisticLockConflict.inc({ resource: 'house_treasury' });
       throw new AppError('CONFLICT', 'Conflito de concorrência ao atualizar tesouraria', 409, {
         walletId: wallet.id,
         expectedVersion: wallet.version - 1,

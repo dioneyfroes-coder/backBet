@@ -1,13 +1,6 @@
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
-
-export type ContactPayload = {
-  ticketId: string;
-  name?: string | null;
-  email?: string | null;
-  message: string;
-  createdAt: string;
-};
+import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
 
 const queue: ContactPayload[] = [];
 

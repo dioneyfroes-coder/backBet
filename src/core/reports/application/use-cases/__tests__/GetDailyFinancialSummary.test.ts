@@ -3,7 +3,7 @@ import { InMemoryLedgerRepository } from '@/core/finance/domain/repositories/InM
 import { LedgerEntry } from '@/core/finance/domain/entities/LedgerEntry';
 import { BetRepository } from '@/core/betting/domain/repositories/BetRepository';
 import { Bet } from '@/core/betting/domain/entities/Bet';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { HouseTreasuryRepository } from '@/core/treasury/domain/repositories/HouseTreasuryRepository';
 import { HouseWallet } from '@/core/treasury/domain/entities/HouseWallet';

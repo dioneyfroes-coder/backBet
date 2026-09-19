@@ -1,5 +1,5 @@
 import { RiskService } from '@/core/risk/domain/services/RiskService';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { Bet } from '@/core/betting/domain/entities/Bet';

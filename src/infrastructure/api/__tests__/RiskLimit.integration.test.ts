@@ -15,7 +15,7 @@ import { BetRepository } from '@/core/betting/domain/repositories/BetRepository'
 import { EventRepository } from '@/core/betting/domain/repositories/EventRepository';
 import { WithdrawalRequestRepository } from '@/core/finance/domain/repositories/WithdrawalRequestRepository';
 import { InMemoryLedgerRepository } from '@/core/finance/domain/repositories/InMemoryLedgerRepository';
-import { InMemoryRiskRepository } from '@/infrastructure/persistence/inmemory/repositories/InMemoryRiskRepository';
+import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { CreditPackageRepository } from '@/core/finance/domain/repositories/CreditPackageRepository';
 import { HouseTreasuryRepository } from '@/core/treasury/domain/repositories/HouseTreasuryRepository';
 import { Event, Market } from '@/core/betting/domain/entities/Event';
@@ -26,7 +26,7 @@ import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 import { appConfig } from '@/shared/config/appConfig';
 import { IdentityVerificationRepository } from '@/core/compliance/domain/repositories/IdentityVerificationRepository';
 import { ResponsibleGamblingRepository } from '@/core/responsibleGambling/domain/repositories/ResponsibleGamblingRepository';
-import { MockKycProvider } from '@/infrastructure/compliance/MockKycProvider';
+import { MockKycProvider } from '@/core/compliance/domain/providers/MockKycProvider';
 
 jest.setTimeout(30000);
 

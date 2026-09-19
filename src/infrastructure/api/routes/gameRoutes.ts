@@ -21,7 +21,8 @@ import { IGameRoundRepository } from '@core/game/domain/repositories/IGameRoundR
 import { GameIntegrationPort } from '@core/game/domain/ports/GameIntegrationPort';
 import { createGameIntegrationAdapter } from '@/infrastructure/game/adapterFactory';
 import { appConfig } from '@/shared/config/appConfig';
-import { idempotencyService } from '@/shared/services/IdempotencyService';
+import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
+import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 
 export type GameRoutesDeps = {
   walletRepository?: IWalletRepository;
@@ -42,7 +43,7 @@ export async function createGameRoutes(deps: GameRoutesDeps = {}): Promise<Route
   const integrationAdapter: GameIntegrationPort =
     deps.integrationAdapter ?? (await createGameIntegrationAdapter());
 
-  const walletService = new WalletService(walletRepository, ledgerRepository);
+  const walletService = new WalletService(walletRepository, ledgerRepository, coreMetrics);
   const coinFlipConfig = appConfig.games.coinFlip;
   const coinFlipService = new CoinFlipGameService(
     walletService,
