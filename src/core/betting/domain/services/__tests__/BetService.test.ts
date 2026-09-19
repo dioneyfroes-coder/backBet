@@ -297,9 +297,14 @@ describe('BetService', () => {
       const bet = makeBet();
       bet.resolve('WON');
       betRepository.findById.mockResolvedValue(bet);
+      // Resultado divergente continua falhando (já resolvido).
+      await expect(
+        service.resolveBet({ betId: bet.id, result: 'LOST', marketResult: 'Team A' }),
+      ).rejects.toThrow('Only pending bets can be resolved.');
+      // Replay com o MESMO resultado é no-op seguro (crash recovery).
       await expect(
         service.resolveBet({ betId: bet.id, result: 'WON', marketResult: 'Team A' }),
-      ).rejects.toThrow('Only pending bets can be resolved.');
+      ).resolves.toBe(bet);
     });
   });
 

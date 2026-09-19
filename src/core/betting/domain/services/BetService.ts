@@ -178,6 +178,16 @@ export class BetService {
   async resolveBet(input: IResolveBetDTO): Promise<Bet> {
     const operation = async (session?: TransactionSession) => {
       const bet = await this.getBetOrThrow(input.betId, session ? { session } : undefined);
+      // Replay seguro: crash após commit antes de persistir o idempotency key
+      // reexecuta a unidade inteira. Se o bet já foi resolvido com o MESMO
+      // resultado, a operação é no-op (o crédito/ajuste já foi aplicado
+      // atomicamente). Resultado divergente continua falhando no entity.
+      if (
+        (bet.status === 'WON' && input.result === 'WON') ||
+        (bet.status === 'LOST' && input.result === 'LOST')
+      ) {
+        return bet;
+      }
       bet.resolve(input.result);
       if (this.riskService) {
         const liabilityCents = bet.odds.calculateLiability(bet.amount).getCents();
