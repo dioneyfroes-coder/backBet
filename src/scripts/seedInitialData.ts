@@ -28,8 +28,8 @@ async function main() {
     const userRepository = await createUserRepository();
     const walletRepository = await createWalletRepository();
 
-    const userService = new UserService(userRepository as any);
-    const walletService = new WalletService(walletRepository as any);
+    const userService = new UserService(userRepository);
+    const walletService = new WalletService(walletRepository);
     const registerUser = new RegisterUser(userService, walletService);
 
     for (const user of defaults) {

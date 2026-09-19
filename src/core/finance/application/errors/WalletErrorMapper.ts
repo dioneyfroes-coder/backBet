@@ -1,7 +1,13 @@
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { AppError } from '@/shared/errors/AppError';
+import {
+  DomainErrorStatusMap,
+  mapDomainErrorToAppError,
+  rethrowDomainError,
+  executeWithDomainErrorMapping,
+} from '@/core/shared/application/errors/DomainErrorMapper';
 
-const ERROR_STATUS_MAP: Record<string, number> = {
+const ERROR_STATUS_MAP: DomainErrorStatusMap = {
   WALLET_ALREADY_EXISTS: 409,
   WALLET_NOT_FOUND: 404,
   WALLET_INVALID_AMOUNT: 400,
@@ -35,23 +41,11 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   RESPONSIBLE_GAMBLING_INVALID_DATE: 400,
 };
 
-export const mapWalletDomainError = (error: DomainError): AppError => {
-  const status = ERROR_STATUS_MAP[error.code] ?? 400;
-  return new AppError(error.code, error.message, status, error.details);
-};
+export const mapWalletDomainError = (error: DomainError): AppError =>
+  mapDomainErrorToAppError(error, ERROR_STATUS_MAP);
 
-export const rethrowWalletDomainError = (error: unknown): never => {
-  if (error instanceof DomainError) {
-    throw mapWalletDomainError(error);
-  }
-  throw error;
-};
+export const rethrowWalletDomainError = (error: unknown): never =>
+  rethrowDomainError(error, ERROR_STATUS_MAP);
 
-export const executeWithWalletErrorMapping = async <T>(operation: () => Promise<T>): Promise<T> => {
-  try {
-    return await operation();
-  } catch (error) {
-    rethrowWalletDomainError(error);
-    throw error;
-  }
-};
+export const executeWithWalletErrorMapping = async <T>(operation: () => Promise<T>): Promise<T> =>
+  executeWithDomainErrorMapping(operation, ERROR_STATUS_MAP);

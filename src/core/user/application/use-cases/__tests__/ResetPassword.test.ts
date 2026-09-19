@@ -57,7 +57,7 @@ describe('ResetPassword', () => {
     repository.findByRecoveryToken.mockResolvedValue(null);
 
     await expect(useCase.execute('wrong-token', 'NewPass456')).rejects.toMatchObject({
-      status: 404,
+      statusCode: 404,
     });
     expect(repository.update).not.toHaveBeenCalled();
   });

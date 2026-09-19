@@ -168,7 +168,7 @@ export class Odds {
     return this.value.toFixed(2);
   }
 
-  toJSON(): Record<string, any> {
+  toJSON(): Record<string, unknown> {
     return { value: this.value };
   }
 

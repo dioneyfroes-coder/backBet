@@ -455,9 +455,10 @@ export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQ
   });
 
   queue.on('failed', (job, err) => {
+    const payload = job?.data as WithdrawalPayoutPayload | undefined;
     writeStructuredLog({
       event: 'withdrawal_payout_job_failed',
-      requestId: (job?.data as any)?.requestId,
+      requestId: payload?.requestId,
       err,
     });
   });

@@ -32,8 +32,9 @@ export function createUploadMiddleware(
     ) => {
       if (!file || !file.mimetype) return cb(new Error('Invalid file'));
       if (allowed.includes(file.mimetype)) return cb(null, true);
-      const err: any = new Error('File type not allowed');
-      err.code = 'LIMIT_FILE_TYPE';
+      const err = Object.assign(new Error('File type not allowed'), {
+        code: 'LIMIT_FILE_TYPE',
+      });
       return cb(err);
     },
   });
@@ -41,13 +42,13 @@ export function createUploadMiddleware(
   return [
     upload.single(options.fieldName ?? 'document'),
     async (req: Request, _res: Response, next: NextFunction) => {
-      const file = (req as any).file;
+      const file = req.file;
       if (!file) return next();
 
       try {
         const stored = await storage.store(file.buffer, file.originalname, file.mimetype);
         // attach stored metadata to request for controller
-        (req as any).storedFile = stored;
+        req.storedFile = stored;
         return next();
       } catch (err) {
         return next(err);

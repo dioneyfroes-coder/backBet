@@ -2,13 +2,13 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '@/shared/errors/AppError';
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: {
     code: string;
     message: string;
-    details?: Record<string, any>;
+    details?: Record<string, unknown>;
   };
   meta?: {
     timestamp: string;
@@ -36,7 +36,7 @@ export abstract class BaseController {
     code: string,
     message: string,
     statusCode: number = 400,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
   ): Response {
     return res.status(statusCode).json({
       success: false,
@@ -51,7 +51,7 @@ export abstract class BaseController {
     } as ApiResponse);
   }
 
-  protected badRequest(res: Response, message: string, details?: Record<string, any>): Response {
+  protected badRequest(res: Response, message: string, details?: Record<string, unknown>): Response {
     return this.error(res, 'BAD_REQUEST', message, 400, details);
   }
 
@@ -101,19 +101,15 @@ export abstract class BaseController {
     }
   }
 
-  protected async handleError(error: any, res: Response): Promise<Response> {
+  protected async handleError(error: unknown, res: Response): Promise<Response> {
     console.error('Controller error:', error);
 
     if (error instanceof AppError) {
       return this.error(res, error.code, error.message, error.statusCode, error.details);
     }
 
-    if (error.code === 'VALIDATION_ERROR') {
-      return this.badRequest(res, error.message, error.details);
-    }
-
     if (error instanceof z.ZodError) {
-      const details = (error as z.ZodError).issues.reduce(
+      const details = error.issues.reduce(
         (acc: Record<string, string>, err: z.ZodIssue) => {
           const path = err.path.join('.');
           acc[path] = err.message;
@@ -124,6 +120,27 @@ export abstract class BaseController {
       return this.badRequest(res, 'Validação falhou', details);
     }
 
-    return this.internalError(res, error.message || 'Erro desconhecido');
+    if (isAppErrorLike(error)) {
+      const details =
+        typeof error.details === 'object' && error.details !== null
+          ? (error.details as Record<string, unknown>)
+          : undefined;
+      return this.badRequest(res, error.message ?? 'Erro desconhecido', details);
+    }
+
+    if (error instanceof Error) {
+      return this.internalError(res, error.message || 'Erro desconhecido');
+    }
+
+    return this.internalError(res, 'Erro desconhecido');
   }
 }
+
+type AppErrorLike = {
+  code?: string;
+  message?: string;
+  details?: unknown;
+};
+
+const isAppErrorLike = (value: unknown): value is AppErrorLike =>
+  typeof value === 'object' && value !== null && 'code' in value;

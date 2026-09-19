@@ -92,7 +92,7 @@ export class Bet {
 
   // ---------- Validation ----------
   private validate(): void {
-    const isNonEmptyString = (val: any): val is string =>
+    const isNonEmptyString = (val: unknown): val is string =>
       typeof val === 'string' && val.trim().length > 0;
 
     if (!isNonEmptyString(this.id)) {
@@ -132,7 +132,7 @@ export class Bet {
   }
 
   // ---------- Utility ----------
-  toJSON(): Record<string, any> {
+  toJSON(): Record<string, unknown> {
     return {
       id: this.id,
       userId: this.userId,

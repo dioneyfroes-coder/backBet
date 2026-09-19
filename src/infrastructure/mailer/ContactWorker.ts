@@ -53,13 +53,14 @@ export function startContactWorker(): BullQueue {
   const queue = new Queue('contact_queue', getRedisUrl()) as BullQueue;
   // using named processor 'contact'
   queue.process('contact', async (job) => {
+    const payload = job.data as ContactPayload;
     try {
-      await processContactPayload(job.data as ContactPayload);
+      await processContactPayload(payload);
       return Promise.resolve();
     } catch (err) {
       writeStructuredLog({
         event: 'contact_send_failed',
-        ticketId: (job.data as any)?.ticketId,
+        ticketId: payload.ticketId,
         err,
       });
       return Promise.reject(err);
@@ -67,9 +68,10 @@ export function startContactWorker(): BullQueue {
   });
 
   queue.on('failed', (job, err) => {
+    const payload = job?.data as ContactPayload | undefined;
     writeStructuredLog({
       event: 'contact_job_failed',
-      ticketId: (job?.data as any)?.ticketId,
+      ticketId: payload?.ticketId,
       err,
     });
   });

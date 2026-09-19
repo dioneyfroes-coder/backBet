@@ -144,7 +144,8 @@ describe('Event domain behavior', () => {
   it('serializes to JSON with nested markets', () => {
     const event = createEvent('SCHEDULED');
     const json = event.toJSON();
-    expect(json.markets['market-1'].status).toBe('OPEN');
-    expect(json.markets['market-1'].odds).toHaveProperty('odd-1', 1.5);
+    const markets = json.markets as Record<string, { status: string; odds: Record<string, unknown> }>;
+    expect(markets['market-1'].status).toBe('OPEN');
+    expect(markets['market-1'].odds).toHaveProperty('odd-1', 1.5);
   });
 });

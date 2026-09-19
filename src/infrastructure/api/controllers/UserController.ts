@@ -13,6 +13,9 @@ import { GetUserProfile } from '@core/user/application/use-cases/GetUserProfile'
 import { UpdateProfile } from '@core/user/application/use-cases/UpdateProfile';
 import { ChangeEmail } from '@core/user/application/use-cases/ChangeEmail';
 import { UpdatePixKey } from '@core/user/application/use-cases/UpdatePixKey';
+import { AddUserDocument } from '@core/user/application/use-cases/AddUserDocument';
+import { GetPreferences } from '@core/user/application/use-cases/GetPreferences';
+import { UpdatePreferences } from '@core/user/application/use-cases/UpdatePreferences';
 import { flushUserProfileCache } from '@/infrastructure/cache/cacheHooks';
 
 /**
@@ -25,9 +28,9 @@ export class UserController extends BaseController {
     private updateProfileUseCase: UpdateProfile,
     private changeEmailUseCase: ChangeEmail,
     private updatePixKeyUseCase: UpdatePixKey,
-    private addUserDocumentUseCase?: any,
-    private getPreferencesUseCase?: any,
-    private updatePreferencesUseCase?: any,
+    private addUserDocumentUseCase?: AddUserDocument,
+    private getPreferencesUseCase?: GetPreferences,
+    private updatePreferencesUseCase?: UpdatePreferences,
   ) {
     super();
   }
@@ -336,7 +339,7 @@ export class UserController extends BaseController {
       return this.unauthorized(res, 'Autenticação requerida');
     }
 
-    const stored = (req as any).storedFile;
+    const stored = req.storedFile;
     if (!stored) {
       return this.badRequest(res, 'Arquivo não enviado');
     }

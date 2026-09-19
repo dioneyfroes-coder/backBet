@@ -1,7 +1,13 @@
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { AppError } from '@/shared/errors/AppError';
+import {
+  DomainErrorStatusMap,
+  mapDomainErrorToAppError,
+  rethrowDomainError,
+  executeWithDomainErrorMapping,
+} from '@/core/shared/application/errors/DomainErrorMapper';
 
-const ERROR_STATUS_MAP: Record<string, number> = {
+const ERROR_STATUS_MAP: DomainErrorStatusMap = {
   EVENT_NOT_FOUND: 404,
   MARKET_NOT_FOUND: 404,
   ODD_NOT_FOUND: 404,
@@ -36,23 +42,11 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   RESPONSIBLE_GAMBLING_INVALID_DATE: 400,
 };
 
-export const mapBetDomainError = (error: DomainError): AppError => {
-  const status = ERROR_STATUS_MAP[error.code] ?? 400;
-  return new AppError(error.code, error.message, status, error.details);
-};
+export const mapBetDomainError = (error: DomainError): AppError =>
+  mapDomainErrorToAppError(error, ERROR_STATUS_MAP);
 
-export const rethrowBetDomainError = (error: unknown): never => {
-  if (error instanceof DomainError) {
-    throw mapBetDomainError(error);
-  }
-  throw error;
-};
+export const rethrowBetDomainError = (error: unknown): never =>
+  rethrowDomainError(error, ERROR_STATUS_MAP);
 
-export const executeWithBetErrorMapping = async <T>(operation: () => Promise<T>): Promise<T> => {
-  try {
-    return await operation();
-  } catch (error) {
-    rethrowBetDomainError(error);
-    throw error;
-  }
-};
+export const executeWithBetErrorMapping = async <T>(operation: () => Promise<T>): Promise<T> =>
+  executeWithDomainErrorMapping(operation, ERROR_STATUS_MAP);

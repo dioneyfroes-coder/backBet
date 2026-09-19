@@ -61,14 +61,15 @@ export class MockPaymentAdapter implements IPaymentPort {
         const txId = `mock-tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         this.registry.set(requestId, { paid: true, transactionId: txId });
         return { success: true, transactionId: txId };
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'unknown';
         const backoff = this.baseBackoffMs * Math.pow(2, attempt - 1);
         const jitter = Math.floor(Math.random() * this.jitterMs);
         const waitMs = backoff + jitter;
         // last attempt -> return failure
         if (attempt === this.attempts) {
-          this.registry.set(requestId, { paid: false, error: err?.message ?? 'unknown' });
-          return { success: false, error: err?.message ?? 'unknown' };
+          this.registry.set(requestId, { paid: false, error: message });
+          return { success: false, error: message };
         }
         // otherwise wait and retry
         await wait(waitMs);

@@ -1,5 +1,5 @@
 import { IUserRepository } from '@core/user/domain/repositories/IUserRepository';
-import { AppError } from '@core/errors/AppError';
+import { AppError } from '@/shared/errors/AppError';
 import { Email } from '@core/user/domain/value-objects/Email';
 import crypto from 'crypto';
 

@@ -777,7 +777,7 @@ const swaggerOptions = {
 
 // Add explicit paths for contact and upload (helps generators and docs)
 // Note: controllers already contain detailed JSDoc, but explicit paths improve visibility
-(swaggerOptions.definition as any).paths = {
+(swaggerOptions.definition as { paths?: unknown }).paths = {
   '/api/v1/contact': {
     post: {
       tags: ['Contact'],

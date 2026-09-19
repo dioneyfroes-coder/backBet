@@ -1,7 +1,13 @@
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { AppError } from '@/shared/errors/AppError';
+import {
+  DomainErrorStatusMap,
+  mapDomainErrorToAppError,
+  rethrowDomainError,
+  executeWithDomainErrorMapping,
+} from '@/core/shared/application/errors/DomainErrorMapper';
 
-const ERROR_MAP: Record<string, number> = {
+const ERROR_STATUS_MAP: DomainErrorStatusMap = {
   TREASURY_INVALID_AMOUNT: 400,
   TREASURY_INSUFFICIENT_PROFIT: 400,
   TREASURY_INSUFFICIENT_PRIZE_RESERVE: 400,
@@ -12,23 +18,11 @@ const ERROR_MAP: Record<string, number> = {
   MONEY_CURRENCY_MISMATCH: 400,
 };
 
-export const mapTreasuryError = (error: DomainError): AppError => {
-  const status = ERROR_MAP[error.code] ?? 400;
-  return new AppError(error.code, error.message, status, error.details);
-};
+export const mapTreasuryError = (error: DomainError): AppError =>
+  mapDomainErrorToAppError(error, ERROR_STATUS_MAP);
 
-export const rethrowTreasuryError = (error: unknown): never => {
-  if (error instanceof DomainError) {
-    throw mapTreasuryError(error);
-  }
-  throw error;
-};
+export const rethrowTreasuryError = (error: unknown): never =>
+  rethrowDomainError(error, ERROR_STATUS_MAP);
 
-export const executeWithTreasuryErrorMapping = async <T>(op: () => Promise<T>): Promise<T> => {
-  try {
-    return await op();
-  } catch (error) {
-    rethrowTreasuryError(error);
-    throw error;
-  }
-};
+export const executeWithTreasuryErrorMapping = async <T>(op: () => Promise<T>): Promise<T> =>
+  executeWithDomainErrorMapping(op, ERROR_STATUS_MAP);

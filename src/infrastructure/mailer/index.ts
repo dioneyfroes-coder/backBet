@@ -1,15 +1,19 @@
 import { InMemoryMailerQueue } from './InMemoryMailerQueue';
 import { BullMailerQueue } from './BullMailerQueue';
+import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
 
-let adapter: any = null;
+export interface IMailerQueue {
+  enqueueContact(payload: ContactPayload): Promise<void>;
+}
 
-export function getMailerQueue() {
+let adapter: IMailerQueue | null = null;
+
+export function getMailerQueue(): IMailerQueue {
   if (adapter) return adapter;
 
   if (process.env.USE_REDIS_QUEUE === 'true') {
     try {
-      const instance = new BullMailerQueue();
-      adapter = instance as any;
+      adapter = new BullMailerQueue();
       return adapter;
     } catch (err) {
       // fallback to in-memory
@@ -17,6 +21,6 @@ export function getMailerQueue() {
     }
   }
 
-  adapter = InMemoryMailerQueue as any;
+  adapter = InMemoryMailerQueue;
   return adapter;
 }
