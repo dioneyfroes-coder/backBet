@@ -38,6 +38,18 @@ const TERMINAL_STATUSES: ReadonlySet<WithdrawalStatus> = new Set<WithdrawalStatu
   'REVERSED',
 ]);
 
+const ALLOWED_TRANSITIONS: Record<WithdrawalStatus, readonly WithdrawalStatus[]> = {
+  REQUESTED: ['VALIDATING', 'CANCELED'],
+  VALIDATING: ['APPROVED', 'REJECTED', 'CANCELED'],
+  APPROVED: ['PROCESSING'],
+  PROCESSING: ['COMPLETED', 'FAILED', 'REVERSED'],
+  REJECTED: [],
+  COMPLETED: ['REVERSED'],
+  CANCELED: [],
+  FAILED: ['PROCESSING'],
+  REVERSED: [],
+};
+
 export class WithdrawalRequest {
   constructor(
     public readonly id: string,
@@ -50,6 +62,7 @@ export class WithdrawalRequest {
     public readonly notes?: string,
     public approvalLogs: ApprovalLog[] = [],
     public processingAt?: Date,
+    public version: number = 1,
   ) {
     if (amount <= 0) {
       throw new AppError('VALIDATION_ERROR', 'Amount must be positive', 400);
@@ -59,8 +72,9 @@ export class WithdrawalRequest {
     }
   }
 
-  private transitionTo(next: WithdrawalStatus, allowed: ReadonlyArray<WithdrawalStatus>): void {
-    if (!allowed.includes(this.status)) {
+  private transitionTo(next: WithdrawalStatus): void {
+    const allowed = ALLOWED_TRANSITIONS[this.status];
+    if (!allowed.includes(next)) {
       throw new AppError(
         'CONFLICT',
         `Invalid withdrawal state transition: ${this.status} -> ${next}`,
@@ -76,41 +90,41 @@ export class WithdrawalRequest {
   }
 
   validateBy(adminId: string): void {
-    this.transitionTo('VALIDATING', ['REQUESTED']);
+    this.transitionTo('VALIDATING');
     void adminId;
   }
 
   approve(adminId: string, notes?: string): void {
-    this.transitionTo('APPROVED', ['VALIDATING']);
+    this.transitionTo('APPROVED');
     this.approvalLogs.push({ adminId, action: 'APPROVED', notes, createdAt: new Date() });
   }
 
   reject(adminId: string, notes?: string): void {
-    this.transitionTo('REJECTED', ['VALIDATING']);
+    this.transitionTo('REJECTED');
     this.approvalLogs.push({ adminId, action: 'REJECTED', notes, createdAt: new Date() });
   }
 
   markProcessing(): void {
-    this.transitionTo('PROCESSING', ['APPROVED']);
+    this.transitionTo('PROCESSING');
     // Marca quando o processamento iniciou (mantém o primeiro timestamp caso o
     // estado seja re-confirmado) para permitir recuperação de PROCESSING preso.
     this.processingAt = this.processingAt ?? new Date();
   }
 
   completePayout(): void {
-    this.transitionTo('COMPLETED', ['PROCESSING']);
+    this.transitionTo('COMPLETED');
   }
 
   failPayout(): void {
-    this.transitionTo('FAILED', ['PROCESSING']);
+    this.transitionTo('FAILED');
   }
 
   cancel(): void {
-    this.transitionTo('CANCELED', ['REQUESTED', 'VALIDATING']);
+    this.transitionTo('CANCELED');
   }
 
   reverse(): void {
-    this.transitionTo('REVERSED', ['PROCESSING', 'COMPLETED']);
+    this.transitionTo('REVERSED');
   }
 
   toDTO() {
@@ -125,6 +139,23 @@ export class WithdrawalRequest {
       processingAt: this.processingAt,
       notes: this.notes,
       approvalLogs: this.approvalLogs,
+      version: this.version,
     };
+  }
+
+  clone(): WithdrawalRequest {
+    return new WithdrawalRequest(
+      this.id,
+      this.userId,
+      this.amount,
+      this.currency,
+      new Date(this.requestedAt),
+      this.status,
+      this.processedAt ? new Date(this.processedAt) : undefined,
+      this.notes,
+      this.approvalLogs.map((l) => ({ ...l })),
+      this.processingAt ? new Date(this.processingAt) : undefined,
+      this.version,
+    );
   }
 }

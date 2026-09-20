@@ -3,32 +3,69 @@ import {
   IWithdrawalRequestRepository,
   WithdrawalRequestRepositoryOptions,
 } from './IWithdrawalRequestRepository';
+import { AppError } from '@/shared/errors/AppError';
 
 export class WithdrawalRequestRepository implements IWithdrawalRequestRepository {
   private requests: WithdrawalRequest[] = [];
 
   async create(request: WithdrawalRequest): Promise<WithdrawalRequest> {
-    this.requests.push(request);
-    return request;
+    // Mongo persiste documento independente (lean-doc); o repo precisa preservar
+    // o snapshot persistido isolado da instância que o service muta in-place
+    // (approve/claim), senão o guard CAS compara contra o objeto já alterado e
+    // dispara conflito sintético — Mongo nunca faz isso porque o doc é isolado.
+    this.requests.push(request.clone());
+    return request.clone();
   }
 
   async update(
     request: WithdrawalRequest,
-    _options?: WithdrawalRequestRepositoryOptions,
+    options?: WithdrawalRequestRepositoryOptions,
   ): Promise<WithdrawalRequest> {
     const index = this.requests.findIndex((r) => r.id === request.id);
-    if (index >= 0) {
-      this.requests[index] = request;
+    if (index < 0) {
+      return request;
     }
-    return request;
+
+    if (options?.guard) {
+      // CAS: compara contra o SNAPSHOT PERSISTIDO (clone isolado da instância que
+      // o service já mutou), como o Mongo compara contra o documento do banco.
+      const current = this.requests[index];
+      const versionMismatch =
+        typeof options.guard.version === 'number' && current.version !== options.guard.version;
+      if (current.status !== options.guard.status || versionMismatch) {
+        throw new AppError('CONFLICT', 'Withdrawal request changed concurrently', 409, {
+          requestId: request.id,
+        });
+      }
+    }
+
+    this.requests[index] = request.clone();
+    this.requests[index].version += 1;
+    return this.requests[index].clone();
+  }
+
+  async claimForProcessing(requestId: string): Promise<WithdrawalRequest | null> {
+    const index = this.requests.findIndex((r) => r.id === requestId);
+    if (index < 0 || !['APPROVED', 'FAILED'].includes(this.requests[index].status)) {
+      return null;
+    }
+    const claimed = this.requests[index].clone();
+    claimed.status = 'PROCESSING';
+    claimed.processingAt = claimed.processingAt ?? new Date();
+    claimed.version += 1;
+    this.requests[index] = claimed.clone();
+    return claimed.clone();
   }
 
   async findById(id: string): Promise<WithdrawalRequest | null> {
-    return this.requests.find((r) => r.id === id) || null;
+    const found = this.requests.find((r) => r.id === id);
+    // Mongo devolve lean-doc isolado a cada read; clone evita que a mutação
+    // in-place do service alcance o snapshot PERSISTIDO que o guard CAS usa.
+    return found ? found.clone() : null;
   }
 
   async findByUserId(userId: string): Promise<WithdrawalRequest[]> {
-    return this.requests.filter((r) => r.userId === userId);
+    return this.requests.filter((r) => r.userId === userId).map((r) => r.clone());
   }
 
   async listPending(limit?: number, offset?: number): Promise<WithdrawalRequest[]> {

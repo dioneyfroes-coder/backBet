@@ -18,6 +18,7 @@ requestedAt: Date;
     notes?: string;
     createdAt: Date;
   }>;
+  version: number;
 }
 
 const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
@@ -74,6 +75,10 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequestDocument>(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    version: {
+      type: Number,
+      default: 1,
+    },
   },
   { timestamps: true },
 );

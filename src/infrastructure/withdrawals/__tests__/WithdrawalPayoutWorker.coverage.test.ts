@@ -44,6 +44,7 @@ describe('WithdrawalPayoutWorker — falha das métricas é best-effort', () => 
     service = {
       markProcessing: jest.fn().mockResolvedValue(undefined),
       completePayout: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest.fn().mockResolvedValue({ status: 'PROCESSING' }),
     };
     adapter = { payWithdrawal: jest.fn() };
     jest.spyOn(console, 'debug').mockImplementation(() => {});
@@ -278,6 +279,7 @@ describe('WithdrawalPayoutWorker — startWithdrawalWorker', () => {
     const service = {
       markProcessing: jest.fn().mockResolvedValue(undefined),
       completePayout: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest.fn().mockResolvedValue({ status: 'PROCESSING' }),
     } as any;
 
     const queue = startWithdrawalWorker(service) as any;

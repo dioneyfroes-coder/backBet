@@ -39,6 +39,7 @@ describe('Fase 5 — dimensão Audit JUNTA com Wallet+Ledger+Risk+Bet+Withdrawal
     service = {
       markProcessing: jest.fn().mockResolvedValue(undefined),
       completePayout: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest.fn().mockResolvedValue({ status: 'PROCESSING' }),
     };
     adapter = {
       payWithdrawal: jest.fn().mockResolvedValue({ success: true, transactionId: 'tx-omnidim' }),

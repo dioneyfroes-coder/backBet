@@ -12,7 +12,9 @@ describe('WithdrawalPayoutWorker state transitions', () => {
 
   beforeEach(() => {
     service = {
-      markProcessing: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest
+        .fn()
+        .mockResolvedValue({ status: 'PROCESSING', version: 1 }),
       completePayout: jest.fn().mockResolvedValue(undefined),
     };
     adapter = {
@@ -26,7 +28,7 @@ describe('WithdrawalPayoutWorker state transitions', () => {
 
     await processWithdrawalPayload(payload, adapter as IPaymentPort, service as WithdrawalRequestService);
 
-    expect(service.markProcessing).toHaveBeenCalledWith('req-succ-1');
+    expect(service.claimForProcessing).toHaveBeenCalledWith('req-succ-1');
     expect(service.completePayout).toHaveBeenCalledWith('req-succ-1');
     expect(adapter.payWithdrawal).toHaveBeenCalledTimes(1);
   });
@@ -39,7 +41,7 @@ describe('WithdrawalPayoutWorker state transitions', () => {
       processWithdrawalPayload(payload, adapter as IPaymentPort, service as WithdrawalRequestService),
     ).rejects.toThrow('provider_error');
 
-    expect(service.markProcessing).toHaveBeenCalledWith('req-fail-1');
+    expect(service.claimForProcessing).toHaveBeenCalledWith('req-fail-1');
     expect(service.completePayout).not.toHaveBeenCalled();
   });
 

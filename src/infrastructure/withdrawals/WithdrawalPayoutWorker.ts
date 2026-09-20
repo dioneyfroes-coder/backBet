@@ -22,24 +22,6 @@ import { idempotencyService } from '@/infrastructure/persistence/idempotencyFact
 import { canonicalFingerprint } from '@/shared/services/fingerprint';
 import { getRedisUrl } from '@/shared/config/connections';
 
-async function markProcessingBestEffort(
-  payload: WithdrawalPayoutPayload,
-  service?: WithdrawalRequestService,
-): Promise<void> {
-  if (!service) {
-    return;
-  }
-  try {
-    await service.markProcessing(payload.requestId);
-  } catch (err) {
-    writeStructuredLog({
-      event: 'withdrawal_state_transition_skipped',
-      requestId: payload.requestId,
-      err,
-    });
-  }
-}
-
 export async function processWithdrawalPayloadOnce(
   payload: WithdrawalPayoutPayload,
   paymentAdapter?: IPaymentPort,
@@ -48,8 +30,37 @@ export async function processWithdrawalPayloadOnce(
 ): Promise<void> {
   const adapter = paymentAdapter ?? createPaymentAdapter();
 
-  // Reflect APPROVED -> PROCESSING before contacting the provider (best effort).
-  await markProcessingBestEffort(payload, service);
+  // O claim APPROVED/FAILED -> PROCESSING é ATÔMICO e OBRIGATÓRIO antes de
+  // qualquer contato com o PSP. Se o claim falhar (concorrência entre workers,
+  // estado alterado ou Mongo indisponível), o payout NÃO é executado: um novo
+  // processamento seria uma tentativa duplicada de operação financeira.
+  if (!service) {
+    writeStructuredLog({
+      event: 'withdrawal_payout_skipped_no_service',
+      requestId: payload.requestId,
+    });
+    return;
+  }
+
+  let claimed;
+  try {
+    claimed = await service.claimForProcessing(payload.requestId);
+  } catch (err) {
+    writeStructuredLog({
+      event: 'withdrawal_claim_failed',
+      requestId: payload.requestId,
+      err,
+    });
+    throw err;
+  }
+
+  if (!claimed) {
+    writeStructuredLog({
+      event: 'withdrawal_not_claimed_skip_psp',
+      requestId: payload.requestId,
+    });
+    return;
+  }
 
   let res;
   try {
