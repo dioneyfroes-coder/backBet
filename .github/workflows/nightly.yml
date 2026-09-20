@@ -11,11 +11,14 @@ name: Nightly — cargas pesadas
 #   └─ agendados/manuais
 #      ├─ Chaos  (crash testing — Fase 14)
 #      ├─ Load   (contention — Fase 4)
-#      └─ Backup drill (backup/restore/reconciliação — Fase 15)
+#      ├─ Backup drill (backup/restore/reconciliação — Fase 15)
+#      └─ Docker clean rebuild (reconstrução limpa — Fase 17)
 #
 # Cada job sobe a SUA própria infra de teste (docker-compose.test.yml:
 # MongoDB replica set + Redis) num runner isolado — sem cargas paralelas
-# dividindo o mesmo banco.
+# dividindo o mesmo banco. O Docker clean rebuild usa o compose de PRODUÇÃO
+# (docker-compose.yml) com LAB_BIND_IP=127.0.0.1 para não depender do IP fixo
+# do laboratório.
 
 on:
   schedule:
@@ -59,6 +62,30 @@ jobs:
       - name: Teardown test infrastructure
         run: docker compose -f docker-compose.test.yml down
         if: always()
+
+  docker-rebuild:
+    name: Docker clean rebuild (Fase 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Gerar keyfile do MongoDB (ignorado no Git)
+        run: |
+          mkdir -p deploy/mongo
+          openssl rand -base64 756 > deploy/mongo/mongodb-keyfile
+          chmod 400 deploy/mongo/mongodb-keyfile
+
+      - name: Montar .env de laboratório a partir do exemplo
+        run: cp .env.example .env
+
+      - name: Drill de reconstrução limpa (down -v → build --no-cache → up → health/readiness)
+        run: LAB_BIND_IP=127.0.0.1 npm run docker:rebuild:ci
 
   scheduled-suite:
     name: ${{ matrix.suite.name }}

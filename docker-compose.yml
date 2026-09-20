@@ -1,3 +1,10 @@
+# IP de bind das portas publicadas de Mongo/Redis (LAB_BIND_IP). O valor
+# padrão 192.168.22.250 é um IP ESTÁTICO DELIBERADO do laboratório (server01)
+# — não é configuração acidental nem falha de segurança. Em outro host,
+# sobrescreva com LAB_BIND_IP=<ip-do-host>. Os serviços continuam alcançáveis
+# pela rede interna do Compose pelos nomes "mongodb"/"redis" independente
+# desse bind.
+
 x-backbet-env: &backbet-env
   NODE_ENV: production
   BACKBET_RUNTIME_ENV: production
@@ -41,7 +48,7 @@ services:
   mongodb:
     image: mongo:7
     ports:
-      - "192.168.22.250:27018:27017"
+      - "${LAB_BIND_IP:-192.168.22.250}:27018:27017"
     restart: unless-stopped
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongodb-keyfile"]
     environment:
@@ -87,8 +94,24 @@ services:
 
         URI="mongodb://$${MONGO_ROOT_USER}:$${MONGO_ROOT_PASSWORD}@mongodb:27017/admin?authSource=admin"
 
-        state=$$(mongosh "$${URI}" --quiet --eval \
-          'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+        # --- Aguarda o MongoDB aceitar conexões (no primeiro boot, o entrypoint
+        # do mongo reinicia o mongod após configurar auth — janela de ECONNREFUSED).
+        attempt_repl_state() {
+          mongosh "$${URI}" --quiet --eval \
+            'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }' 2>/dev/null || true
+        }
+
+        echo "Aguardando MongoDB aceitar conexões autenticadas..."
+        i=0
+        while [ "$$i" -lt 60 ]; do
+          if [ -n "$$(attempt_repl_state)" ]; then
+            break
+          fi
+          i=$$((i + 1))
+          sleep 2
+        done
+
+        state=$$(attempt_repl_state)
 
         if [ "$${state}" = "1" ]; then
           echo "Replica set rs0 já está PRIMARY."
@@ -103,9 +126,8 @@ services:
         echo "Aguardando MongoDB se tornar PRIMARY..."
 
         i=0
-        while [ "$$i" -lt 30 ]; do
-          state=$$(mongosh "$${URI}" --quiet --eval \
-            'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
+        while [ "$$i" -lt 60 ]; do
+          state=$$(attempt_repl_state)
 
           if [ "$${state}" = "1" ]; then
             echo "Replica set rs0 está PRIMARY."
@@ -124,7 +146,7 @@ services:
     environment:
       REDIS_PASSWORD: "${REDIS_PASSWORD:?Defina REDIS_PASSWORD no .env}"
     ports:
-      - "192.168.22.250:6379:6379"
+      - "${LAB_BIND_IP:-192.168.22.250}:6379:6379"
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:

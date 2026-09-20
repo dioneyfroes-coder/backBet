@@ -168,6 +168,77 @@ Dados persistidos (todos no mesmo host, como volumes nomeados):
 
 ---
 
+## IP do laboratório (decisão deliberada)
+
+O `docker-compose.yml` publica as portas do MongoDB (`27018`) e do Redis
+(`6379`) **apenas no IP `192.168.22.250`** — o IP estático do `server01`.
+
+> Este IP é **deliberadamente estático** e **não deve ser interpretado como
+> configuração acidental**. As portas publicadas nesse IP fazem parte da
+> decisão consciente de laboratório (ex.: acesso humano aos dados via tools do
+> Mongo/Redis a partir da rede local). Os serviços continuam internos à rede
+> do Compose para a aplicação (`mongodb:27017` / `redis:6379`).
+
+Para alterar o bind (ex.: outro host, ou nenhuma publicação), use `LAB_BIND_IP`
+no `.env`:
+
+```ini
+# Default: 192.168.22.250 (lab)
+LAB_BIND_IP=127.0.0.1        # publica só em loopback
+LAB_BIND_IP=                 # não publica porta (serviço interno apenas)
+```
+
+No `docker-compose.yml`, o default fica codificado como
+`${LAB_BIND_IP:-192.168.22.250}` — o composição real mantém o IP fixo do lab,
+mas qualquer outro host pode sobrescrever sem editar o arquivo.
+
+---
+
+## Reconstrução limpa (Fase 17 — drill)
+
+O drill de reconstrução limpa valida que todo o ambiente nasce de um estado
+vazio. Roda de ponta a ponta o ciclo previsto no plano:
+
+```text
+docker compose down -v           (1) limpeza total
+docker compose build --no-cache  (2) build sem cache
+docker compose up -d             (3) subir tudo
+docker compose ps                (4) estado dos containers
+curl /health                     (5) API saudável
+curl /readiness                  (5) Mongo + Redis prontos
+```
+
+Uso:
+
+```bash
+# no server01 (mantém a stack de pé ao final)
+npm run docker:rebuild
+
+# em CI / host sem o IP do lab (derruba a stack ao final)
+LAB_BIND_IP=127.0.0.1 npm run docker:rebuild:ci
+
+# com build em cache (mais rápido, para iteração local)
+bash scripts/docker-rebuild-drill.sh --cache
+```
+
+O script valida:
+
+- `mongodb`, `redis` e `backbet` **healthy** no `docker compose ps`;
+- `withdrawal-worker` e `contact-worker` **Up** com log de inicialização;
+- `GET /health` → `status: "healthy"`;
+- `GET /readiness` → `ready: true` com `checks.mongo.status` e
+  `checks.redis.status` = `up`.
+
+O mesmo drill roda no workflow **Nightly** (job `docker-rebuild`, Fase 17),
+agendado/manual, para detectar regressões de Dockerfile/Compose sem custo no
+PR gate.
+
+> ⚠️ `docker compose down -v` **apaga os volumes** (`mongodb_data`, `redis_data`,
+> `backbet_logs`, `backbet_uploads`). O drill pede confirmação em ambientes
+> interativos; use `--yes` apenas quando a perda de dados é aceitável (ex.: CI).
+
+---
+
 ## Segurança (mínimo operacional)
 
 - `JWT_SECRET` forte e fora do Git (`.env` é ignorado);

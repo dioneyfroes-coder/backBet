@@ -20,9 +20,9 @@ Executado em 30/08/2026: `npm run check` (`check:secrets` → `lint` → `test:c
 | Cobertura | ✔ conhecida | 79.86% statements · 80.53% linhas · 76.93% funções |
 | Build (`tsc` + `tsc-alias` + assets) | ✔ | `dist/` gerada; smoke pós-build ok |
 
-DoD consolidado item a item: `docs/DEFINITION_OF_DONE.mdx` — **48/50 itens ✔**;
-os 2 restantes (`integração passando`, `Docker build passando`) exigem ambiente
-com Docker/CI e **não são lacunas de código**.
+DoD consolidado item a item: `docs/DEFINITION_OF_DONE.mdx` — **49/50 itens ✔**;
+o restante (`integração passando`) exige ambiente com Docker/CI e **não é lacuna
+de código**.
 
 ---
 
@@ -110,7 +110,7 @@ Concorrência controlada     ✔
 Operações idempotentes      ✔
 Auditoria                   ✔
 Testes                      ✔ (784)
-Docker                      ◐ (build exige ambiente Docker)
+Docker                      ✔ (drill de reconstrução limpa 16/16)
 CI/CD                       ✔
 Observabilidade             ✔
 Backup                      ✔

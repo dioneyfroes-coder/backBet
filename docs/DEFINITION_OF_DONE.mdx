@@ -72,7 +72,7 @@ ambiente com Docker/CI (não disponível nesta estação de dev).
 | 38 | testes de concorrência passando | ✔ | `WalletConcurrency.test.ts` + `load.concurrency` |
 | 39 | teste de falhas passando | ✔ | `failure.integration.test.ts` + `docs/RESILIENCE.mdx` |
 | 40 | build passando | ✔ | `npm run build` (tsc + tsc-alias + assets) |
-| 41 | Docker build passando | ◐ | `Dockerfile` presente e consumido pelo compose; build da imagem exige ambiente com Docker (verificar no server01) |
+| 41 | Docker build passando | ✔ | Imagem `backbet:latest` via `docker compose build --no-cache` + drill `scripts/docker-rebuild-drill.sh` (**16/16 ok**, server01 20/09/2026): API healthy, readiness, mongo/redis healthy, workers com log de boot |
 | 42 | documentação atualizada | ✔ | `docs/*` completo + `README.mdx` |
 
 ## Produto
@@ -94,8 +94,8 @@ ambiente com Docker/CI (não disponível nesta estação de dev).
 
 ## Resumo
 
-- **50 itens**: 48 ✔ · 2 ◐ (integração real e build da imagem Docker — aguardam
-  ambiente com Docker/CI, não são lacunas de código).
+- **50 itens**: 49 ✔ · 1 ◐ (integração real com Docker — aguarda executar
+  `src/integration/__tests__/*` no ambiente com Docker/CI).
 - **Critério final do plano (seção 44)**: o cenário cadastro → login → depósito
   → aposta → settlement → saque → reconcialiação é coberto por testes unitários,
   de integração, de concorrência e de falha sem criar/destruir dinheiro —
