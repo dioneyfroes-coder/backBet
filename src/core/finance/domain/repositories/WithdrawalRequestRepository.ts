@@ -46,7 +46,15 @@ export class WithdrawalRequestRepository implements IWithdrawalRequestRepository
 
   async claimForProcessing(requestId: string): Promise<WithdrawalRequest | null> {
     const index = this.requests.findIndex((r) => r.id === requestId);
-    if (index < 0 || !['APPROVED', 'FAILED'].includes(this.requests[index].status)) {
+    if (index < 0) {
+      return null;
+    }
+    const currentStatus = this.requests[index].status;
+    // APPROVED/FAILED -> PROCESSING (primeira claim). PROCESSING já é RETRY
+    // legítimo pós-timeout: o débito nunca aconteceu (ledger bloqueia o duplo
+    // em completePayout), então re-claimar PROCESSING só re-executa o payout.
+    // Estados terminais (COMPLETED) ou de validação não são claimáveis.
+    if (!['APPROVED', 'FAILED', 'PROCESSING'].includes(currentStatus)) {
       return null;
     }
     const claimed = this.requests[index].clone();
