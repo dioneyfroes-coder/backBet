@@ -88,20 +88,33 @@ Todos sob `/api/v1/admin/sigap`, com `protectedRoute` + `requireAdminRole` e reg
 | `SIGAP_IMPEDIMENT_ENABLED` | `false` | Habilita o provedor de consulta de impedimento |
 | `SIGAP_IMPEDED_DOCUMENTS` | *(vazio)* | CPFs (apenas dígitos) marcados como impedidos no mock |
 | `SIGAP_TRANSMISSION_JOB_INTERVAL_MS` | `86400000` | Intervalo do job diário (1 dia) |
+| `SIGAP_RETRY_MAX_ATTEMPTS` | `5` | Teto de tentativas da mesma remessa (retry) — ao atingir, marca `SIGAP_RETRY_LIMIT_EXCEEDED` sem chamar o provedor |
 | `SIGAP_QUERY_DEFAULT_LIMIT` / `SIGAP_QUERY_MAX_LIMIT` | `50` / `200` | Limites de paginação |
 
 ## Configuração (`appConfig.sigap`)
 
-O bloco `sigap` centraliza `enabled`, `provider`, `operatorId`, `impedimentEnabled`, `impededDocuments`, `transmissionJobIntervalMs` e `query`, seguindo o mesmo padrão dos blocos `audit`, `compliance` e `treasury`.
+O bloco `sigap` centraliza `enabled`, `provider`, `operatorId`, `impedimentEnabled`, `impededDocuments`, `transmissionJobIntervalMs`, `retryMaxAttempts` e `query`, seguindo o mesmo padrão dos blocos `audit`, `compliance` e `treasury`.
+
+## Ciclo de transmissão (Fase 19)
+
+O ciclo segue o fluxo previsto no plano (`SigapService → adapter → transmissão → ACK/REJECT → retry → auditoria`):
+
+1. **Transmissão** — `SigapService.transmitFile` monta/reenvia a remessa idempotente por `(operatorId, fileType, referenceDate)`.
+2. **ACK / REJECT** — o provedor responde `{ status: 'ACKED', ackId }` ou `{ status: 'REJECTED', rejectionCode, rejectionReason }`; a remessa é persistida como `ACKED` ou `REJECTED` em coleção própria (`errorCode`/`errorMessage` preenchidos na rejeição).
+3. **Retry** — reenvios incrementam `attemptCount`; ao atingir `SIGAP_RETRY_MAX_ATTEMPTS` (`appConfig.sigap.retryMaxAttempts`, padrão 5) a remessa vira `FAILED` com `SIGAP_RETRY_LIMIT_EXCEEDED` e o provedor não é mais chamado (evita loop infinito).
+4. **Auditoria** — `POST /transmit` e `POST /impediment` registram eventos de auditoria (`resourceType: sigap_submission`, acionados via `SigapController`), verificados no teste de integração.
+5. **Métricas** — `backbet_sigap_submissions_total` (ACK), `backbet_sigap_submission_failures_total` (falha de transmissão) e `backbet_sigap_submission_rejected_total` (REJECT da SPA), todas por `fileType`.
+
+O adapter mock permite simular determinismo nas três conclusões (ACK, falha via `failNext`, REJECT via `rejectNext`).
 
 ## Testes
 
-- `src/core/sigap/domain/services/__tests__/SigapService.test.ts`
+- `src/core/sigap/domain/services/__tests__/SigapService.test.ts` (ACK, idempotência, FAILED, REJECT, teto de retry, impedimento)
 - `src/core/sigap/domain/services/payloads/__tests__/SigapPayloadBuilder.test.ts`
 - `src/core/sigap/domain/repositories/__tests__/InMemorySigapSubmissionRepository.test.ts`
 - `src/infrastructure/persistence/mongoose/repositories/__tests__/MongooseSigapSubmissionRepository.test.ts`
 - `src/infrastructure/jobs/__tests__/SigapTransmissionJob.test.ts`
-- `src/integration/__tests__/admin.sigap.integration.test.ts`
+- `src/integration/__tests__/admin.sigap.integration.test.ts` (HTTP: ACKED, REJECT, retry, teto, auditoria, 403/400)
 
 ## Nota sobre integração real
 

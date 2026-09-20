@@ -42,10 +42,14 @@ export interface SigapPayloadRecord {
 }
 
 /** Resultado de uma transmissão retornado pelo provedor (adapter). */
-export interface SigapTransmissionResult {
-  ackId: string;
-  receivedAt: Date;
-}
+export type SigapTransmissionResult =
+  | { status: 'ACKED'; ackId: string; receivedAt: Date }
+  | {
+      status: 'REJECTED';
+      rejectionCode: string;
+      rejectionReason: string;
+      receivedAt: Date;
+    };
 
 /** Resultado de uma consulta de impedimento retornado pelo provedor. */
 export interface SigapImpedimentResult {

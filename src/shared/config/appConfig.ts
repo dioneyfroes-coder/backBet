@@ -362,6 +362,7 @@ export const appConfig = {
       env.SIGAP_TRANSMISSION_JOB_INTERVAL_MS,
       86400000,
     ),
+    retryMaxAttempts: parsePositiveInt(env.SIGAP_RETRY_MAX_ATTEMPTS, 5),
     query: {
       defaultLimit: parsePositiveInt(env.SIGAP_QUERY_DEFAULT_LIMIT, 50),
       maxLimit: parsePositiveInt(env.SIGAP_QUERY_MAX_LIMIT, 200),

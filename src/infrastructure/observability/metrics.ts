@@ -151,6 +151,13 @@ const sigapSubmissionFailureCounter = new Counter({
   registers: [registry],
 });
 
+const sigapSubmissionRejectedCounter = new Counter({
+  name: 'backbet_sigap_submission_rejected_total',
+  help: 'Total de remessas rejeitadas pela SPA (REJECT)',
+  labelNames: ['fileType'],
+  registers: [registry],
+});
+
 const betsPlacedCounter = new Counter({
   name: 'backbet_bets_total',
   help: 'Total de apostas criadas com sucesso',
@@ -239,6 +246,7 @@ export {
   responsibleGamblingBlockedCounter,
   sigapSubmissionCounter,
   sigapSubmissionFailureCounter,
+  sigapSubmissionRejectedCounter,
   betsPlacedCounter,
   betsRejectedCounter,
   betsWonCounter,

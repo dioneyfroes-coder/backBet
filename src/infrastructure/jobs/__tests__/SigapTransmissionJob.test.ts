@@ -8,7 +8,11 @@ import { Odds } from '@/core/odds/domain/value-objects/Odds';
 
 class FakeTransmissionProvider implements ISigapTransmissionPort {
   async transmit(input: { fileType: string }) {
-    return { ackId: `ack-${input.fileType}`, receivedAt: new Date() };
+    return {
+      status: 'ACKED' as const,
+      ackId: `ack-${input.fileType}`,
+      receivedAt: new Date(),
+    };
   }
 }
 

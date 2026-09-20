@@ -19,6 +19,7 @@ export interface IMetricsPort {
   responsibleGamblingBlocked: ICounter;
   sigapSubmission: ICounter;
   sigapSubmissionFailure: ICounter;
+  sigapSubmissionRejected: ICounter;
   optimisticLockConflict: ICounter;
   contactSpam: ICounter;
   contactValidation: ICounter;
@@ -44,6 +45,7 @@ export const noopMetrics: IMetricsPort = {
   responsibleGamblingBlocked: noop,
   sigapSubmission: noop,
   sigapSubmissionFailure: noop,
+  sigapSubmissionRejected: noop,
   optimisticLockConflict: noop,
   contactSpam: noop,
   contactValidation: noop,

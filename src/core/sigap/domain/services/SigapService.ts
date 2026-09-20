@@ -31,6 +31,8 @@ export interface SigapServiceOptions {
   transmissionProvider: ISigapTransmissionPort;
   impedimentProvider?: ISigapImpedimentPort;
   metrics?: IMetricsPort;
+  /** Teto de tentativas de transmissão da mesma remessa (retry). Padrão: appConfig.sigap.retryMaxAttempts. */
+  retryMaxAttempts?: number;
 }
 
 export interface SigapQueryOptions {
@@ -65,10 +67,18 @@ export class SigapService {
     return this.options.transmissionProvider.constructor.name;
   }
 
+  private get retryMaxAttempts(): number {
+    return this.options.retryMaxAttempts ?? appConfig.sigap.retryMaxAttempts;
+  }
+
   /**
    * Transmite um payload de determinada data referência ao SIGAP, criando ou
    * reutilizando (idempotente por (operatorId, fileType, referenceDate)) o
    * registro de submissão e incrementando tentativas em caso de reenvio.
+   *
+   * Respeita o teto de retry: uma vez que attemptCount atinge retryMaxAttempts,
+   * não chama mais o provedor e marca a remessa como FAILED com
+   * SIGAP_RETRY_LIMIT_EXCEEDED (evita reenvio infinito).
    */
   async transmitFile(input: SigapTransmitOptions): Promise<SigapSubmission> {
     const operatorId = input.operatorId ?? appConfig.sigap.operatorId;
@@ -80,6 +90,28 @@ export class SigapService {
 
     let submission: SigapSubmission;
     if (existing) {
+      if (existing.attemptCount >= this.retryMaxAttempts) {
+        existing.markFailed(
+          'SIGAP_RETRY_LIMIT_EXCEEDED',
+          `limite de ${this.retryMaxAttempts} tentativas atingido`,
+        );
+        await this.options.submissionRepository.save(existing);
+        this.incrementSubmissionMetric('failed', input.fileType);
+        writeStructuredLog(
+          {
+            component: 'sigap',
+            action: 'transmit',
+            fileType: input.fileType,
+            referenceDate: input.referenceDate,
+            operatorId,
+            status: existing.status,
+            error: existing.errorMessage,
+            attempts: existing.attemptCount,
+          },
+          'error',
+        );
+        return existing;
+      }
       existing.attemptCount += 1;
       existing.markPending();
       submission = existing;
@@ -101,6 +133,26 @@ export class SigapService {
         referenceDate: input.referenceDate,
         payload: input.payload,
       });
+      if (result.status === 'REJECTED') {
+        submission.markRejected(result.rejectionCode, result.rejectionReason);
+        await this.options.submissionRepository.save(submission);
+        this.incrementSubmissionMetric('rejected', input.fileType);
+        writeStructuredLog(
+          {
+            component: 'sigap',
+            action: 'transmit',
+            fileType: input.fileType,
+            referenceDate: input.referenceDate,
+            operatorId,
+            status: submission.status,
+            rejectionCode: result.rejectionCode,
+            rejectionReason: result.rejectionReason,
+            attempts: submission.attemptCount,
+          },
+          'warn',
+        );
+        return submission;
+      }
       submission.markTransmitted(result.ackId);
       await this.options.submissionRepository.save(submission);
       this.incrementSubmissionMetric('transmitted', input.fileType);
@@ -258,12 +310,14 @@ export class SigapService {
   }
 
   private incrementSubmissionMetric(
-    label: 'transmitted' | 'failed',
+    label: 'transmitted' | 'failed' | 'rejected',
     fileType: SigapFileType,
   ): void {
     try {
       if (label === 'failed') {
         this.metrics.sigapSubmissionFailure.inc({ fileType });
+      } else if (label === 'rejected') {
+        this.metrics.sigapSubmissionRejected.inc({ fileType });
       } else {
         this.metrics.sigapSubmission.inc({ fileType });
       }

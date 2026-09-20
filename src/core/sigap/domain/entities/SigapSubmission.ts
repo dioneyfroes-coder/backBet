@@ -98,6 +98,14 @@ export class SigapSubmission {
     this.updatedAt = new Date();
   }
 
+  /** SPA recebeu o arquivo, mas o rejeitou com um código/motivo. */
+  markRejected(errorCode: string, errorMessage: string): void {
+    this.status = 'REJECTED';
+    (this as { errorCode?: string }).errorCode = errorCode;
+    (this as { errorMessage?: string }).errorMessage = errorMessage;
+    this.updatedAt = new Date();
+  }
+
   markPending(): void {
     this.status = 'PENDING';
     this.updatedAt = new Date();

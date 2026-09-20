@@ -95,6 +95,7 @@ assignDefault('SIGAP_OPERATOR_ID', 'backbet-operator');
 assignDefault('SIGAP_IMPEDIMENT_ENABLED', 'false');
 assignDefault('SIGAP_IMPEDED_DOCUMENTS', '');
 assignDefault('SIGAP_TRANSMISSION_JOB_INTERVAL_MS', '86400000');
+assignDefault('SIGAP_RETRY_MAX_ATTEMPTS', '5');
 assignDefault('SIGAP_QUERY_DEFAULT_LIMIT', '50');
 assignDefault('SIGAP_QUERY_MAX_LIMIT', '200');
 
@@ -227,6 +228,7 @@ type AppEnv = NodeJS.ProcessEnv & {
   SIGAP_IMPEDIMENT_ENABLED?: string;
   SIGAP_IMPEDED_DOCUMENTS?: string;
   SIGAP_TRANSMISSION_JOB_INTERVAL_MS?: string;
+  SIGAP_RETRY_MAX_ATTEMPTS?: string;
   SIGAP_QUERY_DEFAULT_LIMIT?: string;
   SIGAP_QUERY_MAX_LIMIT?: string;
 };
