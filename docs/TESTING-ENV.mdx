@@ -1,232 +1,113 @@
 ---
-title: "Ambientes de Teste (Fase 18)"
-description: "Como rodar a suíte de integração real de forma reproduzível, sem depender de MongoDB/Redis pessoais, nos três ambientes: development, test e production."
+title: "Testes, Ambientes e Carga"
+description: "Suítes do BackBet, ambientes de teste, carga/concorrência, recuperação (crash/backup) e matriz de cenários críticos do dinheiro."
 slug: "/docs/testing-env"
-sidebar_label: "Ambientes de Teste"
+sidebar_label: "Testing & QA"
 ---
 
-# Ambientes de Teste (Fase 18)
+# Testes, Ambientes e Carga
 
-A **Fase 18** organiza o projeto em três ambientes conceituais e garante que a
-suíte de **integração real** (MongoDB + Redis) seja **reproduzível** — ou seja,
-não depende de um MongoDB/Redis pessoal, de dados locais, nem de configuração
-específica da máquina de desenvolvimento.
+Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no BackBet.
 
-| Ambiente | Infraestrutura | Como rodar |
-|---|---|---|
-| **development** | Local do PC dev (Mongo + Redis via `docker run` ou Compose), app com `npm run dev` | Ver `docs/QUICKSTART.mdx` |
-| **test** | **Docker Compose versionado** (`docker-compose.test.yml`): MongoDB `mongo:7` como replica set `rs0` de nó único + Redis `redis:7` | `npm run test:integration:full` |
-| **production** | Host único em Docker via Compose: MongoDB (replica set `rs0`) + Redis + API + workers | Ver `docs/DOCKER.mdx` (Fase 17) |
+## Suítes e comandos
 
-## Por que uma infra de teste em Compose?
+| Comando | O que faz | Infra |
+|---------|-----------|-------|
+| `npm test` | Unitários herméticos (Jest, in-memory) | nenhuma |
+| `npm run test:coverage` | Unitários + relatório de cobertura | nenhuma |
+| `npm run test:integration` | Integração real (subset) | Mongo replica set + Redis |
+| `npm run test:integration:full` | Integração completa + verificação de endpoints | Mongo replica set + Redis |
+| `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) | infra real |
+| `npm run test:load:distributed` | Carga **distribuída** (N carteiras, eixo horizontal) | infra real |
+| `npm run test:crash` | Recuperação de worker após crash | infra real |
+| `npm run test:backup` | Ciclo backup/restore/validação | infra real |
+| `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) | — |
+| `npm run test:infra:reset` | Sobe infra de teste do zero | Docker |
+| `npm run check` | Gate completo: `check:secrets` + lint + cobertura + build | — |
 
-- Transações MongoDB (wallet/ledger/bet/treasury) exigem **replica set**; o
-  compose de teste sobe o `rs0` automaticamente (`rs.initiate()` idempotente).
-- Os testes de idempotência/atomicidade usam Redis de verdade.
-- Nada disso precisa existir na máquina do dev — `npm install` + Docker bastam.
+**Estado atual (20/09/2026)**: **1105 testes** (1071 passando, 33 skipped, 1 falha pré-existente `FI-05` fora do escopo atual), **142 suítes passando**; cobertura **~84,5% stmts / ~85% lines / ~81% fns / ~71% branches**; `npm run check` verde.
 
-## Pré-requisitos
+### Infra de teste
 
-- Docker Engine + **Docker Compose v2** (recomendado **v2.20+** por conta do suporte a `up -d --wait`).
-- Node.js 22+ (`engines` do `package.json`).
-- **Nenhuma** instância local rodando nas portas `127.0.0.1:27017` (Mongo) ou `127.0.0.1:6379` (Redis) enquanto a infra de teste estiver de pé.
-
-## Comandos
+`docker-compose.test.yml` sobe MongoDB como **replica set `rs0`** + Redis no loopback:
 
 ```bash
-# 1. Sobe Mongo (replica set rs0) + Redis na máquina (portas só em 127.0.0.1)
-npm run test:infra:up
-
-# 2. Roda a suíte de integração real
-npm run test:integration
-
-# 3. Derruba a infra (os volumes são mantidos para a próxima execução)
-npm run test:infra:down
-```
-
-**Tudo em um comando** (levanta a infra, roda os testes e derruba a infra,
-mesmo que os testes falhem):
-
-```bash
+npm run test:infra:reset   # sobe/limpa a infra
 npm run test:integration:full
 ```
 
-Para **começar do zero** (apaga dados do Mongo/Redis de teste e religa tudo):
+> Transações Mongo, locking otimista, workers Bull e idempotência **só fazem sentido** contra o replica set — as suítes de integração/carga exigem esta infra.
 
-```bash
-npm run test:infra:reset
-```
+## Testes de carga e concorrência
 
-## Configuração de conexão do runner
+Os testes de carga medem **correção sob contenção**, não throughput:
 
-O orquestrador `scripts/run-integration-tests.cjs`:
+- **`test:load` (contida)**: N operações concorrentes na **mesma carteira** → valida locking otimista (`version` → `409` + retry), idempotência (`Idempotency-Key`) e retry transitório (`retryTransient.ts`). Provado com 100 saques concorrentes em `WalletConcurrency.test.ts:104-149`.
+- **`test:load:distributed` (distribuída)**: N carteiras distintas de forma paralela (eixo horizontal) → valida isolação por agregado e ausência de contenção cruzada.
 
-- define `RUN_REAL_INTEGRATION_TESTS=true`;
-- roda o Jest com `--runInBand` no spec `src/integration/__tests__/mongo-redis.integration.test.ts`;
-- lê **`MONGODB_URI`** / **`REDIS_URL`** do ambiente (shell ou `.env`; o dotenv
-  nunca sobrescreve variáveis já exportadas) e **não tem fallback** para
-  localhost/IP fixo — se faltar alguma variável, o runner aborta com erro claro;
-- o `env.ts` também **não fornece mais defaults localhost** em modo teste: as
-  URIs são obrigatórias sempre que Mongo/Redis forem usados (a suíte unitária
-  hermética roda sem elas, pois usa adaptadores in-memory);
-- usa o database de teste **`MONGODB_TEST_DB`** (default `backbet-test`): deriva
-  da `MONGODB_URI` trocando só o database, ou usa **`MONGODB_TEST_URI`**
-  literalmente (credenciais do usuário dedicado `backbet-test`). Assim a suíte
-  **nunca acessa o banco da aplicação**.
+Regras garantidas sob carga: saldo nunca negativo (FI-01), débito único por saque (FI-04), sem double-spending em apostas simultâneas (B3), WIN com exatamente um crédito (FI-08), CANCEL com exatamente um reembolso (FI-09).
 
-Para rodar contra a infra local de teste do compose (loopback, sem auth):
+## Teste de crash e backup
 
-```bash
-npm run test:infra:up
-npm run test:integration    # com .env apontando para a infra de teste
-```
+- `npm run test:crash` — derruba worker no meio do processamento e valida recuperação (estado `PROCESSING`/`FAILED` consistente, retry conclui, sem débito duplicado).
+- `npm run test:backup` — exercita `backup:create → restore → validate`; o `backup:drill` automatizado restaura em banco temporário sem tocar o original. Runbook: `docs/BACKUP_RECOVERY.mdx`.
 
-Para direcionar a suíte a **outra** infra (ex.: um ambiente de teste remoto),
-exporte as variáveis antes de rodar:
+## Matriz de cenários críticos (dinheiro)
 
-```bash
-export MONGODB_URI="mongodb://backbet-test:senha@host:27017/backbet-test?authSource=admin&replicaSet=rs0"
-export REDIS_URL="redis://:senha@host:6379"
-npm run test:integration
-```
+Legenda: **Coberto** = teste automático; **Novo (Fase 20)** = adicionado na Fase 20; **Parcial** = caminho principal coberto com detalhe pendente.
 
-## Como a infra de teste foi montada
+### Carteira
+| # | Cenário | Status | Onde |
+|---|---------|--------|------|
+| W1 | Rollback de transação pós-débito consistente | Coberto* | `BetService.critical.test.ts` (simulação in-memory) |
+| W2 | Depósito concorrente não duplica crédito | Coberto | `WalletService.test.ts`, `WalletConcurrency.test.ts` |
+| W3 | Saque concorrente não duplica débito | Coberto | `WalletConcurrency.test.ts:104-149` |
+| W4 | Conflito de versão (update obsoleto) → 409 | Coberto | `WalletRepository.ts:21-36` |
+| W5 | Saldo nunca fica negativo | Coberto | `BetService.critical.test.ts` |
+| W6 | Saque com saldo insuficiente não debita | Coberto | `Wallet.ts:62-66`, `WalletService.test.ts` |
 
-- **`mongodb`** — `mongo:7`, `--replSet rs0 --bind_ip_all`, healthcheck com `mongosh`.
-- **`mongo-rs-init`** — container one-shot que inicia o `rs0` e só termina quando
-  o nó única vira `PRIMARY` (espera até 30s). O membro anuncia `127.0.0.1:27017`
-  porque o **Jest roda no host** e precisa descobrir o primary pela porta publicada.
-- **`redis`** — `redis:7-alpine`, healthcheck com `redis-cli ping`.
-- Portas publicadas **somente em loopback** e Mongo **sem autenticação**: essa
-  infra é efêmera/local e não deve ser exposta na rede. Para produção, use o
-  `docker-compose.yml` (Mongo autenticado + Redis + API + workers no mesmo host).
+### Aposta
+| # | Cenário | Status | Onde |
+|---|---------|--------|------|
+| B1 | Saldo insuficiente ao apostar (sem aposta, saldo intacto) | Coberto | `BetService.critical.test.ts` |
+| B2 | Aposta normal (débito + registro + risco) | Coberto | `BetService.test.ts:96-116` |
+| B3 | Aposta simultânea sem dupla cobrança | Coberto | `BetService.critical.test.ts` |
+| B4-B6 | Evento encerrado / mercado fechado / odd inexistente bloqueiam | Coberto | `BetService.ts:232-276` + testes |
+| B7 | Limite de exposição (HTTP: `RISK_REJECTED` 400 sem débito) | Coberto | `RiskLimit.integration.test.ts` |
+| B8 | Rollback real com transação Mongo (`withTransaction`) | **Parcial** | simulação in-memory feita; caso de integração é próximo passo |
 
-## Rodando a suíte dentro do compose de produção (host único)
+### Settlement
+| # | Cenário | Status |
+|---|---------|--------|
+| S1 | WIN credita retorno (HTTP) | Coberto (`Settlement.integration.test.ts`) |
+| S2 | LOST não credita | Coberto |
+| S3 | CANCEL com reembolso | Coberto |
+| S4 | Replay de liquidação não paga duas vezes | Coberto |
+| S5 | Resultado inválido rejeitado (`400`) | Coberto |
+| S6 | Não-admin bloqueado (`403`) | Coberto |
 
-O compose principal (`docker-compose.yml`) tem o serviço **`integration-tests`**
-(profile `tests`) que usa a imagem `backbet:test` — estágio `tests` do
-Dockerfile com **devDependencies + fonte TS** (a imagem de produção
-`backbet:latest` é podada com `npm prune --omit=dev` e não contém Jest). Ele
-conecta nos endpoints **internos** `mongodb:27017` e `redis:6379` e só executa
-depois de o Redis estar saudável e o `mongo-rs-init` ter concluído (readiness
-antes dos testes):
+### Withdrawal (worker)
+WD1-WD8: trava no request, aprovação, PROCESSING→COMPLETED, falha com reversão, retry até aceitar (`WithdrawalPayoutWorker.e2e.test.ts`), entrega duplicada paga 1x, timeout não debita, resposta duplicada pós-completePayout não debita 2x — **todos cobertos** (`WithdrawalPayoutWorker.safety.test.ts`, `state.test.ts`).
 
-```bash
-# no host (com Docker)
-docker compose --profile tests run --rm integration-tests
-# ou via script do package.json
-npm run test:integration:docker
-```
+### Pix (webhook)
+P1-P7: webhook duplicado não credita 2x, assinatura/payload inválidos rejeitados (401/400), pagamento atrasado pós-expirado ignorado, confirmação credita, estorno/cancelamento, valor divergente (422), reference divergente (422) — **todos cobertos** (`ProcessPixWebhook.test.ts` + `PixWebhook.integration.test.ts`).
 
-Requisitos no `.env` do host: `MONGODB_URI`, `MONGODB_TEST_URI`,
-`REDIS_URL`, `JWT_SECRET` (o serviço falha na interpolação se faltarem). A
-`MONGODB_TEST_URI` usa o usuário dedicado `backbet-test` (criado no boot do
-Mongo pelo `deploy/mongo/init-app-user.sh`), com acesso somente ao banco
-`backbet-test`.
+### SIGAP (transmissão regulatória)
+S1-S7: ACKED com `ackId`, reenvio idempotente, REJECT persistido, FAILED + retry, teto de retry (`SIGAP_RETRY_LIMIT_EXCEEDED`), impedimento (IMPEDED/NOT_IMPEDED/UNKNOWN), auditoria nas ações admin — **todos cobertos** (`SigapService.test.ts` + `admin.sigap.integration.test.ts`).
 
-## Pipeline completo (Fase 19) — gate obrigatório + endpoints reais
+## Lacunas registradas
 
-Antes de considerar uma entrega terminada, rode o **pipeline completo**:
+1. **Rollback real com transação Mongo** (W1/B8) — a simulação in-memory prova a orquestração; adicionar caso na suíte de integração (replica set) é o próximo passo.
+2. **Adapter SIGAP real** — S1-S7 cobertos contra o mock; transmissão real (mTLS/TLS 1.2, e-CNPJ, Bearer) fica bloqueada por credenciais/ambiente SPA (ver `docs/SIGAP_CONFORMIDADE.mdx`).
+3. **FI-05** — falha pré-existente em `FinancialInvariants.test.ts`, fora do escopo atual, tratada em separado.
 
-```bash
-npm ci          # instalação reproduzível a partir do package-lock.json
-npm run check   # GATE OBRIGATÓRIO = lint + test:coverage + build (tudo verde)
-```
+## Troubleshooting de testes
 
-Nenhum merge para `main` se qualquer um dos três falhar (lint ❌, testes/coverage ❌,
-build ❌). O CI (`.github/workflows/ci.yml`) aplica o mesmos passos.
+| Sintoma | Solução |
+|---------|---------|
+| Testes de integração falham | `npm run test:infra:reset` e confira Mongo/Redis ativos |
+| `MongoServerError: Transaction numbers are only allowed...` | Mongo precisa ser replica set (`replicaSet=rs0`) |
+| `409` inesperado | Replay de `Idempotency-Key` com payload diferente ou lock otimista — verifique a carteira |
+| Cobertura baixa no gate | Rode `npm run test:coverage` local e compare com o limiar do `check` |
 
-**Teste de endpoints REAIS** (sem Docker/Mongo/Redis, persistência in-memory):
-sobe o binário compilado (`dist/index.js`) e exercita via HTTP o fluxo completo:
-
-```bash
-npm run smoke
-```
-
-O smoke valida: `/health`, `/health/cache`, `/api/docs.json` (Swagger), catálogo
-de eventos, `register` → `login` → `me` → `deposit` → `withdraw` (validação de
-mínimo) → **aposta real** → `bets/me` (estaca abatida do saldo) → **cancel**.
-(refund do saldo) → `refresh`. Ao final imprime `SMOKE: N/N checagens OK`.
-
-> Dica (Fase 19): os eventos de exemplo do repositório in-memory agora usam IDs
-> **UUID** (ex.: `3fa85f64-5717-4562-b3fc-2c963f66afa6`), porque o `PlaceBetDTO`
-> exige `z.string().uuid()` — antes os eventos demo não podiam ser apostados
-> pela API real.
-
-**Docker (deploy real)** — `docker compose build` / `docker compose up` exigem
-Docker Engine; no PC de dev não há Docker, então esses passos rodam no host
-Docker (ver `docs/DOCKER.mdx`) seguindo:
-
-```bash
-# no host (com Docker):
-docker compose build         # imagem backbet:latest
-docker compose up -d         # MongoDB + Redis + API + workers
-```
-
-## CI (GitHub Actions)
-
-O workflow `.github/workflows/ci.yml` tem um job `integration` dedicado que sobe
-a **mesma** infra (`docker compose -f docker-compose.test.yml up -d --wait`),
-roda `npm run test:integration` e derruba a infra (`down`) sempre — provando que
-o ambiente de teste é reproduzível fora da máquina do dev.
-
-## Cenários críticos (Fase 20) — matriz de dinheiro
-
-A **matriz de cenários críticos** (Carteira/Aposta/Settlement/Withdrawal/Pix)
-vive em [`MATRIX-CENARIOS-CRITICOS.mdx`](./MATRIX-CENARIOS-CRITICOS.mdx) e
-aponta, cenário a cenário, o arquivo:linha que o valida.
-
-Testes adicionados na Fase 20 (rodam no `npm run check` normal, sem infra):
-
-| Teste | O que garante |
-|---|---|
-| `src/core/betting/domain/services/__tests__/BetService.critical.test.ts` | saldo insuficiente; **rollback de transação** (falha pós-débito restaura saldo, não persiste aposta/ledger); **aposta simultânea** sem dupla cobrança (`balance >= 0`, débitos do ledger casam) |
-| `src/infrastructure/api/__tests__/Settlement.integration.test.ts` | **settlement via HTTP** — WON credita retorno, LOST não credita, replay com `Idempotency-Key` não paga duas vezes, `result` inválido → 400, não-admin → 403 |
-| `src/infrastructure/withdrawals/__tests__/WithdrawalPayoutWorker.safety.test.ts` | **worker**: entrega duplicada (sequencial e concorrente) paga 1x; timeout do provedor não debita e retry conclui; resposta duplicada do provedor não debita 2x (guarda do ledger) |
-| `src/infrastructure/api/__tests__/RiskLimit.integration.test.ts` | **Fase 20.1** — limita a exposição via `RISK_CONFIG` e prova via HTTP: aposta que estoura o teto → `400 RISK_REJECTED` sem debitar a carteira (e aposta menor continua passando); blacklist → `RISK_REJECTED` sem débito; fecha a lacuna B7 da matriz |
-| `src/infrastructure/api/__tests__/PixWebhook.integration.test.ts` | **Fase 18** — **webhook Pix** via HTTP: assinatura inválida → 401 sem crédito; `PIX_PAID` credita via rota `/api/v1/wallets/deposit/pix-charge`; duplicado/`IDEMPOTENCY`-like → `replayed` sem dupla cobrança; `EXPIRED` → `expired_ignored`; `amount`/`reference` divergentes → 422 sem crédito; refund estorna e cancel não debita |
-| `src/core/finance/application/use-cases/__tests__/ProcessPixWebhook.test.ts` | **Fase 18** — caso de uso do webhook Pix: cada cenário P1-P7 isolado (assinatura, charge não encontrada, expiração, refund, mismatch de valor/reference) sem HTTP |
-| `src/integration/__tests__/admin.sigap.integration.test.ts` | **Fase 19** — **SIGAP via HTTP**: transmit → `ACKED`, `REJECT` da SPA persistido com `errorCode`, falha → `FAILED` e retry → `ACKED`, teto `retryMaxAttempts` → `SIGAP_RETRY_LIMIT_EXCEEDED` sem chamar o provedor, auditoria de `sigap.transmit`/`sigap.impediment`, 400/403 |
-| `src/core/sigap/domain/services/__tests__/SigapService.test.ts` | **Fase 19** — caso de uso SIGAP: ACK idempotente por `(operatorId,fileType,referenceDate)`, FAILED, REJECT, teto de retry, impedimento `IMPEDED/NOT_IMPEDED/UNKNOWN` |
-
-**Fase 18 — webhook Pix implementado**: as endpoints de recebimento de Pix
-passaram a existir e os cenários P1-P7 da matriz estão **cobertos** (rota pública
-`POST /api/v1/webhooks/pix` autenticada por assinatura HMAC-SHA256 no header
-`X-BackBet-Signature`, com `rawBody` capturado pelo `ApiServer`). Continua
-funcionando o **fluxo síncrono** legado (`POST /wallets/deposit`).
-
-## Testes de carga (Fase 2/2b)
-
-Os fluxos de dinheiro também são medidos sob **carga real** (Mongo replica set +
-transações), em dois eixos — **contenção** (N ops na mesma carteira) e
-**distribuída** (N carteiras distintas):
-
-```bash
-docker compose build integration-tests        # após mudar src/
-node scripts/load-driver.cjs 1 2 5 10          # contenção
-node scripts/load-driver.cjs --distributed 1 2 5 10   # distribuída
-# ou direto: npm run test:load / npm run test:load:distributed
-```
-
-Resultado-chave: a suíte distribuída manteve `rejected = 0` e throughput
-**~constante** de 1x a 10x (até 25000 depósitos + 25000 saques + 8000 apostas) —
-provando que o teto da suíte de contenção é serialização de documento único, não
-capacidade da aplicação. Metodologia completa, tabelas e como reproduzir em
-[`LOAD-TESTING.mdx`](./LOAD-TESTING.mdx).
-
-## Teste de repetibilidade (Fase 1)
-
-Antes das medições de carga, a suíte completa foi executada 3× para confirmar
-que os resultados não eram circunstanciais: 891 testes unitários herméticos
-(3/3 execuções verdes) + 14 de integração real (3/3 verdes), sempre com
-`LOAD rejected: 0` (`scripts/load-results/` e `Plano …MVP.md`).
-
-## Troubleshooting
-
-| Sintoma | Causa / solução |
-|---|---|
-| `port is already allocated` | Existe Mongo/Redis rodando em 27017/6379 na máquina. Pare-o ou rode a infra de teste em outro host. |
-| `docker: command not found` | Docker não instalado ou fora do PATH. Instale Docker Engine + Compose v2. |
-| `up -d --wait` não funciona | Compose v2 antigo (antes da v2.20). Atualize e rode `docker compose version`. |
-| Testes falham conectando no Mongo | Aguarde o `rs0` ficar PRIMARY (log de `npm run test:infra:up`); rode `npm run test:infra:down -v` (reset) via `npm run test:infra:reset` se persistir. |
-| Quero ver o estado da infra | `docker compose -f docker-compose.test.yml ps` e `docker compose -f docker-compose.test.yml logs mongo-rs-init`. |
+**Última atualização:** 20 de setembro de 2026.

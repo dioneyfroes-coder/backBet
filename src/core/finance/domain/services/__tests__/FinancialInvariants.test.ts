@@ -2,7 +2,7 @@
 //
 // Suite formal, pura de domínio (repositórios in-memory), que prova que as regras
 // financeiras do BackBet NUNCA são violadas — inclusive sob retry e concorrência.
-// Referência normativa: docs/FINANCIAL_INVARIANTS.mdx
+// Referência normativa: docs/Finance_docs.mdx
 //
 //   FI-01 saldo nunca < 0
 //   FI-02 lockedBalance nunca < 0

@@ -170,8 +170,8 @@ control(
   'B-04',
   'Política de logs sem segredos documentada',
   true,
-  exists('docs/LOGS.mdx') && exists('docs/SECURITY-OPS.mdx'),
-  'docs/LOGS.mdx + docs/SECURITY-OPS.mdx (política e checklist)',
+  exists('docs/OBSERVABILITY.mdx') && exists('docs/DEPLOY.mdx'),
+  'docs/OBSERVABILITY.mdx (política de logs sem segredos) + docs/DEPLOY.mdx (checklist operacional)',
 );
 
 // C — Continuidade de negócio
@@ -225,7 +225,7 @@ control(
   'Invariantes financeiros testados (FI-01..FI-10)',
   true,
   exists('src/core/finance/domain/services/__tests__/FinancialInvariants.test.ts'),
-  'FinancialInvariants.test.ts (22 casos) + docs/FINANCIAL_INVARIANTS.mdx',
+  'FinancialInvariants.test.ts (22 casos) + spec em docs/Finance_docs.mdx',
 );
 control(
   'D — Integridade financeira',

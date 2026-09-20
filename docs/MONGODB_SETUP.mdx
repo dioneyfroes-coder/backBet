@@ -1,146 +1,90 @@
 ---
-title: "MongoDB Configuração"
-description: "Guia de configuração do MongoDB local e Atlas para BackBet."
+title: "MongoDB e Repositórios Mongoose"
+description: "Provisionamento do MongoDB (replica set), credenciais, e integração dos repositórios Mongoose com os domínios."
 slug: "/docs/mongodb-setup"
+sidebar_label: "MongoDB"
 ---
 
-# MongoDB Setup Guide
+# MongoDB e Repositórios Mongoose
 
-> O MongoDB é opcional em desenvolvimento, porém obrigatório para ambientes que exigem persistência durável. Este guia explica como habilitar/desabilitar o Mongoose, configurar ambientes locais/Atlas e diagnosticar falhas.
+Como provisionar, conectar e usar a persistência Mongo do BackBet, incluindo a integração das factories com os repositórios Mongoose.
 
-## Quando habilitar Mongo?
+## Por que replica set?
 
-- **DEV rápido / testes unitários**: mantenha `USE_MONGOOSE_PERSISTENCE=false` para usar os repositórios in-memory (resetam a cada boot, CI fica mais leve).
-- **Homologação/produção**: defina `USE_MONGOOSE_PERSISTENCE=true` e providencie um Mongo real. O `server.ts` chamará `connectMongoDB()` antes de subir o Express e registrará handlers de shutdown para `disconnectMongoDB()`.
-- **Testes automatizados que precisam de banco**: use containers (Docker/Compose) ou Atlas M0 e exponha `MONGODB_URI` durante o job.
+O BackBet usa **transações** para atomicidade entre carteira, ledger, aposta e tesouraria. O MongoDB só permite transações em **replica set** (ou sharded cluster). O compose sobe `mongodb` com `replicaSet=rs0` e a URI de exemplo carrega `replicaSet=rs0`.
 
-> Nota: o projeto introduziu um contrato `IRiskRepository` para gerenciar exposição/risco por usuário. Quando `USE_MONGOOSE_PERSISTENCE=false` a fábrica usa `InMemoryRiskRepository` como fallback; quando `true` utiliza `MongooseRiskRepository` (com `RiskProfileSchema`). Considere isto ao planejar testes de integração de risco.
-
-## Variáveis essenciais
-
-| Variável | Obrigatória quando | Exemplo | Observações |
-| --- | --- | --- | --- |
-| `USE_MONGOOSE_PERSISTENCE` | Sempre | `true` / `false` | Escolhe entre repositórios Mongo ou memória. |
-| `MONGODB_URI` | `USE_MONGOOSE_PERSISTENCE=true` ou `NODE_ENV=production` | `mongodb://backbet:senha@mongodb:27017/backbet?authSource=admin&replicaSet=rs0` | **Sem default** — falha imediata se ausente (não tenta localhost). |
-| `MONGODB_DB_NAME` | `USE_MONGOOSE_PERSISTENCE=true` | `backbet` | Default: derivado do database da `MONGODB_URI`. |
-| `NODE_ENV` | Sempre | `development` | Em `production` o loader falha se `MONGODB_URI` estiver vazio. |
-
-> Alguns documentos antigos citam `MONGO_URL`; padronizamos `MONGODB_URI`. Se ambos estiverem presentes, priorize `MONGODB_URI`.
-
-## Passo a passo para habilitar
-
-1. Ajuste `.env`:
-   ```properties
-   USE_MONGOOSE_PERSISTENCE=true
-   MONGODB_URI=mongodb://backbet:senha@mongodb:27017/backbet?authSource=admin&replicaSet=rs0
-   MONGODB_DB_NAME=backbet
-   ```
-2. Reinicie o servidor (`npm run dev`). O log deverá mostrar `✓ MongoDB connected to backbet-dev` antes do banner Express.
-3. Bata em `/readiness`: a resposta terá `checks.mongo.status: "up"` e o gauge `backbet_dependency_health{dependency="mongo"}` passa para `1`.
-4. Se quiser voltar ao modo in-memory, defina `USE_MONGOOSE_PERSISTENCE=false` e opcionalmente remova `MONGODB_URI`.
-
-## Opções de provisionamento
-
-### Mongo local via Docker (mais rápido)
-
-```bash
-docker run -d --name backbet-mongo \
-  -p 27017:27017 \
-  -e MONGO_INITDB_DATABASE=backbet-dev \
-  mongo:7.0
-
-export USE_MONGOOSE_PERSISTENCE=true
-export MONGODB_URI="mongodb://localhost:27017/backbet-dev"
-npm run dev
+```text
+MONGODB_URI=mongodb://backbet:TROQUE@localhost:27017/backbet?authSource=admin&replicaSet=rs0
 ```
 
-Para persistir dados use um volume: `-v ./data/mongo:/data/db`.
+## Provisionamento (Docker Compose)
 
-### MongoDB Community (instalação nativa)
+O `docker-compose.yml` define o serviço `mongodb` interno (sem porta pública) com:
 
-| SO | Comando |
-| --- | --- |
-| macOS (Homebrew) | `brew install mongodb-community && brew services start mongodb-community` |
-| Linux (Debian/Ubuntu) | Siga a [documentação oficial](https://www.mongodb.com/docs/manual/administration/install-on-linux/) e habilite o serviço `mongod`. |
-| Windows | Instale o MSI oficial e execute `"C:\\Program Files\\MongoDB\\Server\\7.0\\bin\\mongod.exe" --dbpath C:\\data\\db`. |
+- usuários `MONGO_ROOT_PASSWORD` (admin) e `MONGODB_APP_PASSWORD` (usuário da app, `readWrite`);
+- banco `backbet` criado automaticamente no primeiro registro;
+- replica set `rs0` inicializado no entrypoint.
 
-### MongoDB Atlas (staging/prod)
+Ambientes:
 
-1. Crie um projeto e um cluster (tier M10+ para produção, M0 serve para POCs).
-2. Em **Security → Database Access**, gere um usuário restrito ao database (`backbet-prod`).
-3. Em **Network Access**, autorize o IP fixo do servidor ou configure um VPC/peering.
-4. Copie a connection string (`mongodb+srv://<user>:<pass>@cluster.../backbet-prod?retryWrites=true&w=majority`).
-5. Atualize o `.env` e mantenha TLS (já incluso no `mongodb+srv`).
-6. Configure backups automáticos no Atlas (Snapshots + PITR se disponível).
+- **Dev in-memory**: `USE_MONGOOSE_PERSISTENCE=false` (não toca Mongo).
+- **Dev real**: `USE_MONGOOSE_PERSISTENCE=true` + `MONGODB_URI` apontando para o compose.
+- **Teste**: `docker-compose.test.yml` (Mongo+Redis no loopback) — usado por `test:integration:full`.
+- **Produção**: Mongo privado no host (compose) ou gerenciado (Atlas) via `MONGODB_URI`.
 
-## Verificando a conexão
+## Repositórios Mongoose (arquitetura)
 
-```ts
-import { connectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
+Fluxo: `Domain (interfaces) → Persistence factory → Mongoose repo → Schema → MongoDB`.
 
-async function smoke() {
-  const cfg = getMongoDBConfig();
-  await connectMongoDB(cfg);
-  console.log('✓ Mongo conectado');
-}
-```
+1. **Domínio** define as interfaces (`src/core/**/domain/repositories/*`).
+2. **Factories** (`src/infrastructure/persistence/factory.ts`) escolhem entre in-memory e Mongo lendo `USE_MONGOOSE_PERSISTENCE` (lazy import evita carregar schemas quando a flag é false).
+3. **server.ts** conecta/desconecta via `connectMongoDB()`/`disconnectMongoDB()` e registra shutdown limpo (SIGINT/SIGTERM).
+4. **Casos de uso** importam apenas factories — alternar memória/Mongo não exige mudança de código.
 
-- `npm run test -- observabilityEndpoints` valida `/readiness` e garante que o ping do Mongo responde.
-- `mongosh "${MONGODB_URI}" --eval 'db.stats()'` é útil para validar o usuário e a conectividade sem rodar o app.
+### Matriz de repositórios
 
-## Índices e migrações
+| Contexto | Interface | Implementação Mongo | Schema | Observações |
+| --- | --- | --- | --- | --- |
+| Usuários | `IUserRepository` | `MongooseUserRepository.ts` | `UserSchema.ts` | Índices únicos em `email`/`username`; sincroniza `providerId` |
+| Carteiras | `IWalletRepository` | `MongooseWalletRepository.ts` | `WalletSchema.ts` | `balanceCents`/`lockedBalanceCents`; versão otimista (`version`) |
+| Apostas | `IBetRepository` | `MongooseBetRepository.ts` | `BetSchema.ts` | Índices por `status`/`userId`/`eventId`; settlement idempotente |
+| Eventos | `IEventRepository` | *(in-memory)* | — | Planejado coleção futura |
+| Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository.ts` | `CreditPackageSchema.ts` | `bonusPercent` derivado no domínio |
+| Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository.ts` | `WithdrawalRequestSchema.ts` | Audit trail (`approverId`, `approvedAt`) |
+| Risco | `IRiskRepository` | `MongooseRiskRepository.ts` | `RiskProfileSchema.ts` | `exposureCents`/`maxExposureCents`; `InMemoryRiskRepository` fallback |
+| Ledger | `ILedgerRepository` (finance) | Mongoose | `LedgerEntrySchema.ts` | Append-only, `transactionId` único (índice) |
+| Auditoria | `IAuditEventRepository` | `MongooseAuditEventRepository.ts` | `AuditEventSchema.ts` | Eventos imutáveis + retenção |
+| Idempotência | `MongoIdempotencyStore` | Mongo | idempotency | Alternativa ao Redis |
 
-- Os schemas Mongoose em `src/infrastructure/persistence/mongoose/schemas` declaram índices (`unique`, TTLs etc.). Ao conectar, o Mongoose sincroniza automaticamente (`Model.syncIndexes()` implícito).
-- Para conferir manualmente:
-  ```bash
-  mongosh "${MONGODB_URI}"
-  > db.users.getIndexes()
-  > db.wallets.getIndexes()
-  > db.bets.getIndexes()
-  ```
-- Mudanças estruturais relevantes devem vir acompanhadas de migrações (scripts `mongosh` ou `migrate-mongo`) e registro no changelog.
+### Padrões de implementação
 
-## Backup & restore rápidos
+- **Mapeamento**: helpers `toDomain`/`toPersistence`; nunca manipular documentos na aplicação.
+- **Lean queries**: `.lean({ virtuals: true })` para leituras.
+- **Upsert idempotente**: `findOneAndUpdate({ _id }, dto, { upsert: true })`.
+- **Erros padronizados**: violação de índice/inesperado → `AppError` (`CONFLICT`, `INTERNAL_SERVER_ERROR`); trate com `AppError.isAppError`.
+- **Locking otimista**: carteira usa `version` no filtro da atualização; conflito → `409`.
 
-> O projeto possui ferramenta própria testada em `docs/BACKUP_RECOVERY.mdx` (`npm run backup:create` / `backup:restore` / `backup:validate` / `backup:drill`). O `mongodump` abaixo é a alternativa manual para ambientes com a binária instalada.
+### Índices e migrações
 
-```bash
-# Dump local
-mongodump --uri "$MONGODB_URI" --out ./backups/$(date +%Y%m%d)
-
-# Restore em outra instância
-mongorestore --uri "mongodb://localhost:27017/backbet-restored" ./backups/20251123
-```
-
-- No Atlas, habilite Continuous Backup e defina alertas para falhas em snapshots.
-- Armazene dumps sensíveis em buckets privados; nunca commite arquivos `.bson`.
+- Índices definidos via `schema.index(...)` em `src/infrastructure/persistence/mongoose/schemas/**/*`; o Mongoose sincroniza no boot, mas valide com `db.<collection>.getIndexes()` em produção.
+- Mudanças estruturais grandes → scripts em `scripts/migrations/<timestamp>.ts` ou runbook.
 
 ## Troubleshooting
 
-| Sintoma | Análise | Correção |
-| --- | --- | --- |
-| `ECONNREFUSED 127.0.0.1:27017` | Serviço Mongo parado ou porta bloqueada | `docker start backbet-mongo` ou `brew services start mongodb-community` |
-| `MongoServerSelectionError: authentication failed` | Usuário/senha inválidos na URI | Recrie credenciais no Atlas e escape caracteres especiais (`@` → `%40`). |
-| `/readiness` marca `mongo` como `down` | Ping falhou ou `USE_MONGOOSE_PERSISTENCE=false` | Verifique `USE_MONGOOSE_PERSISTENCE`, logs `readiness_dependency` e conectividade de rede. |
-| `Topology was destroyed` após deploy | Conexão caiu sem retry | Certifique-se de que `retryWrites=true` e que a rede permite TCP keep-alive; reinicie `npm run dev`. |
-| Connection pool saturado | `maxPoolSize` baixo ou queries lentas | Ajuste `?maxPoolSize=50` e monitore `backbet_dependency_latency_ms`. |
+| Sintoma | Causa/solução |
+|---------|---------------|
+| `Transaction numbers are only allowed...` | Mongo não está em **replica set** — suba com `replicaSet=rs0` |
+| `MongoDB connection failed` no boot | URI/credenciais erradas; `mongosh` para testar; container ativo? |
+| `duplicate key error` | Índice único violado → tratar `CONFLICT`; conferir `findByEmail`/`findByUserId` antes |
+| `/readiness` → `mongo: down` | Flag habilitada sem banco disponível; ver `readiness_dependency` nos logs |
+| `Topology was destroyed` | Conexão encerrada abruptamente; garantir `retryWrites=true` e keep-alive |
 
-## Boas práticas
+## Checklist para novos repositórios
 
-1. Sempre propague `USE_MONGOOSE_PERSISTENCE` + `MONGODB_URI` pelos ambientes (Docker Compose, pipelines CI, Helm chart).
-2. Use usuários distintos para leitura/escrita em produção (princípio do menor privilégio).
-3. Configure alertas de disco/latência no Atlas ou no provedor gerenciado.
-4. Não exponha o cluster a `0.0.0.0/0` em produção; prefira VPC peering ou VPN.
-5. Documente qualquer alteração de schema e sincronize com `docs/MONGOOSE_REPOSITORIES.mdx`.
+- [ ] Interface em `core/<context>/domain/repositories`.
+- [ ] Schema em `infrastructure/persistence/mongoose/schemas` com índices explícitos.
+- [ ] Implementação adicionada à factory em `persistence/factory.ts`.
+- [ ] Testes de conversão domínio ↔ persistence.
+- [ ] Documentado aqui se novos env vars forem necessários.
 
-## Próximos passos
-
-1. Automatizar um script `npm run mongo:status` que testa `connectMongoDB()` isoladamente.
-2. Adicionar fixtures/migrations iniciais para ambientes de staging (usuário seed, carteira com saldo).
-3. Integrar backups com o pipeline (ex.: upload diário para S3 + retenção) — ver `docs/BACKUP_RECOVERY.mdx`.
-
-## Referências úteis
-
-- [MongoDB Manual](https://www.mongodb.com/docs/manual/)
-- [Atlas Quickstart](https://www.mongodb.com/docs/atlas/getting-started/)
-- [Mongoose Docs](https://mongoosejs.com/docs/guide.html)
+**Última atualização:** 20 de setembro de 2026.

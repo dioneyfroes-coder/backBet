@@ -1,205 +1,117 @@
 ---
 title: "Guia Rápido"
-description: "Passo a passo para preparar, executar e validar o BackBet localmente."
+description: "Subir o BackBet em minutos: ambiente sem infra (in-memory), com Mongo/Redis reais, Docker, comandos típicos e troubleshooting."
 slug: "/docs/quickstart"
 ---
 
-# BackBet Quickstart
+# Guia Rápido
 
-Checklist para sair do zero até um ambiente funcional com saúde/observabilidade verificadas e testes em dia.
+Guia de como subir o BackBet localmente, escolher o modo de persistência e rodar as rotinas de qualidade.
 
-## 1. Pré-requisitos
+## Pré-requisitos
 
-- Node.js **22+** e npm **10+**
-- Git + `tsc` (instalado via `npm install`)
-- Docker 24+ (opcional, mas recomendado para MongoDB/Redis)
-- Porta `3000` livre (override via `PORT`)
+- **Node.js ≥ 22** (recomendado via `nvm`).
+- **Docker + Docker Compose** para infraestrutura real (Mongo replica set `rs0` + Redis) e testes de integração.
+- **npm** incluído no Node.
 
-## 2. Clone e dependências
+## Setup em 5 passos (sem infra — in-memory)
 
-```bash
-git clone https://github.com/<sua-org>/backbet.git
-cd backbet
-npm install
-```
+1. Instale dependências: `npm install`
+2. Copie o exemplo: `cp .env.example .env`
+3. Edite o `.env`: `NODE_ENV=development`, `BACKBET_RUNTIME_ENV=development` e um `JWT_SECRET` forte (`openssl rand -hex 32`).
+4. Desative infra para rodar em memória: `USE_MONGOOSE_PERSISTENCE=false` e `CACHE_ENABLED=false`.
+5. Suba em dev com hot reload: `npm run dev` → teste `http://localhost:3000/health`.
 
-> Sempre use `npm install` (o projeto usa lockfile npm). `npm ci` é recomendado em CI/CD.
+> `JWT_SECRET` é obrigatório — o boot lança erro sem ele. `MONGODB_URI`/`REDIS_URL` são obrigatórios em produção apenas.
 
-## 3. Variáveis de ambiente
+## Com infraestrutura real (Mongo + Redis)
 
-```bash
-cp .env.example .env
-```
-
-
-Ajuste os principais toggles:
-
-| Variável | O que faz | Valor típico em dev |
-|----------|-----------|---------------------|
-| `NODE_ENV` | Ambiente lógico | `development` |
-| `PORT` | Porta HTTP | `3000` |
-| `USE_MONGOOSE_PERSISTENCE` | Liga repositórios Mongo/Mongoose | `false` se quiser in-memory |
-| `MONGODB_URI` / `MONGODB_DB_NAME` | Conexão Mongo | `mongodb://localhost:27017` / *(derivado da URI)* |
-| `CACHE_ENABLED` / `REDIS_URL` | Libera cache Redis + métricas | `false` quando não houver Redis |
-| `ALLOW_DEV_BEARER_BYPASS` | Permite `Authorization: Bearer <userId>` sem JWT | `true` | 
-| `IDENTITY_PROVIDER_*` | Credenciais do provedor de identidade | Use valores reais só em staging/prod |
-| `JWT_*` | Segredo/local auth | Necessário para `/api/v1/auth/login` e `/api/v1/auth/refresh` |
-| `RATE_LIMIT_*` | Rate limit global | Defaults altos (5k req/10 min) |
-| `TRACING_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry | Ative apenas se tiver collector |
-
-> Nunca versione `.env`. Para CI, configure secrets no provedor.
-
-## 4. Dependências locais (Mongo + Redis)
-
-Subindo apenas para desenvolvimento neste PC (Mongo e Redis juntos):
+Recomendado para testar transações, idempotência e workers:
 
 ```bash
-docker run -d --name backbet-mongo -p 27017:27017 mongo:7
-docker run -d --name backbet-redis -p 6379:6379 redis:7
+docker compose up -d mongodb redis      # sobe Mongo (replica set rs0) + Redis
 ```
 
-> Se o ambiente for o de produção em Docker, use o compose da **Fase 17**
-> (ver `docs/DOCKER.mdx`): `docker-compose.yml` sobe **tudo no mesmo host** —
-> MongoDB (replica set `rs0`) + `mongo-rs-init` + Redis + API + workers.
+No `.env`, aponte a aplicação:
 
-> Sem Mongo? defina `USE_MONGOOSE_PERSISTENCE=false`. Sem Redis? `CACHE_ENABLED=false`.
->
-> Para rodar a **suíte de integração real** (reproduzível, com replica set `rs0`
-> e Redis), use o compose de **teste** da Fase 18:
-> `npm run test:integration:full` (ver `docs/TESTING-ENV.mdx`).
+```text
+USE_MONGOOSE_PERSISTENCE=true
+MONGODB_URI=mongodb://backbet:TROQUE@localhost:27017/backbet?authSource=admin&replicaSet=rs0
+REDIS_URL=redis://localhost:6379
+CACHE_ENABLED=true
+```
 
-## 5. Executar em desenvolvimento
+Depois `npm run dev` e valide `/health`, `/readiness` e `/health/cache`.
+
+> A configuração completa de banco (credenciais, secção de usuários, replica set) está em `docs/MONGODB_SETUP.mdx`.
+
+## Tudo em Docker
 
 ```bash
-npm run dev
+docker compose up -d --build
 ```
 
-- Usa `tsx watch src/index.ts` com reload automático.
-- O bootstrap (`src/index.ts`) inicia tracing antes de carregar o `ApiServer`.
-- Logs são JSON com `request_start`/`request_end`/`request_error` e sempre incluem `requestId`.
+Sobe o host único: Mongo (rs0) + Redis + API + workers. A API fica em `http://localhost:3000`.
 
-### Endpoints importantes
+- `docker-compose.test.yml` — infra de teste isolada (loopback).
+- `docker-compose.proxy.yml` — Caddy/TLS opcional.
+- `docker-compose.observability.yml` — Prometheus/Grafana/OTEL opcional (habilita `/metrics` com `OBS_ENABLE_PROMETHEUS=true`).
 
-| URL | Descrição |
-|-----|-----------|
-| `GET /health` | Heartbeat e uptime |
-| `GET /readiness` | Consulta Redis/Mongo e atualiza `dependencyHealthSnapshot` |
-| `GET /health/cache` | Exibe métricas internas do `RedisClient` |
-| `GET /metrics` | Desativado (410) por padrão — habilite `OBS_ENABLE_PROMETHEUS=true` se precisar do Prometheus legado |
-| `GET /api/docs` | Swagger UI |
-| `GET /api/docs.json` | OpenAPI 3.1 |
-
-### Contact worker (fila de emails)
-
-O sistema enfileira mensagens de contato em `contact_queue` e requer um worker para processá-las em produção.
-
-- Em desenvolvimento você pode rodar o worker TypeScript diretamente com `tsx`:
-
-```bash
-npm run worker:contact
-```
-
-- Com PM2 (desenvolvimento, sem build):
-
-```bash
-pm2 start ecosystem.contact.dev.config.cjs --env development
-```
-
-- Em produção (após `npm run build`):
-
-```bash
-npm run build
-pm2 start ecosystem.contact.config.cjs --env production
-```
-
-Variáveis relevantes:
-
-- `USE_REDIS_QUEUE=true` — ativar Bull+Redis em produção.
-- `REDIS_URL` — conexão Redis para a fila.
-- `MAILER_SMTP_URL` — URL SMTP (opcional; se ausente o worker usa `jsonTransport` para não enviar emails reais em dev).
-- `CONTACT_TO_EMAIL` — destino padrão das mensagens de suporte.
-
-
-## 6. Scripts essenciais
+## Rotinas de desenvolvimento
 
 | Comando | Uso |
 |---------|-----|
-| `npm run dev` | Desenvolvimento com hot reload |
-| `npm run build` | `tsc` + `tsc-alias` para `dist/` |
-| `npm start` | Executa `dist/index.js` (produção/staging) |
-| `npm test` | Suíte unitária Jest (~750 testes) |
-| `npm run test -- --coverage` | Relatório completo de cobertura |
-| `npm run lint` / `npm run lint:fix` | ESLint 9 + `@typescript-eslint` |
-| `npm run format` | Prettier |
-| `npm run migration:run` | Runner de migrations (Mongo) |
-| `npm run seed:initial` / `npm run seed:credit-packages` | Seeds utilitários |
+| `npm run dev` | API com hot reload |
+| `npm run build` | Compilação para `dist/` |
+| `npm run start` | Executa o build |
+| `npm run smoke` | Verificação pós-build dos endpoints |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Unitários herméticos |
+| `npm run test:coverage` | Unitários + cobertura |
+| `npm run test:integration:full` | Integração real (Mongo + Redis) |
+| `npm run check` | Gate completo: `check:secrets` + lint + cobertura + build |
+| `npm run format` | Formatação Prettier |
 
-Para executar a suíte de integração real com MongoDB e Redis, isole um banco de teste e rode (as URIs vêm do ambiente — não há fallback para localhost):
+## Variáveis de ambiente mais comuns
 
-```bash
-RUN_REAL_INTEGRATION_TESTS=true \
-MONGODB_URI="mongodb://backbet-test:senha@host:27017/backbet-test?authSource=admin&replicaSet=rs0" \
-REDIS_URL="redis://:senha@host:6379" \
-npm test -- --runInBand src/integration/__tests__/mongo-redis.integration.test.ts
-```
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `NODE_ENV` | — | `development` / `test` / `production` |
+| `BACKBET_RUNTIME_ENV` | — | Ambiente de runtime do BackBet (`development` local deve estar explícito para o bypass de auth) |
+| `JWT_SECRET` | — | **Obrigatória sempre**; assina tokens |
+| `MONGODB_URI` / `REDIS_URL` | — | Obrigatórias em produção; usadas com `USE_MONGOOSE_PERSISTENCE=true` |
+| `USE_MONGOOSE_PERSISTENCE` | `false` | `true` para Mongo real; `false` usa repositórios in-memory |
+| `CACHE_ENABLED` | — | Liga/desliga cache Redis |
+| `ALLOW_DEV_BEARER_BYPASS` | — | `true` só em dev: aceita `Bearer <userId>` sem JWT válido |
+| `PIX_PROVIDER` | `mock` | Provedor PIX (mock hoje; provedor real é pendência W-04) |
+| `PIX_WEBHOOK_ENABLED` | `false` | Habilita `POST /api/v1/webhooks/pix` |
+| `TRACING_ENABLED` | `false` | OpenTelemetry (OTLP) |
+| `OBS_ENABLE_PROMETHEUS` | `false` | Ativa `/metrics` (Prometheus) |
+| `OBS_ENABLE_EMAIL_ALERTS` | `false` | Alertas por e-mail (requer SMTP) |
+| `AUDIT_RETENTION_DAYS` | `1825` | Retenção de auditoria (5 anos) |
+| `SIGAP_ENABLED` | `false` | Liga o job de transmissão SIGAP |
+| `SIGAP_RETRY_MAX_ATTEMPTS` | `5` | Máximo de tentativas de transmissão SIGAP |
+| `RATE_LIMIT_*`, `AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*` | — | Taxas de rate limit global e por rota |
 
-A forma recomendada é usar o orquestrador `npm run test:integration` (ou, no server01, `npm run test:integration:docker`), que já isola em `backbet-test`.
+## Troubleshooting
 
-Essa suíte é ignorada quando `RUN_REAL_INTEGRATION_TESTS` não é `true`; nunca aponte para dados de produção.
+| Sintoma | Causa provável / solução |
+|---|---|
+| Boot falha com "JWT_SECRET" ausente | Defina `JWT_SECRET` no `.env` (obrigatória sempre) |
+| `MONGODB_URI` não conecta | Confira se o Mongo é **replica set** (transações exigem `replicaSet=rs0`); veja `docs/MONGODB_SETUP.mdx` |
+| `409` em depósito/aposta | Lock otimista ou idempotência: repita apenas a mesma chave com os mesmos dados |
+| `/metrics` responde `410` | Normal: ative `OBS_ENABLE_PROMETHEUS=true` apenas se precisar |
+| Porta 3000 ocupada | Mude `PORT` no `.env` ou libere a porta |
+| Testes de integração falham | Suba a infra de teste: `npm run test:infra:reset` |
+| Sem `accessToken` no registro | Usuário ficou `PENDING_VERIFICATION`; faça polling em `GET /api/v1/auth/register/status/:userId` |
 
-## 7. Monitoramento diário
+## Próximos passos
 
-- `npm run pm2:webui:start` para abrir o painel na porta `PM2_WEB_PORT` (default `9615`).
-- Acesse via túnel/proxy seguro e acompanhe CPU, memória e restarts do processo `backbet`.
-- Para complementar, rode `npm run pm2:webui:logs` e mantenha Uptime Robots/Synthetics consultando `/health`/`/readiness`.
-- Suba o processo de alertas com `npm run pm2:health:start` (usa `HEALTH_MONITOR_*` + `SMTP_*`) ou execute pontualmente com `HEALTH_MONITOR_RUN_ONCE=true npm run health-monitor:start`.
-- Finalize com `npm run pm2:webui:stop` e `npm run pm2:health:stop`, ou use `pm2 monit` quando o painel não estiver disponível.
+- Arquitetura e módulos: `docs/ARCHITECTURE.mdx`
+- Contrato da API: `docs/API_CONTRACT.mdx`
+- Banco e repositórios: `docs/MONGODB_SETUP.mdx`
+- Testes completos e cenários críticos: `docs/TESTING-ENV.mdx`
+- Estado do projeto e pendências: `docs/ESTADO-DO-PROJETO.mdx`
 
-## 8. Smoke test rápido
-
-Após `npm run dev` ou `npm start`:
-
-```bash
-curl -sf http://localhost:3000/health
-curl -sf http://localhost:3000/readiness
-curl -sf http://localhost:3000/api/docs.json | head -n 20
-curl -i http://localhost:3000/metrics
-```
-
-Cache habilitado?
-
-```bash
-curl -sf http://localhost:3000/health/cache
-```
-
-## 9. Testes, qualidade e build
-
-1. `npm run lint`
-2. `npm run test -- --coverage`
-3. `npm run build`
-
-> Essa trinca é obrigatória antes de qualquer PR. `npm run build && npm start` garante que o bundle em `dist/` funciona.
-
-## 10. Troubleshooting
-
-| Sintoma | Correção |
-|---------|----------|
-| `Cannot find module` ao rodar `npm start` | Remova `dist/` e refaça `npm run build`. Confirme `npm install` e tsconfig correto. |
-| `ERR_UNKNOWN_FILE_EXTENSION` | Garanta que `package.json` **não** tenha `"type": "module"`. |
-| `MongoNetworkError` | Suba Mongo (`docker ps`), revise URI ou use `USE_MONGOOSE_PERSISTENCE=false`. |
-| `Redis connection refused` | Corrija `REDIS_URL` ou desligue cache (`CACHE_ENABLED=false`). |
-| `IDENTITY_PROVIDER_*` faltando | Use chaves reais do provedor de identidade ou habilite `ALLOW_DEV_BEARER_BYPASS` (apenas em dev/test). |
-| Testes instáveis | `npm test -- --clearCache && npm test`. Confira se serviços externos não estão caindo. |
-| Porta 3000 ocupada | Ajuste `PORT` ou finalize processo (`lsof -i :3000`). |
-
-## 11. Próximos passos
-
-1. Rodar `npm run lint && npm run test -- --coverage && npm run build` antes de commitar.
-2. Atualizar documentação do módulo tocado em `docs/*.mdx` quando necessário.
-3. Em staging/prod: ative Redis real, conecte Mongo definitivo, defina variáveis do provedor de identidade (ex.: `IDENTITY_PROVIDER_*`), configure OTLP (`TRACING_ENABLED=true` + `OTEL_EXPORTER_OTLP_ENDPOINT`) e proteja `/health/cache` + `/readiness` via proxy (`/metrics` responde 410 até que `OBS_ENABLE_PROMETHEUS=true`).
-
----
-
-**Última atualização:** 23 de novembro de 2025
-
-Boa jornada e bons commits! 🚀
+**Última atualização:** 20 de setembro de 2026.

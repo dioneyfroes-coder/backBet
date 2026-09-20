@@ -1,179 +1,70 @@
-## Recuperação de Senha
-
-O sistema permite que o usuário recupere sua senha via email:
-
-1. O usuário solicita recuperação informando seu email (`POST /auth/request-password-recovery`).
-2. Se o email existir, um token de recuperação é gerado e enviado por email com um link de redefinição.
-3. O usuário acessa o link, informa a nova senha e o token (`POST /auth/reset-password`).
-4. O token expira em 30 minutos e só pode ser usado uma vez.
-5. Nenhuma informação sobre existência do email é exposta na resposta.
 ---
-title: "Módulo Usuário"
-description: "Visão completa do núcleo de usuários: domínio, APIs de perfil/autenticação e integrações com Wallet, provedores de identidade e JWT."
-slug: "/docs/user"
+title: "Usuários, Identidade e Autenticação"
+description: "Fluxo de usuário do BackBet: registro, verificação, autenticação JWT, Passport, sessão, perfil e documentos."
+slug: "/docs/user-docs"
+sidebar_label: "Users & Auth"
 ---
 
-# Core User
+# Usuários, Identidade e Autenticação
 
-> Responsável por onboarding, gestão de perfil e entrega de dados consistentes para Auth, Finance e Betting. Segue DDD + Clean Architecture e expõe endpoints REST protegidos por Passport/JWT ou pelo provedor configurado.
+Este documento cobre o ciclo de vida do usuário no BackBet (módulo `src/core/user`) e a autenticação via Passport/JWT.
 
-## Estrutura
+## Ciclo de vida do usuário
 
-```
-src/core/user/
-  application/
-    use-cases/{RegisterUser,GetUserProfile,UpdateProfile,ChangeEmail,UpdatePixKey}.ts
-  config/user-config.ts
-  domain/
-    entities/User.ts
-    repositories/{IUserRepository,UserRepository}.ts
-    services/UserService.ts
-    value-objects/Email.ts
-  types/user.types.ts
-src/infrastructure/
-  api/controllers/{AuthController,UserController}.ts
-  api/routes/{authRoutes,userRoutes}.ts
-  api/dtos/{AuthDTOs,UserDTOs}.ts
-  api/middleware/{AuthMiddleware,cacheMiddleware}.ts
-shared/services/{JwtService,AuthService}.ts
-```
+1. **Registro** — `POST /api/v1/auth/register` cria `User` + `Wallet` (BRL padrão). O usuário nasce `PENDING_VERIFICATION` ou `ACTIVE`, conforme a política de verificação configurada.
+2. **Verificação (polling)** — usuários `PENDING_VERIFICATION` fazem polling em `GET /api/v1/auth/register/status/:userId` até `isActive=true`.
+3. **Ativação** — quando ativo, o registro retorna `accessToken`/`refreshToken` + `sessionId`.
+4. **Login** — `POST /api/v1/auth/login` (email/senha) devolve tokens.
+5. **Perfil** — `GET/PUT /api/v1/users/me`, `GET /api/v1/users/me/preferences`, `POST /api/v1/users/me/documents` (upload multipart).
+6. **Saída** — revogação de sessão quando aplicável.
 
-## Fluxo de cadastro end-to-end
+## Autenticação
 
-1. `POST /api/v1/auth/register` valida payload (`RegisterDTO`) e delega para `RegisterUser`.
-2. O use-case chama `UserService.registerUser` (garante email único, aplica `bcrypt` com fator 12, exige `minPasswordLength` de `userConfig`).
-3. Em seguida `WalletService.createWallet` é acionado via `executeWithWalletErrorMapping`, gerando carteira com a moeda solicitada ou `BRL` (default).
-4. Quando um provedor externo de identidade está habilitado, `AuthController` pode sincronizar o usuário com o provedor (preservando `externalId` quando aplicável).
-5. A resposta inclui `status`, `isActive`, `sessionId`, `accessToken`/`refreshToken` (quando a conta já nasce ativa) e snapshots completos de usuário + carteira.
-6. Se o status permanecer `PENDING_VERIFICATION`, os tokens retornam `null` e o frontend pode acompanhar a liberação via `GET /api/v1/auth/register/status/:userId`.
+### Estratégias Passport
 
-## Modelo de domínio
+- **Produção**: `passport-jwt` valida o `Authorization: Bearer <JWT>` emitido pelo `JwtService` local (ou provedor de identidade via adapter). O token carrega `userId` e `sessionId`.
+- **Dev/Test**: com `ALLOW_DEV_BEARER_BYPASS=true`, `Bearer <userId>` (valor sem formato JWT `AAA.BBB.CCC`) é tratado como userId diretamente — facilita testes locais sem provedor.
+- **ID token (provedor de identidade)**: cadastro/atualização sincronizam o `providerId` quando configurado.
 
-### Entidade `User` (`src/core/user/domain/entities/User.ts`)
-- Campos: `id`, `email: Email`, `username`, `passwordHash`, `status`, `pixKey?`, `createdAt`, `updatedAt`.
-- Métodos: `canOperate`, `suspend`, `activate`, `updatePixKey`, `toDTO`.
-- Estados (`UserStatus`): `PENDING_VERIFICATION`, `ACTIVE`, `SUSPENDED`.
+### JWT
 
-### Value Object `Email`
-- Valida sintaxe, remove espaços e domínios malformados, lança `AppError(400, VALIDATION_ERROR)` quando inválido.
+- Assinatura: `JWT_SECRET` (**obrigatória sempre** — o boot lança erro sem ela). Custo de hash de senha: bcrypt **12**.
+- Validade configurável; renovação via `/api/v1/auth/refresh` (quando habilitada) ou fluxo do provedor.
+- Tokens expirados → `401 UNAUTHORIZED`; sem permissão → `403 FORBIDDEN`.
 
-### DTOs (`src/core/user/types/user.types.ts`)
-- `ICreateUserDTO`: `{ email, username, password, currency? }`.
-- `IUserDTO`: projeção serializável da entidade.
-- `IUserResponseDTO`: envelope `{ user, wallet }` retornado pelo cadastro.
+### Proteção de rotas
 
-## Serviços e casos de uso
+- `protectedRoute` exige token válido e preenche `req.auth.userId`.
+- `requireAdminRole` restringe `/api/v1/admin/*` (papel `ADMIN`, configurado por `ADMIN_USER_IDS`).
+- Middlewares de autenticação: `src/infrastructure/api/middleware/AuthMiddleware.ts`.
 
-### `UserService`
-- `registerUser`: cria `User` com `PENDING_VERIFICATION`, hash da senha e salva via `IUserRepository`.
-- `suspendUser` / `activateUser`: validam estado antes de atualizar para evitar operações redundantes.
-- `updateProfile`: altera `username` (derivado de first/last name enviados) e atualiza `updatedAt`.
-- `changeEmail`: verifica unicidade, envia email de confirmação para o novo endereço, recria VO `Email` e persiste. O envio de email é tentado, mas falhas não bloqueiam a alteração.
-- `updatePixKey`: normaliza/valida a chave, persiste no usuário e dispara `flushUserProfileCache` para que carteiras possam reutilizar o valor.
-- `comparePassword`: usa `bcrypt.compare` durante o login legado.
+## Rate limits de autenticação
 
-### Use cases
-- `RegisterUser`: cadastro + criação de carteira.
-- `GetUserProfile`: provê dados para `/api/v1/users/me` e `/api/v1/auth/me`.
-- `UpdateProfile`: encapsula regras de mutação de perfil.
-- `ChangeEmail`: executa fluxo de troca de email.
-- `UpdatePixKey`: salva/limpa a chave Pix padrão reutilizada em fluxos de saque.
+- Globais + específicos da rota: `AUTH_LOGIN_RATE_LIMIT_*`, `AUTH_REGISTER_RATE_LIMIT_*` (abusos de login/registro são contidos por `createRouteRateLimiter`).
 
-## Persistência e factories
+## Upload de documentos
 
-- `IUserRepository` define `findById`, `findByEmail`, `save`, `update`.
-- Implementações disponíveis:
-  - `UserRepository`: in-memory (default em desenvolvimento/testes).
-  - `MongooseUserRepository`: utiliza `UserModel` quando `USE_MONGOOSE_PERSISTENCE=true`.
-- `createUserRepository()` (em `src/infrastructure/persistence/factory.ts`) decide qual implementação carregar e é compartilhado por `authRoutes` e `userRoutes`, evitando divergência de instâncias.
+- `POST /api/v1/users/me/documents` (`multipart/form-data`) — usado para KYC quando o port de verificação estiver ativo.
+- Os arquivos não são versionados; considere bucket privado em produção.
 
-## Integrações com Auth, provedores externos e JWT
+## Segurança
 
-- `AuthController` cobre registro, login, refresh, `me` e logout.
-- `JwtService` assina tokens (HS256) com parâmetros de `appConfig.jwt` (`JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`).
-- `AuthMiddleware` aceita:
-  - Bearer JWT válido → popula `req.auth` com `userId`/`sessionId`.
-  - Dev bypass (`ALLOW_DEV_BEARER_BYPASS=true`) → qualquer `Bearer <user-id>` é aceito para testes locais.
-- Integração com provedores externos: os adaptadores só inicializam quando as credenciais reais estão presentes. Quando ativo, as rotas Auth sincronizam usuários e enriquecem respostas com dados do provedor configurado.
+- Nenhum segredo/`password` em logs — o `requestContext` expõe apenas `userId`.
+- Hash com custo 12 testado (bcrypt) — `Security.test.ts`.
+- CORS por allowlist + helmet + payload limit `10mb`.
 
-## API HTTP
+## Games (requisitos de auth)
 
-### Rotas de usuário (`src/infrastructure/api/routes/userRoutes.ts`)
+O módulo de games compartilha a mesma autenticação:
 
-| Método | Caminho | Autenticação | Cache | Observações |
-|--------|---------|--------------|-------|-------------|
-| `GET` | `/api/v1/users/me` | `protectedRoute` | `cacheUserProfileMiddleware` (Redis) | Retorna perfil completo; campo `username` é o nome público do usuário.
-| `PATCH` | `/api/v1/users/me` | `protectedRoute` | — | Valida `UpdateProfileDTO`; recalcula `username` e executa `flushUserProfileCache`.
-| `PATCH` | `/api/v1/users/me/email` | `protectedRoute` | — | Usa `ChangeEmailDTO`; garante email único e invalida cache.
-| `GET` | `/api/v1/users/me/pix-key` | `protectedRoute` | — | Entrega a chave Pix padrão persistida (ou `null` quando não configurada) para o front seguir exibindo a última seleção.
-| `PUT` | `/api/v1/users/me/pix-key` | `protectedRoute` | — | Valida `UpdatePixKeyDTO`; permite cadastrar/remover a chave que será utilizada como fallback em `/api/v1/wallets/withdraw`.
-| `GET` | `/api/v1/users/me/preferences` | `protectedRoute` | — | Retorna as preferências do usuário (`emailNotifications`, `smsNotifications`, `marketingEmails`, `requireWithdrawPassword`).
-| `PUT` | `/api/v1/users/me/preferences` | `protectedRoute` | — | Atualiza preferências do usuário; aceita payload parcial com qualquer um dos campos acima.
+- `GET /api/v1/games` e `GET /api/v1/games/coin-flip/feed` — **públicos**.
+- `GET /api/v1/games/coin-flip/history` e `POST /api/v1/games/coin-flip/play` — **auth obrigatória** (mesma `Authorization`).
+- No endpoint `play`, o backend debita a carteira (`WalletService`) **antes** de jogar; resposta inclui `outcome`, `result`, `payoutAmount` e `createdAt`. `503` = jogo desligado (`GAME_COINFLIP_ENABLED=false`).
+- Detalhes completos (estados, `play-batch`, prêmio fixo): `docs/Bet_docs.mdx`.
 
-### Rotas de autenticação (`src/infrastructure/api/routes/authRoutes.ts`)
+## Evidência no código
 
-| Método | Caminho | Rate limit | Observações |
-|--------|---------|-----------|-------------|
-| `POST` | `/api/v1/auth/register` | `AUTH_REGISTER_RATE_LIMIT_*` | Cadastro + criação de carteira; sincroniza com o provedor de identidade quando disponível.
-| `GET` | `/api/v1/auth/register/status/:userId` | — | Retorna `{ status, isActive }` e permite polling até liberar o usuário.
-| `POST` | `/api/v1/auth/login` | `AUTH_LOGIN_RATE_LIMIT_*` | Login legado (consulta repositório, compara senha, emite JWT).
-| `POST` | `/api/v1/auth/refresh` | `AUTH_REFRESH_RATE_LIMIT_*` | Valida refresh token e retorna novo par access/refresh.
-| `GET` | `/api/v1/auth/me` | `protectedRoute` | Expõe perfil combinando User + dados do provedor de identidade quando configurado.
-| `POST` | `/api/v1/auth/logout` | `protectedRoute` | Placeholder; logout real ocorre no client ou no provedor de identidade quando aplicável.
+- `src/core/user/domain/services/UserService.ts` (hash bcrypt 12), `src/infrastructure/auth/*` (JwtService), `src/infrastructure/api/ApiServer.ts` (middlewares), `src/infrastructure/api/controllers/AuthController.ts`.
+- Tests: `Security.test.ts`, `Auth*.test.ts`.
 
-> Ajuste limites via `AUTH_{REGISTER|LOGIN|REFRESH}_RATE_LIMIT_{WINDOW_MS,MAX,MESSAGE}` e configure o rate limit global (`RATE_LIMIT_*`) conforme o ambiente.
-
-## DTOs e validações
-
-- `RegisterDTO`, `LoginDTO`, `RefreshTokenDTO` (Zod) vivem em `src/infrastructure/api/dtos/AuthDTOs.ts`.
-- `UpdateProfileDTO`, `ChangeEmailDTO` e `UpdatePixKeyDTO` (`src/infrastructure/api/dtos/UserDTOs.ts`) garantem tamanho mínimo de nomes, limite de bio (500 chars), emails válidos e chaves Pix entre 5 e 255 caracteres (aceitando alfanumérico, telefone, CPF/CNPJ ou emails).
-- Toda validação utiliza `BaseController.validateSchema`, que retorna `AppError` padronizado (`code`, `message`, `status`).
-
-## Cache e consistência
-
-- `cacheUserProfileMiddleware` atende `GET /users/me` reutilizando Redis (`cacheKeys.userProfile`). TTL configurado em `shared/config/cacheConfig.ts`.
-- Mutadores (`PATCH /users/me`, `/users/me/email`, `PUT /users/me/pix-key`) chamam `flushUserProfileCache(userId)` para evitar servir dados obsoletos.
-- Caso novos fluxos alterem perfil (ex.: upgrade de plano), reutilize os helpers de cache para manter consistência.
-
-## Configuração
-
-- `src/core/user/config/user-config.ts`:
-  - `minPasswordLength` (8), `maxLoginAttempts`, `accountVerificationTimeout`, `defaultCurrency`, limites de depósito/saque.
-- Variáveis chave:
-  - Variáveis de configuração do provedor de identidade (ex.: `IDENTITY_PROVIDER_*`) quando aplicável.
-  - `JWT_SECRET`, `JWT_ISSUER`, `JWT_EXPIRATION`, `JWT_REFRESH_EXPIRATION`.
-  - `ALLOW_DEV_BEARER_BYPASS` (false por padrão) para testes locais.
-  - `USE_MONGOOSE_PERSISTENCE` para selecionar o repositório.
-
-  ## Limites operacionais da wallet
-
-  - **Depósitos:** `DepositDTO` recusa imediatamente valores menores que R$ 1,00 e responde `400 VALIDATION_ERROR`. Reforce o bloqueio no front e mostre uma mensagem única (“Depósitos começam em R$ 1,00”).
-  - **Saques:** `WithdrawDTO` exige pelo menos R$ 100,00 por solicitação. Entradas abaixo disso são rejeitadas antes do uso do saldo, garantindo que os limites de compliance sejam respeitados.
-  - Ajustes futuros podem ser centralizados via `appConfig.wallets` (ainda sem knobs públicos); por enquanto esses thresholds são fixos e devem ser comunicados em qualquer runbook ou playbook de atendimento.
-
-## Testes e troubleshooting
-
-- `src/core/user/application/use-cases/__tests__/RegisterUser.test.ts` cobre o fluxo principal (cadastro + wallet), mockando serviços.
-- `UserRepository` fornece helpers (`getAllUsers`, `clear`) para cenários de teste.
-- Teste endpoints manualmente:
-  ```bash
-  curl -X POST http://localhost:3000/api/v1/auth/register     -H 'Content-Type: application/json'     -d '{"email":"dev@example.com","username":"dev.user","password":"Secret123!"}'
-  ```
-- Rode `npm test -- User` para focar na suíte do módulo.
-- Problemas comuns:
-  - `CONFLICT Email already exists` → email duplicado em memória ou no Mongo.
-  - `IDENTITY_PROVIDER_SECRET must be configured` → desabilite o provedor em dev ou configure chaves reais.
-  - `UNAUTHORIZED` em dev → defina `ALLOW_DEV_BEARER_BYPASS=true` e envie `Authorization: Bearer <user-id>`.
-
-## Próximos passos
-
-1. Emitir eventos de domínio (`UserRegistered`, `EmailChanged`) para futuros consumers (notificações, compliance).
-2. Persistir campos opcionais (bio, avatar) em um repositório dedicado e sincronizar com o provedor de identidade via webhooks quando aplicável.
-
-3. Implementar fluxo de recuperação/verificação de email usando o adaptador do provedor (ex.: Passport hooks) ou fluxo interno de verificação por e-mail.
-3. Implementar fluxo de recuperação/verificação de email usando o adaptador do provedor (ex.: Passport hooks) ou fluxo interno de verificação por e-mail.
-4. Adicionar testes de integração Auth + Wallet com Redis habilitado e rate limits reais.
-
----
-
-**Última atualização:** 8 de dezembro de 2025
+**Última atualização:** 20 de setembro de 2026.

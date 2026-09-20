@@ -6,16 +6,17 @@ slug: "/"
 
 # BackBet
 
-Backend de apostas esportivas em **TypeScript + Node 22+** (Express 5), organizado em camadas limpas e DDD. Toda a API pública vive sob o prefixo versionado **`/api/v1`**, o dinheiro é tratado em **centavos inteiros** (sem floats) e a concorrência é protegida por **idempotência** (`Idempotency-Key`) e **locking otimista**.
+Backend de apostas esportivas em **TypeScript + Node 22+** (Express 5), organizado em camadas limpas e DDD. Toda a API pública vive sob o prefixo versionado **`/api/v1`**, o dinheiro é tratado em **centavos inteiros** (sem floats) e a concorrência é protegida por **idempotência** (`Idempotency-Key`), **locking otimista** e **transações Mongo** (replica set).
 
 ## O que é e qual problema resolve
 
 BackBet resolve o problema central de um backoffice de apostas: garantir que **fluxos de dinheiro sejam exatos e concorrentes** — depósitos, saques, apostas e tesouraria sem erro de arredondamento e sem saldo "perdido" por corrida de requisições. Para isso, combina:
 
-- **DDD + camadas limpas**: domínio isolado em `src/core/*`, use cases no padrão Result, repositórios trocáveis (in-memory / Mongoose).
+- **DDD + camadas limpas**: domínio isolado em `src/core/*`, use cases no padrão `Result`, repositórios trocáveis (in-memory / Mongoose).
 - **Dinheiro em centavos**: aritmética inteira (`Money`, `BetAmount`), API sempre em reais.
-- **Concorrência defensiva**: `Idempotency-Key` em escritas críticas + `HouseWallet` com `version` e `409 CONFLICT`.
-- **Operação simples**: health/readiness, logs JSON, PM2 + workers Bull, Docker Compose replicável.
+- **Concorrência defensiva**: `Idempotency-Key` em escritas críticas + `HouseWallet` com `version` e `409 CONFLICT` + retry transitório com backoff exponencial.
+- **Persistência transacional**: MongoDB como replica set (`rs0`) habilita transações atômicas entre carteira, ledger, aposta e tesouraria.
+- **Operação simples**: health/readiness, logs JSON, PM2 + workers Bull, Docker Compose replicável, backup/restore testado.
 
 ## Arquitetura
 
@@ -30,7 +31,13 @@ API (Express 5) ▸ Application (use cases) ▸ Domain (entidades/VOs) ▸ Infra
 | User Core | `src/core/user` | Registro, login/JWT, perfil, preferências, recuperação de senha, upload de documentos |
 | Finance Core | `src/core/finance` | Carteiras, depósitos, saques, pacotes de crédito, tesouraria (`HouseWallet`) |
 | Betting Core | `src/core/betting` | Eventos, odds, colocar/cancelar/resolver apostas |
-| Games | `src/core/games` (via `GameController`) | Mini games (Coin Flip: jogar em lote, feed, histórico) |
+| Risk Core | `src/core/risk` | Perfil de exposição, contadores de reserva e limites por usuário |
+| Treasury | `src/core/treasury` | `HouseTreasuryService`, reconciliação diária e relatórios financeiros |
+| Compliance | `src/core/compliance` | Ports plugáveis de KYC, geolocalização e integridade de dispositivo |
+| Responsible Gambling | `src/core/responsibleGambling` | Limites e auto-exclusão configuráveis por usuário |
+| Audit | `src/core/audit` | Eventos de auditoria append-only + retenção (5 anos) |
+| SIGAP | `src/core/sigap` | Transmissão regulatória de apostas com ciclo ACK/REJECT + retry |
+| Games | `src/core/games` | Mini games (Coin Flip: jogar em lote, feed, histórico) |
 | Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `AppError`, DTOs |
 
 Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, ...) isolam o domínio; a fábrica em `src/infrastructure/persistence/factory.ts` escolhe o adaptador (in-memory ou Mongo/Mongoose).
@@ -42,9 +49,9 @@ Interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, ...) isola
 | Runtime | Node >= 22, TypeScript 5.9 (`tsx` em dev, `tsc` + `tsc-alias` no build) |
 | API | Express 5, Zod (validação de DTOs), helmet, cors, express-rate-limit |
 | Auth | Passport + `passport-jwt`, `JwtService` local; bypass em dev (`ALLOW_DEV_BEARER_BYPASS`) |
-| Dados | MongoDB/Mongoose (opcional em dev), Redis (`ioredis`, cache + filas Bull) |
-| Workers | Bull (contato, saque) — adaptador em memória em dev/test |
-| Observabilidade | `/health`, `/readiness`, request-id + logs JSON, OpenTelemetry (OTLP), PM2 WebUI + health-monitor |
+| Dados | MongoDB/Mongoose (replica set `rs0`), Redis (`ioredis`, cache + filas Bull) |
+| Workers | Bull (contato, saque, SIGAP, auditoria) — adaptador em memória em dev/test |
+| Observabilidade | `/health`, `/readiness`, request-id + logs JSON, OpenTelemetry (OTLP), PM2 WebUI + health-monitor, alertas (12 regras) |
 
 ## Como executar
 
@@ -62,16 +69,19 @@ Ambientes, env vars e troubleshooting: `docs/QUICKSTART.mdx` e `docs/MONGODB_SET
 |---------|-----------|
 | `npm run typecheck` | Checagem de tipos (`tsc --noEmit`) |
 | `npm run lint` | ESLint em `src/**/*.ts` |
-| `npm test` | Suíte unitária Jest hermética (888 testes) |
+| `npm test` | Suíte unitária Jest hermética |
 | `npm run test:coverage` | Unitária + cobertura |
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) |
 | `npm run test:integration` | Suíte real (MongoDB replica set + Redis via `docker-compose.test.yml`) |
+| `npm run test:integration:full` | Integração completa + verificação de endpoints |
 | `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) contra a infra real |
 | `npm run test:load:distributed` | Carga **distribuída** (N carteiras distintas, eixo horizontal) |
+| `npm run test:crash` | Teste de recuperação (crash) de worker |
+| `npm run test:backup` | Ciclo backup/restore/validação |
 | `npm run check` | `check:secrets` + lint + cobertura + build (gate completo) |
 | `npm run test:infra:reset` | Sobe infra de teste do zero |
 
-Guia completo: `docs/TESTING-ENV.mdx`; carga/concorrência: `docs/LOAD-TESTING.mdx`; matriz de cenários críticos de dinheiro: `docs/MATRIX-CENARIOS-CRITICOS.mdx`.
+Guia completo (scripts, ambientes, cenários críticos e carga): `docs/TESTING-ENV.mdx`.
 
 ## Como usar a API
 
@@ -88,30 +98,29 @@ Contrato completo (códigos de erro, exemplos e fluxos): `docs/API_CONTRACT.mdx`
 
 | Compose | Finalidade |
 |---------|-----------|
-| `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers (contato/saque) |
+| `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers |
 | `docker-compose.test.yml` | Infra de teste isolada (Mongo + Redis no loopback) |
 | `docker-compose.proxy.yml` | Reverse proxy (Caddy/TLS) opcional |
-| `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional) |
+| `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional, liga o `/metrics`) |
 
-Produção: `docker compose up -d --build` — tudo em Docker no **mesmo host**. Guias: `docs/DOCKER.mdx`, `docs/DEPLOY.mdx`.
+Produção: `docker compose up -d --build` — tudo em Docker no **mesmo host**. Guia: `docs/DEPLOY.mdx`.
 
 ## Como o dinheiro funciona
 
 - **Centavos**: todo valor interno é inteiro em centavos (`Money`, `BetAmount`); a API expõe reais. Nada de `float` em fluxo de valor.
 - **Carteira**: saldo por usuário (`Wallet`) movimentado via transações financeiras; cache Redis invalidado após mutações.
 - **Tesouraria**: `HouseWallet` concentra ganhos/perdas do operador e é o alvo dos settlements.
-- **Saques/depósitos**: PIX via `PIX_PROVIDER=mock` (sem provedor externo) com fila `Bull` para saques.
+- **Saques/depósitos**: PIX via `PIX_PROVIDER=mock` com fila `Bull` para saques (e webhook `PIX_PAID`/`PIX_REFUNDED` quando habilitado).
 - **Rate limits**: globais + específicos (`AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_RATE_LIMIT_*`).
-
-Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CENARIOS-CRITICOS.mdx`.
+- **Invariantes**: FI-01..FI-10 testados (`docs/Finance_docs.mdx`).
 
 ## Como a concorrência funciona
 
 - **Idempotência**: escritas críticas reservam a chave no Redis (`SET NX`); replay da mesma chave retorna o mesmo resultado (`Idempotency-Replayed: true`), payload diferente → `409`, reserva em andamento → `409`.
 - **Locking otimista**: `HouseWallet`/carteiras usam `version`; escrita com versão obsoleta retorna `409 CONFLICT` (retry do cliente).
-- **Retry transitório**: `WalletService.run()`/`BetService.placeBet()` re-executam a unidade inteira em `CONFLICT` **e** em write-conflict transitório do Mongo (`112`/`TransientTransactionError`), com backoff exponencial + jitter (`src/core/shared/domain/errors/retryTransient.ts`). Validado sob carga (ver `docs/LOAD-TESTING.mdx`).
-- **Filas**: operações assíncronas (contato, saque) vão para Bull; falhas são registradas e processadas posteriormente.
-- **Persistência transacional**: Mongo como replica set habilita transações (wallet/ledger/bet/treasury) atômicas.
+- **Retry transitório**: `WalletService.run()`/`BetService.placeBet()` re-executam a unidade inteira em `CONFLICT` **e** em write-conflict transitório do Mongo (`112`/`TransientTransactionError`), com backoff exponencial + jitter (`src/core/shared/domain/errors/retryTransient.ts`). Validado sob carga (`docs/TESTING-ENV.mdx`).
+- **Filas**: operações assíncronas (contato, saque, SIGAP, retenção de auditoria) vão para Bull; falhas são registradas e reprocessadas.
+- **Persistência transacional**: Mongo como replica set permite transações (wallet/ledger/bet/treasury) atômicas.
 
 ## Como contribuir
 
@@ -119,33 +128,24 @@ Detalhes do módulo e casos de borda: `docs/Finance_docs.mdx` e `docs/MATRIX-CEN
 - Novos módulos seguem `src/core/<domínio>/application/use-cases`; docs e código mudam juntos.
 - Veja `docs/CONTRIBUTING.mdx` para o checklist completo.
 
-## Status do projeto
+## Estado do projeto
 
-- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` (Fase 30) com contrato, envelope padronizado, paginação, idempotência e OpenAPI; suíte completa com **902 testes** (888 unitários herméticos + 14 de integração real Mongo/Redis), gate `npm run check` verde e invariantes financeiros FI-01..FI-10 testados.
-- **Definition of Done (seção 41 do plano)**: 48/50 itens atendidos com evidência (`docs/DEFINITION_OF_DONE.mdx`); os 2 restantes exigem ambiente com Docker/CI. Aceite final do MVP: `docs/GO_NOGO_FINAL.mdx`.
-- **Requisitos operacionais cobertos**: auditoria/retention, transmissão SIGAP/SPA, Docker/deploy, backup/recuperação, segredos e endurecimento de segurança; auto-avaliação executável via `npm run security:assess` (`docs/CERTIFICACAO_PREPARACAO.mdx`).
-- **Pendências/roadmap**: build da imagem Docker e integração real (verificação em ambiente com Docker/CI), provedores reais W-01..W-05 (KYC/geolocalização/SIGAP/PSP) e certificação SPA — dependem de operador autorizado (projeto separado de compliance).
+- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1`, envelope padronizado, paginação, idempotência e OpenAPI; invariantes financeiros FI-01..FI-10 testados e transmissão SIGAP com ciclo ACK/REJECT em produção via mock.
+- **Suíte (20/09/2026)**: **1105 testes** (1071 passando, 33 skipped, 1 falha pré-existente `FI-05` fora do escopo atual), 142 suítes passando; cobertura ~**84,5%** statements / ~85% lines / ~81% functions; gate `npm run check` verde.
+- **Definition of Done (seção 41 do plano)**: itens atendidos com evidência verificável (`docs/ESTADO-DO-PROJETO.mdx`); pendências conhecidas exigem operador autorizado/provedores reais.
+- **Requisitos operacionais cobertos**: auditoria/retention, transmissão SIGAP/SPA, Docker/deploy, backup/recuperação, segredos e endurecimento de segurança; auto-avaliação executável via `npm run security:assess`.
+- **Pendências/roadmap**: provedores reais W-01..W-05 (KYC/geolocalização/SIGAP/PSP) e certificação SPA — dependem de operador autorizado (projeto separado de compliance). Detalhes e decisão comercial: `docs/ESTADO-DO-PROJETO.mdx`.
 
-## Documentação relacionada
+## Documentação
 
-**Produto/arquitetura**: `docs/ARCHITECTURE.mdx` · `docs/User_docs.mdx` · `docs/Finance_docs.mdx` · `docs/Bet_docs.mdx` · `docs/GAMES_AUTH.mdx` · `docs/risk-integration.mdx`
+- **Produto/arquitetura**: `docs/ARCHITECTURE.mdx` · `docs/User_docs.mdx` · `docs/Finance_docs.mdx` · `docs/Bet_docs.mdx`
+- **API**: `docs/API_CONTRACT.mdx` (contrato v1) · `docs/openapi.json` (OpenAPI 3.1)
+- **Dados & identidade**: `docs/MONGODB_SETUP.mdx`
+- **Observabilidade**: `docs/OBSERVABILITY.mdx`
+- **Operação**: `docs/DEPLOY.mdx` · `docs/BACKUP_RECOVERY.mdx`
+- **Regulatório**: `docs/SIGAP_CONFORMIDADE.mdx`
+- **Testes & QA**: `docs/TESTING-ENV.mdx`
+- **Guia rápido**: `docs/QUICKSTART.mdx`
+- **Estado/docs governança**: `docs/ESTADO-DO-PROJETO.mdx` · `docs/CONTRIBUTING.mdx`
 
-**API**: `docs/API_CONTRACT.mdx` (contrato v1) · `docs/openapi.json` (OpenAPI 3.1)
-
-**Dados & identidade**: `docs/MONGODB_SETUP.mdx` · `docs/MONGOOSE_REPOSITORIES.mdx` · `docs/PASSPORT_SETUP.mdx`
-
-**Observabilidade**: `docs/OBSERVABILITY.mdx` · `docs/LOGS.mdx` · `docs/PM2.mdx` · `docs/RESILIENCE.mdx`
-
-**Deploy & operação**: `docs/DEPLOY.mdx` · `docs/DOCKER.mdx` · `docs/BACKUP_RECOVERY.mdx` · `docs/SECRETS.mdx` · `docs/SECURITY-OPS.mdx` · `docs/AUDIT_RETENTION.mdx` · `docs/SIGAP_CONFORMIDADE.mdx`
-
-**Testes & QA**: `docs/TESTING-ENV.mdx` · `docs/LOAD-TESTING.mdx` · `docs/MATRIX-CENARIOS-CRITICOS.mdx`
-
-**Governança**: `docs/CONTRIBUTING.mdx` · `docs/CONTRIBUTORS.mdx` · `docs/LICENSE.mdx`
-
-**Conclusão do ciclo MVP**: `docs/DEFINITION_OF_DONE.mdx` (DoD, seção 41) · `docs/GO_NOGO_FINAL.mdx` (aceite final, seção 44) · `docs/COMERCIAL_ESTRATEGIA.mdx` (decisão de produto, Fase 36)
-
-**Guia rápido**: `docs/QUICKSTART.mdx`
-
-**Histórico**: `docs/archive/CODE_REVIEW_DIAGNOSTIC.mdx` (snapshot de revisão, nov/2025)
-
-**Versão atual:** 1.0.0 · Doc principal reescrito em 29 de agosto de 2026.
+**Versão atual:** 1.0.0 · Documentação consolidada em 20 de setembro de 2026.

@@ -1,12 +1,13 @@
 ---
 title: "Guia de Contribuição"
-description: "Regras e padrões para contribuir com o projeto BackBet."
+description: "Regras e padrões para contribuir com o projeto BackBet, equipe mantenedora e licença."
 slug: "/docs/contributing"
+sidebar_label: "Contribuir"
 ---
 
 # Guia de Contribuição
 
-As contribuições para o projeto BackBet são restritas aos colaboradores autorizados. Este guia consolida o fluxo esperado, padrões de qualidade e exigências de segurança para manter o repositório saudável.
+As contribuições para o projeto BackBet são restritas aos colaboradores autorizados. Este guia consolida o fluxo esperado, padrões de qualidade, segurança e governança (mantenedores e licença).
 
 ## Fluxo de Trabalho
 
@@ -14,49 +15,73 @@ As contribuições para o projeto BackBet são restritas aos colaboradores autor
 2. **Abra uma branch descritiva** seguindo o padrão `feature/<dominio>-<slug>` ou `fix/<issue>-<slug>` (ex.: `feature/betting-cache-hooks`).
 3. **Implemente e commite** usando mensagens convencionais (ver abaixo).
 4. **Sincronize com a main** antes de abrir o PR (`git pull --rebase origin main`).
-5. **Abra o Pull Request** preenchendo o template padrão, descrevendo contexto, testes executados e verificações de observabilidade.
+5. **Abra o Pull Request** preenchendo o template padrão: contexto, testes executados e verificações de observabilidade.
 6. **Aguarde revisão técnica**; nenhum PR é mesclado sem ao menos 1 aprovação.
 
 ## Commits e Branches
 
-- Use prefixos do Conventional Commits: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `revert`.
-- Commits devem focar em uma unidade lógica. Prefira mensagens no imperativo ("add Redis cache busting").
-- Não faça force-push na branch principal. Em branches de feature, force-push apenas se combinado com quem revisa.
+- Prefixos do Conventional Commits: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `revert`.
+- Commits focados em uma unidade lógica; preferir imperativo ("add Redis cache busting").
+- Não force-push em `main`. Em branches de feature, force-push apenas se combinado com quem revisa.
 
 ## Checklist de Qualidade
 
-Execute e copie para o PR o resultado dos seguintes comandos (na ordem):
+Execute na ordem e copie para o PR:
 
 ```bash
 npm run lint
 npm run test:coverage
 npm run build
 npm run format
+npm run smoke
 ```
 
 - `npm run dev` deve subir sem erros, expondo `/health`, `/readiness` e `/health/cache`. O `/metrics` responde `410 Gone` a menos que `OBS_ENABLE_PROMETHEUS=true` (use apenas se precisar exercitar o `prom-client`).
 - Novas migrations, seeds ou scripts precisam estar documentados em `docs/` e referenciados no README/Quickstart.
-- Se o cache ou tracing estiverem envolvidos, mencione como validar (`CACHE_ENABLED`, `TRACING_ENABLED`).
+- Se cache ou tracing estiverem envolvidos, mencione como validar (`CACHE_ENABLED`, `TRACING_ENABLED`).
 
 ## Testes e Cobertura
 
-- Todo novo caso de uso precisa de testes (unitários ou integração leve). Use os repositórios in-memory quando não for essencial tocar Mongo.
-- Para workflows que dependem de Mongo/Redis reais, utilize os helpers de teste (`mongoMockHelper`, `redisTestClient`) ou configure containers nos pipelines.
-- Garanta que o Jest passe limpo (`npm test`). Falhas intermitentes devem ser abertas como issues antes do merge.
+- Todo novo caso de uso precisa de testes (unitários ou integração leve). Use repositórios in-memory quando não for essencial tocar Mongo.
+- Workflows que dependem de Mongo/Redis reais usam os helpers de teste ou containers (`npm run test:infra:reset` + `test:integration:full`).
+- O Jest deve passar limpo (`npm test`). Falhas intermitentes viram issues antes do merge.
 - Atualize snapshots e dados seeds quando alterar contratos das rotas ou DTOs.
+- **Nunca crie propósito em torno da falha pré-existente `FI-05`** — ela é tratada em separado e não é esteira para novos testes.
 
 ## Documentação e Observabilidade
 
-- Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_CONTRACT`, `docs/OBSERVABILITY`, `docs/QUICKSTART`).
-- Mantenha exemplos de payloads e env vars consistentes (ex.: `CACHE_ENABLED`, `TRACING_ENABLED`, `RATE_LIMIT_*`).
-- Adicione logs/snapshots/traces quando implementar novos fluxos críticos. Documente brevemente no PR onde encontrar esses sinais.
+- Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_CONTRACT`, `docs/OBSERVABILITY`, `docs/QUICKSTART`) — a documentação é consolidada (14 páginas) e deve acompanhar o código.
+- Mantenha payloads e env vars consistentes com os exemplos existentes.
+- Adicione logs/snapshots/traces em fluxos críticos; documente brevemente no PR onde encontrar esses sinais.
 
-## Segurança e Compliance
+## Segurança
 
-- **Nunca** commite arquivos `.env`, chaves, tokens, dumps ou dados de produção.
-- Sanitize logs/prints antes de anexar a PRs ou issues.
-- Dependências novas devem passar por `npm audit` e ter justificativa no PR se houver riscos médios/altos.
+- **Nunca** commite `.env`, chaves, tokens, dumps ou dados de produção (guard: `npm run check:secrets`).
+- Sanitize logs/prints antes de anexar a PRs/issues; logs seguem a política de `docs/OBSERVABILITY.mdx`.
+- Dependências novas passam por `npm audit` e têm justificativa no PR se houver riscos médios/altos.
+
+## Governança
+
+### Equipe mantenedora
+
+| Nome | Função | Responsabilidades |
+| --- | --- | --- |
+| Dioney Fróes | Tech Lead & Product Owner | Visão do produto, arquitetura, qualidade das entregas |
+| José Carlos Fróes | Sponsor & Advisor | Prioridades de investimento, indicadores, alinhamento estratégico |
+
+### Como adicionar novos contribuidores
+
+1. Confirmar consentimento e função da pessoa.
+2. Abrir PR atualizando a tabela acima (core ou convidados) com breve descrição.
+3. Referenciar issue/documento do escopo de atuação.
+4. Revisão dos mantenedores antes do merge.
+
+### Licença
+
+O BackBet é um software **proprietário** (licença BackBet v1.0). Direito limitado, não exclusivo, intransferível e revogável de uso em ambiente próprio ou SaaS, para fins operacionais do cliente. Proibido: cópia/redistribuição/sublicenciamento, engenharia reversa, sistemas derivados/concorrentes e uso ilegal. Venda/white-label exige contrato e autorização formal. Responsabilidade limitada ao valor pago nos últimos 12 meses. Uso do software implica aceite dos termos.
 
 ## Dúvidas
 
-Em caso de bloqueios, abra um tópico no canal interno de plataforma ou contate a liderança técnica. A aprovação de acesso adicional ao repositório segue o processo padrão da equipe de segurança.
+Em caso de bloqueios, abra um tópico no canal interno de plataforma ou contate a liderança técnica. A aprovação de acesso adicional ao repositório segue o processo padrão da equipe.
+
+**Última atualização:** 20 de setembro de 2026.

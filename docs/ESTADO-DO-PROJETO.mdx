@@ -1,0 +1,87 @@
+---
+title: "Estado do Projeto"
+description: "Fonte única de verdade do status do BackBet: estado atual, tests/cobertura, Definition of Done, aceite (Go/No-Go) e decisão comercial."
+slug: "/docs/estado-do-projeto"
+sidebar_label: "Estado do Projeto"
+---
+
+# Estado do Projeto
+
+Este documento é a **fonte única de verdade** do status técnico e decisório do BackBet (consolida as antigas páginas *Definition of Done*, *Go/No-Go Final* e *Estratégia Comercial*).
+
+## Estado atual (20/09/2026)
+
+- **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` com contrato, envelope padronizado, paginação, idempotência, OpenAPI (`docs/openapi.json`) e sincronização regulatória SIGAP.
+- **Suíte**: **1105 testes** — 1071 passando, 33 skipped, **1 falha pré-existente (`FI-05`, `FinancialInvariants.test.ts`) fora do escopo atual**, tratada em separado. **142 suítes** passando.
+- **Cobertura**: ~**84,5%** statements · ~**85%** lines · ~**81%** functions · ~**71%** branches.
+- **Gates**: `npm run check` (secrets + lint + cobertura + build), typecheck e smoke **verdes**.
+- **Lab**: IP estático `192.168.22.250` (dev porta `3000`).
+
+## Definition of Done (seção 41 do plano)
+
+Itens avaliados com evidência no repositório. Resumo por categoria:
+
+| Categoria | Situação |
+|-----------|----------|
+| API versionada + OpenAPI + Swagger | ✅ concluído |
+| Dinheiro em centavos + invariantes FI-01..FI-10 | ✅ concluído (executável: `npx jest FinancialInvariants`) |
+| Concorrência (idempotência + lock otimista + retry transitório) | ✅ concluído e provado sob carga |
+| Transações Mongo (replica set) para wallet/ledger/bet/treasury | ✅ concluído |
+| Workers Bull (contato, saque, SIGAP, auditoria) | ✅ concluído |
+| Auditoria append-only + retenção 5 anos | ✅ concluído |
+| Transmissão SIGAP com ACK/REJECT/retry | ✅ concluído (adapter real pendente W-03) |
+| Backup/restore/drill + runbook DR | ✅ concluído |
+| Segredos, endurecimento, CORS/helmet/rate-limit | ✅ concluído |
+| Observabilidade (logs JSON, health, PM2, alertas) | ✅ concluído |
+| Imagem Docker + build em ambiente com CI | ⚠️ dependente de ambiente com Docker/CI (pendências finais) |
+| Provedores externos reais (KYC/PSP/SIGAP) | ⚠️ exigem operador autorizado (W-01..W-05) |
+
+**Resultado**: a imensa maioria dos itens do DoD está atendida com evidência **verificável por máquina**; os poucos itens restantes dependem de ambiente/credenciais externas, não de código.
+
+## Aceite final (Go / No-Go)
+
+- **Veredito: GO condicionado.** O produto está pronto para **homologação** e demonstração — não para movimentar dinheiro real antes das pendências regulatórias.
+- Condições que seguem em aberto (bloqueiam produção real):
+  1. Validação do build Docker/CI em ambiente com Docker (2 itens finais do DoD);
+  2. Provedores reais W-01..W-05 (KYC, geolocalização, SIGAP, PSP, certificação) — ver `docs/SIGAP_CONFORMIDADE.mdx`.
+- **Sem essa validação, não há retrocesso**: certificação não é tratada retroativamente com o sistema já movimentando dinheiro.
+
+## Decisão comercial (Fase 36)
+
+> **Vender o BackBet como plataforma/backend de gestão de apostas para operadores autorizados (B2B)** — não operar uma bet própria (B2C).
+
+- **Modelo A (operar uma bet)**: exige autorização SPA, capital regulatório, certificação, KYC/AML, pagamentos, marketing, atendimento e risco financeiro — um **projeto separado de compliance**, não uma etapa de código.
+- **Modelo B (B2B)**: o produto **já existe** neste repositório (API `/api/v1` estável, cascata de provedores plugáveis: pagamento/KYC/SIGAP/geolocalização/device). O operador arca com as obrigações regulatórias.
+
+### Evidências vendáveis (testáveis no repo)
+
+Dinheiro exato sem float (`*Cents` + FI-01..FI-10), sem double-spending em saques (idempotência + máquina de estados), concorrência controlada na carteira (`WalletConcurrency.test.ts` — 100 saques), exposição/liability centralizada (`risk`), settlement idempotente (`ReconcileTreasury`), auditoria/retenção, backup/DR (RPO/RTO), segurança de acesso, compliance plugável, reporte SIGAP, jogo responsável, API documentada/versionada, infraestrutura containerizada.
+
+### Dívidas de produto para o B2B (decisão futura)
+
+Multi-tenant (hoje single-operador) · onboarding de operadores · white label/skins · SLA acordado · documentação de integração para operadores. São **evoluções de produto**, não pendências do MVP.
+
+### Alternativa em escopo
+
+Se não houver intenção comercial real: BackBet como **projeto de portfólio** + open source de terceiros em paralelo — cada decisão crítica (double-spending, concorrência, idempotência, transações Mongo, consistência wallet↔bet, disaster recovery) vira material de entrevista.
+
+### Checklist de decisão
+
+- [ ] v1.0 consolidada (técnica) ✅
+- [ ] Escolher **B2B** ou **portfólio + open source** (decisão do mantenedor)
+- [ ] Se B2B: regulação nacional como **projeto separado de compliance** (SPA, SIGAP, certificação)
+- [ ] Toda funcionalidade nova avaliada como **produto**, não como desculpa para expandir o projeto
+
+## Pendências / roadmap (resume)
+
+| Item | Tipo | Ref |
+|------|------|-----|
+| Falha `FI-05` (teste) | dívida técnica pré-existente | tratada em separado |
+| Rollback real `withTransaction` na suíte de integração | teste | `docs/TESTING-ENV.mdx` |
+| Adapter SIGAP real (mTLS/e-CNPJ) | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
+| KYC / geolocalização / PSP reais | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
+| Migração Bull → BullMQ | dívida pós-MVP | `docs/DEPLOY.mdx` |
+| Minoração de `@opentelemetry/*`, `nodemailer`, `js-yaml` | dívida de dependências | `docs/DEPLOY.mdx` |
+| Backup com upload S3 + retenção 5 anos | evolução de produção | `docs/BACKUP_RECOVERY.mdx` |
+
+**Última atualização:** 20 de setembro de 2026.

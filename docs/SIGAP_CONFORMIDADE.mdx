@@ -1,121 +1,114 @@
 ---
-title: "SIGAP e Conformidade Regulatória"
-description: "Fase 16 — módulo modular de integração com o SIGAP (Sistema de Gestão de Apostas) da SPA/Ministério da Fazenda no BackBet."
+title: "SIGAP, Conformidade e Certificação"
+description: "Transmissão regulatória SIGAP/SPA (ciclo ACK/REJECT/retry), matriz de controles SPA → evidência, auto-avaliação e pendências para operação real."
 slug: "/docs/sigap-conformidade"
+sidebar_label: "SIGAP & Conformidade"
 ---
 
-# SIGAP e conformidade regulatória — BackBet
+# SIGAP, Conformidade e Certificação
 
-> Esta página documenta a implementação da **Fase 16** do plano de finalização: um módulo estrutural para transmissão regulatória ao **SIGAP** (Sistema de Gestão de Apostas), mantido pela **Secretaria de Prêmios e Apostas (SPA)** do Ministério da Fazenda para operadores de apostas de quota fixa no Brasil.
+Este documento une dois blocos regulatórios do BackBet:
 
-## Objetivo
+1. **Módulo SIGAP** (`src/core/sigap`) — transmissão de remessas à SPA (Secretaria de Prêmios e Apostas, Ministério da Fazenda) com ciclo determinístico **ACK/REJECT → retry → auditoria**.
+2. **Preparação para certificação** — matriz de controles que a SPA exige, mapeada para **evidências objetivas no repositório**, verificável por máquina.
 
-Preparar o BackBet para, quando direcionado a um operador autorizado, ser capaz de fornecer os dados exigidos pela regulação:
+## SIGAP — transmissão regulatória
+
+### Objetivo
+
+Reportar apostas/eventos à SPA de forma confiável: cada remessa é transmitida via adapter, persistida com estado definitivo (**ACKED | REJECTED | FAILED | IMPEDED**) e auditada — nunca dependendo de logs para comprovar a submissão.
+
+### Arquitetura
+
+| Camada | Peça |
+|--------|------|
+| Domínio | `SigapService`, entidade de transmissão, `ISigapTransmissionPort` |
+| Aplicação | use cases de transmitir/consultar impedimento |
+| Infra | `SigapTransmissionJob` (job periódico), `MockSigapTransmissionProvider` (dev/test), `SigapTransmissionRepository` |
+| Config | `appConfig.sigap` (`provider`, `enabled`, `retryMaxAttempts`), env `SIGAP_ENABLED`, `SIGAP_RETRY_MAX_ATTEMPTS` (default **5**) |
+
+O adapter real (mTLS/TLS 1.2, e-CNPJ, Bearer token, endpoints SPA/Serpro) é **plugável** pelo contrato `appConfig.sigap.provider` — o código não muda, só a implementação e o ambiente de homologação SPA.
+
+### Ciclo de transmissão
 
 ```text
-apostadores
-apostas
-carteiras
-operações
-dados agregados
+SigapTransmissionJob → SigapService → adapter (mock hoje) → transmissão
+   → ACKED (ackId)                                persistido + auditoria
+   → REJECTED (errorCode/errorMessage)  → retry (teto SIGAP_RETRY_MAX_ATTEMPTS)
+   → FAILED (falha de transmissão)      → retry
+   → esgotado                            → SIGAP_RETRY_LIMIT_EXCEEDED (métrica)
 ```
 
-A integração **real** com o SIGAP exige credenciais, endpoints e certificados fornecidos pela SPA/Serpro (portão de acesso com login gov.br em https://sigap.fazenda.gov.br/) e envolve mTLS/TLS 1.2, assinatura de arquivos com e-CNPJ, token Bearer e compactação de payloads.
+- Reenvio idempotente por `(operatorId, fileType, referenceDate)` — não duplica remessa (incrementa `attemptCount`).
+- REJECTED após o teto incrementa `backbet_sigap_submission_rejected_total`.
+- Impedimento (`checkImpediment`): `IMPEDED` / `NOT_IMPEDED` / `UNKNOWN` (sem provider).
+- Ações admin de transmit/impediment registram **auditoria**.
 
-Este módulo implementa, **de forma modular e testável já agora**, toda a moldura dessa integração (ports/adapters, registro de remessas, payloads, job diário e endpoints administrativos), deixando o tráfego externo plugável por um adapter real.
+### Matriz de cobertura (S1-S7)
 
-## Regra geral do MVP
+| # | Cenário | Status |
+|---|---------|--------|
+| S1 | Transmissão registrada como **ACKED** com `ackId` | **Coberto** (`SigapService.test.ts` + `admin.sigap.integration.test.ts`) |
+| S2 | Reenvio idempotente por chave não duplica remessa | **Coberto** |
+| S3 | SPA **REJECT** persistido com `errorCode`/`errorMessage` | **Coberto** |
+| S4 | Falha marca **FAILED** e nova tentativa reenvia | **Coberto** |
+| S5 | Retry com teto: `SIGAP_RETRY_LIMIT_EXCEEDED` após `retryMaxAttempts` | **Coberto** |
+| S6 | Impedimento `IMPEDED`/`NOT_IMPEDED`/`UNKNOWN` | **Coberto** |
+| S7 | Ações admin registram auditoria | **Coberto** |
 
-- O SIGAP está **desabilitado por padrão** (`SIGAP_ENABLED=false`).
-- O adapter atual é o **mock**: transmite e retorna um `ackId` sem trafegar para fora.
-- A troca pelo provedor real é feita **sem alterar o domínio**: implementando `ISigapTransmissionPort`/`ISigapImpedimentPort` e selecionando via `SIGAP_PROVIDER`.
-- Cada remessa é **persistida** em coleção própria (`sigapsubmissions`), permitindo rastreabilidade, auditoria e reenvio idempotente por `(operatorId, fileType, referenceDate)`.
-
-## Estrutura de arquivos
-
-| Responsabilidade | Arquivo |
-| --- | --- |
-| Tipos de domínio (file types, status) | `src/core/sigap/domain/types/sigap.types.ts` |
-| Entidade `SigapSubmission` | `src/core/sigap/domain/entities/SigapSubmission.ts` |
-| Port do repositório de remessas | `src/core/sigap/domain/repositories/ISigapSubmissionRepository.ts` |
-| Repositório em memória (testes/dev) | `src/core/sigap/domain/repositories/InMemorySigapSubmissionRepository.ts` |
-| Port de transmissão (adapter) | `src/core/sigap/domain/ports/ISigapTransmissionPort.ts` |
-| Port de consulta de impedimento | `src/core/sigap/domain/ports/ISigapImpedimentPort.ts` |
-| Construção de payloads (puro) | `src/core/sigap/domain/services/payloads/SigapPayloadBuilder.ts` |
-| Serviço de domínio (orquestração) | `src/core/sigap/domain/services/SigapService.ts` |
-| Mapper de erros do domínio | `src/core/sigap/application/errors/SigapErrorMapper.ts` |
-| Use-cases | `src/core/sigap/application/use-cases/*.ts` |
-| Adapter mock de transmissão | `src/infrastructure/sigap/MockSigapTransmissionProvider.ts` |
-| Adapter mock de impedimento | `src/infrastructure/sigap/MockSigapImpedimentProvider.ts` |
-| Factory de provedores | `src/infrastructure/sigap/sigapFactory.ts` |
-| Schema Mongoose (`sigapsubmissions`) | `src/infrastructure/persistence/mongoose/schemas/SigapSubmissionSchema.ts` |
-| Repositório Mongoose | `src/infrastructure/persistence/mongoose/repositories/MongooseSigapSubmissionRepository.ts` |
-| Seleção runtime (factory) | `src/infrastructure/persistence/factory.ts` |
-| Job diário de transmissão | `src/infrastructure/jobs/SigapTransmissionJob.ts` |
-| Controller das rotas admin | `src/infrastructure/api/controllers/SigapController.ts` |
-| DTOs | `src/infrastructure/api/dtos/SigapDTOs.ts` |
-
-## Tipos de arquivo SIGAP
-
-Os cinco arquivos previstos nas normas técnicas da SPA:
-
-| File type | Conteúdo |
-| --- | --- |
-| `APOSTADOR` | Dados cadastrais de cada apostador |
-| `APOSTAS` | Apostas esportivas detalhadas por apostador/dia |
-| `CARTEIRA` | Movimentações financeiras da carteira por apostador/dia |
-| `OPERADOR_DIARIO` | Agregados diários da operação |
-| `OPERADOR_MENSAL` | Obrigações legais mensais do operador |
-
-## Endpoints administrativos
-
-Todos sob `/api/v1/admin/sigap`, com `protectedRoute` + `requireAdminRole` e registro em auditoria (Fase 15).
-
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| `POST` | `/api/v1/admin/sigap/transmit` | Transmite um arquivo (`fileType`, `referenceDate`, `payload`) |
-| `GET` | `/api/v1/admin/sigap/submissions` | Lista remessas com filtros/paginação |
-| `GET` | `/api/v1/admin/sigap/submissions/:id` | Consulta uma remessa |
-| `POST` | `/api/v1/admin/sigap/impediment` | Consulta se um documento (CPF) está impedido |
-
-## Variáveis de ambiente
+### Configuração
 
 | Variável | Padrão | Descrição |
-| --- | --- | --- |
-| `SIGAP_ENABLED` | `false` | Liga/desliga o módulo e o job diário |
-| `SIGAP_PROVIDER` | `mock` | Adapter de transmissão (futuro: real) |
-| `SIGAP_OPERATOR_ID` | `backbet-operator` | Identificador do operador nas remessas |
-| `SIGAP_IMPEDIMENT_ENABLED` | `false` | Habilita o provedor de consulta de impedimento |
-| `SIGAP_IMPEDED_DOCUMENTS` | *(vazio)* | CPFs (apenas dígitos) marcados como impedidos no mock |
-| `SIGAP_TRANSMISSION_JOB_INTERVAL_MS` | `86400000` | Intervalo do job diário (1 dia) |
-| `SIGAP_RETRY_MAX_ATTEMPTS` | `5` | Teto de tentativas da mesma remessa (retry) — ao atingir, marca `SIGAP_RETRY_LIMIT_EXCEEDED` sem chamar o provedor |
-| `SIGAP_QUERY_DEFAULT_LIMIT` / `SIGAP_QUERY_MAX_LIMIT` | `50` / `200` | Limites de paginação |
+|---|---|---|
+| `SIGAP_ENABLED` | `false` | Liga o job de transmissão |
+| `SIGAP_RETRY_MAX_ATTEMPTS` | `5` | Teto de tentativas de transmissão |
+| `SIGAP_PROVIDER` | `mock` | Adapter (`mock` hoje; real com credenciais SPA) |
 
-## Configuração (`appConfig.sigap`)
+## Preparação para certificação (SPA)
 
-O bloco `sigap` centraliza `enabled`, `provider`, `operatorId`, `impedimentEnabled`, `impededDocuments`, `transmissionJobIntervalMs`, `retryMaxAttempts` e `query`, seguindo o mesmo padrão dos blocos `audit`, `compliance` e `treasury`.
+O que pode ser feito **em desenvolvimento** sem operador autorizado ou certificação formal é **verificável por máquina**:
 
-## Ciclo de transmissão (Fase 19)
+```bash
+npm run security:assess
+```
 
-O ciclo segue o fluxo previsto no plano (`SigapService → adapter → transmissão → ACK/REJECT → retry → auditoria`):
+O script varre o repositório, confere cada controle contra a evidência (arquivo, configuração ou código) e escreve o relatório em `reports/security-assessment-<timestamp>.txt` (e `.json`). Sai com código 1 se algum controle **bloqueante** falhar (mesmo espírito do `check:secrets`).
 
-1. **Transmissão** — `SigapService.transmitFile` monta/reenvia a remessa idempotente por `(operatorId, fileType, referenceDate)`.
-2. **ACK / REJECT** — o provedor responde `{ status: 'ACKED', ackId }` ou `{ status: 'REJECTED', rejectionCode, rejectionReason }`; a remessa é persistida como `ACKED` ou `REJECTED` em coleção própria (`errorCode`/`errorMessage` preenchidos na rejeição).
-3. **Retry** — reenvios incrementam `attemptCount`; ao atingir `SIGAP_RETRY_MAX_ATTEMPTS` (`appConfig.sigap.retryMaxAttempts`, padrão 5) a remessa vira `FAILED` com `SIGAP_RETRY_LIMIT_EXCEEDED` e o provedor não é mais chamado (evita loop infinito).
-4. **Auditoria** — `POST /transmit` e `POST /impediment` registram eventos de auditoria (`resourceType: sigap_submission`, acionados via `SigapController`), verificados no teste de integração.
-5. **Métricas** — `backbet_sigap_submissions_total` (ACK), `backbet_sigap_submission_failures_total` (falha de transmissão) e `backbet_sigap_submission_rejected_total` (REJECT da SPA), todas por `fileType`.
+### Matriz de controles → evidência (PASS)
 
-O adapter mock permite simular determinismo nas três conclusões (ACK, falha via `failNext`, REJECT via `rejectNext`).
+**A — Segurança de acesso**: JWT obrigatório, guarda ADMIN, bcrypt custo 12, rate limit global/por rota, helmet, CORS por allowlist, payload limit `10mb`, validação Zod, `check:secrets` no CI. **Tudo PASS** com evidência em `AuthMiddleware.ts`, `adminRoutes.ts`, `ApiServer.ts` (101/131/136/157), `BaseController.ts`.
 
-## Testes
+**B — Auditoria, logs e retenção**: eventos persistidos (`AuditEventSchema`), retenção ≥ 5 anos (`AUDIT_RETENTION_DAYS=1825`), ledger append-only (`LedgerEntrySchema` índice único), política de logs sem segredos. **PASS**.
 
-- `src/core/sigap/domain/services/__tests__/SigapService.test.ts` (ACK, idempotência, FAILED, REJECT, teto de retry, impedimento)
-- `src/core/sigap/domain/services/payloads/__tests__/SigapPayloadBuilder.test.ts`
-- `src/core/sigap/domain/repositories/__tests__/InMemorySigapSubmissionRepository.test.ts`
-- `src/infrastructure/persistence/mongoose/repositories/__tests__/MongooseSigapSubmissionRepository.test.ts`
-- `src/infrastructure/jobs/__tests__/SigapTransmissionJob.test.ts`
-- `src/integration/__tests__/admin.sigap.integration.test.ts` (HTTP: ACKED, REJECT, retry, teto, auditoria, 403/400)
+**C — Continuidade de negócio**: `backup:create/validate/restore/drill` + runbook de DR com RPO/RTO (`docs/BACKUP_RECOVERY.mdx`). **PASS**.
 
-## Nota sobre integração real
+**D — Integridade financeira**: dinheiro em centavos, invariantes FI-01..FI-10 testados, limites min/max de depósito/saque (`MoneySecurityService`), reconciliação (`GetDailyFinancialSummary`/`ReconcileTreasury`). **PASS**.
 
-Para um operador brasileiro autorizado, a transmissão real exige acessos e procedimentos de fora do código (credenciais de sistema, certificados digitais e documentação técnica da SPA/Serpro). O módulo acima garante que, uma vez conhecidos esses contratos, a integração se limita a um **novo adapter** que implementa as ports, sem alterar domínio, persistência, job ou endpoints.
+**E — Compliance modular**: ports de KYC, geolocalização e integridade de dispositivo com gate no saque; módulo SIGAP; jogo responsável (`ResponsibleGamblingService`). **PASS**.
+
+**F — Infraestrutura de produção**: imagem Docker + compose, hardening (`deploy/harden-server.sh`), TLS (`deploy/proxy/Caddyfile`), serviços internos sem porta pública, CI com gates de segurança, observabilidade/alertas. **PASS**.
+
+### Pendências que dependem de terceiros (PEND)
+
+Não bloqueiam o ambiente de dev, mas são **pré-requisito para dinheiro real**:
+
+| ID | Pendência | Ação externa |
+|----|-----------|--------------|
+| W-01 | Provedor real de KYC (biometria/prova de vida) | Contratar parceiro de KYC autorizado |
+| W-02 | Geolocalização real (VPN/proxy) | Provedor de geolocalização/compliance |
+| W-03 | Adapter SIGAP real (mTLS/TLS 1.2, e-CNPJ, token) | Credenciais de operador autorizado + `SIGAP_ENABLED=true` |
+| W-04 | PSP/Pix real para depósitos/saques | Conta e credenciais de provedor de pagamentos |
+| W-05 | Certificação SPA / auditoria externa | Operador autorizado + auditoria formal |
+
+### Caminho de certificação
+
+```text
+BackBet → security assessment → compliance assessment → certificação aplicável
+→ integração regulatória → operador autorizado → produção
+```
+
+1. **Regenere evidência**: rode `npm run security:assess` a cada release; o JSON pode ser anexado a uma auditoria.
+2. **Certificação**: com operador, repetir os passos 3-6 ligando o `security:assess` como artefato de entrada.
+3. **Não adiar**: certificação não se trata retroativamente com o sistema movimentando dinheiro — controles bloqueantes falhando **bloqueiam o go-live**.
+
+**Última atualização:** 20 de setembro de 2026.

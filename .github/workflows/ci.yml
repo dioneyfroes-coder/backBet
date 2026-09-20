@@ -44,7 +44,7 @@ jobs:
         run: npm run lint
 
       # Gate duro da Fase 27: nenhuma vulnerabilidade CRÍTICA nas dependências
-      # de produção. Moderadas/altas conhecidas: docs/SECURITY-OPS.mdx.
+      # de produção. Moderadas/altas conhecidas: docs/DEPLOY.mdx.
       - name: Scan de dependências (audit crítico - produção)
         run: npm run audit:prod:critical
 

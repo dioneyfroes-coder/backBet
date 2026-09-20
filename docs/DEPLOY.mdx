@@ -1,131 +1,137 @@
 ---
-title: "Deploy — Fase 25"
-description: "Arquitetura inicial de deploy do BackBet: Cloudflare, reverse proxy Caddy com TLS, separação de processos (API/saque/contatos/e-mail) e Mongo/Redis sem acesso público."
+title: "Deploy, Docker e Segurança Operacional"
+description: "Composes, proxy/TLS, segredos (secrets), endurecimento de servidor, scan de dependências, rotação e checklist pré-deploy."
 slug: "/docs/deploy"
+sidebar_label: "Deploy & Segurança"
 ---
 
-# Deploy — Fase 25
+# Deploy, Docker e Segurança Operacional
 
-> Esta fase adiciona a camada faltante da Fase 17 (`docs/DOCKER.mdx`): o
-> **reverse proxy** com TLS (Caddy) na frente da API e o fluxo completo
-> **Cloudflare → proxy → API/workers**. Processos de saque, contatos e
-> e-mail já são separados desde a Fase 17.
+Guia de implantação do BackBet: Docker Compose, reverse proxy/TLS, política de **segredos**, listas de verificação pré-deploy e operação no servidor.
 
-## Arquitetura inicial suficiente
+## Docker Compose
 
-```text
-Internet
-   ↓
-Cloudflare (DNS proxied + TLS/edge, opcional Tunnel = 0 portas públicas)
-   ↓
-Caddy — reverse proxy / load balancer / TLS automático (host Docker)
-   ↓
-BackBet API (backbet:3000, rede interna do Compose)
-   ├── MongoDB   (serviço interno do Compose — NUNCA público)
-   ├── Redis     (serviço interno do Compose — sem porta publicada)
-   └── Workers   (processos separados, mesma imagem)
-        ├── saque      (start-withdrawal-worker.js — Bull: withdrawal_payouts)
-        └── contatos   (start-contact-worker.js — Bull: contact_queue + e-mail)
+| Compose | Finalidade |
+|---------|-----------|
+| `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers |
+| `docker-compose.test.yml` | Infra de teste isolada (Mongo + Redis no loopback) |
+| `docker-compose.proxy.yml` | Reverse proxy (Caddy/TLS) opcional |
+| `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional, liga o `/metrics`) |
+
+Produção (mesmo host):
+
+```bash
+docker compose up -d --build
 ```
 
-Decisões do MVP:
+Mongo e Redis ficam **sem porta pública** (serviços internos do Compose); só a API e o proxy de TLS são expostos.
 
-- **Um único ponto público**: o Caddy publica só `80/443` e conversa com a API
-  na rede interna do Compose. Com o overlay ativo, a API não precisa de porta
-  pública (`BACKBET_PORT=127.0.0.1:3000`).
-- **TLS automático** pelo Caddy (Let's Encrypt). Com Cloudflare na frente em
-  modo proxied, use **Full** (ou Full (strict)).
-- **Workers separados da API**: consumem as mesmas filas Bull; escalar a API
-  com `--scale backbet=N` não duplica o processamento das filas (semântica
-  Bull), e múltiplos workers também são seguros (a fila distribui).
-- **E-mail**: hoje é processado pelo `contact-worker` (mesmo script usado pelo
-  app `backbet-mailer` do PM2). Para volume, rode um segundo worker via saída
-  do compose `contact-worker` em outra instância — sem mudança de código.
+> Após mudanças de dependências/schema: `npm run docker:rebuild` (rebuild limpo da imagem).
 
-## Arquivos desta fase
+## Proxy e TLS
 
-| Arquivo | Onde roda | Função |
+- `docker-compose.proxy.yml` sobe **Caddy** com certificado automático; `deploy/proxy/Caddyfile` define o domínio público.
+- Produção sugerida: `https://api.backbet.com` (HTTPS + cert automático, HSTS opcional).
+- Verificação pós-deploy: `curl -sf https://$PUBLIC_DOMAIN/health` e `curl -sfI ... | grep -i strict-transport-security`.
+
+## Segredos — política e gestão
+
+Regra máxima: **nenhum segredo no Git.** `.env` é ignorado; `.env.example` só contém exemplos seguros.
+
+### Catálogo
+
+| Variável | Descrição | Obrigatório? |
 |---|---|---|
-| `docker-compose.proxy.yml` | server01 (overlay) | Adiciona o serviço `caddy` + volumes `caddy_data`/`caddy_config` |
-| `deploy/proxy/Caddyfile` | montado em `/etc/caddy/Caddyfile` | Reverse proxy, TLS, gzip, headers de segurança |
-| `docs/DEPLOY.mdx` | — | Este guia |
+| `JWT_SECRET` | Assina tokens JWT | **Sim, sempre** (`env.ts` lança sem ele) |
+| `MONGODB_URI` | Conexão Mongo (embute usuário/senha) | **Sim em produção** |
+| `REDIS_URL` | Conexão Redis | **Sim em produção** |
+| `MONGO_ROOT_PASSWORD` | Admin do Mongo | Sim (compose) |
+| `MONGODB_APP_PASSWORD` | Usuário `readWrite` da app | Sim (compose) |
+| `MAILER_SMTP_URL` | URL SMTP do worker de contato | Não (sem valor → `jsonTransport`) |
+| `SMTP_PASSWORD` / `SMTP_USERNAME` | SMTP do health-monitor | Só com `OBS_ENABLE_EMAIL_ALERTS=true` |
+| `GF_ADMIN_PASSWORD` | Admin do Grafana | Só com observability |
+| `PM2_WEB_PASSWORD` | Auth da WebUI do PM2 | Não (default inseguro `change-me-now` — **troque**) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Collector OTLP | Só com tracing remoto |
+| `PAYMENT_PROVIDER_KEY` / `PIX_PROVIDER_KEY` | PSP (futuro) | Só com PSP real |
 
-## Passo a passo
+### Como o código protege
 
-### 1. Cloudflare (DNS)
+`src/shared/config/env.ts`: lança erro sem `JWT_SECRET`; em produção exige `MONGODB_URI`/`REDIS_URL`; nunca loga valores (boot expõe só `hasJwtSecret: boolean`); credenciais em URL exigem percent-encoding.
 
-1. Aponte o domínio para o DNS da Cloudflare (nameservers).
-2. Crie um registro **A proxied** do `PUBLIC_DOMAIN` (ex.: `api.backbet.example.com`)
-   para o IP público do server01.
-3. SSL/TLS → modo **Full** (certificado da origem: o Caddy emite o dele).
+### Guard de CI: `npm run check:secrets`
 
-### 2. Reverse proxy (Caddy) no host
+`scripts/check-secrets.cjs` varre apenas arquivos rastreados pelo Git (`git ls-files`) e falha se encontrar nomes sensíveis (`.env*`, `.pem`, `.key`, `credentials`), chaves AWS/Stripe/GitHub, JWTs, e URLs `smtp(s)://user:pass@` / `mongodb://user:pass@` com credencial real. Já roda no `npm run check`.
 
-```bash
-cp .env.example .env
-# edite o .env e adicione:
-#   PUBLIC_DOMAIN=api.backbet.example.com
-#   BACKBET_PORT=127.0.0.1:3000     # API só em loopback (proxy é o ponto público)
+### Secret managers (produção)
 
-docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --build
-```
+O MVP usa `.env` + `env_file` do Compose (atende a fase 26). Para operação real:
 
-O Caddy valida o domínio, emite o certificado e roteia para `backbet:3000`.
-Para balancear a API (opcional):
+- **Doppler / 1Password CLI**: `doppler run -- docker compose ...` sem `.env` em disco;
+- **Hashicorp Vault / AWS Secrets Manager**: lidos no entrypoint (`scripts/entry.cjs`).
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d --scale backbet=2
-```
+A troca não altera código — `env.ts` continua lendo `process.env`.
 
-### 3. Validação
+### Rotação
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.proxy.yml ps
-curl -sf https://$PUBLIC_DOMAIN/health
-curl -sf https://$PUBLIC_DOMAIN/readiness
-curl -sfI https://$PUBLIC_DOMAIN/ | grep -i 'strict-transport-security|server'
-```
+- Rotacione `JWT_SECRET`, `MONGODB_URI`, SMTP e chaves de PSP de forma planejada; reinicie API + workers após rotacionar (config lida no boot).
+- Credenciais de banco rotacionadas exigem atualizar também o backup/restore (`docs/BACKUP_RECOVERY.mdx`).
 
-Checagem de superfície exposta (deve haver **só** 80/443 no host):
+## Segurança Operacional (checklist pré-deploy)
 
-```bash
-ss -tlnp | grep -E ':80|:443|:3000'
-# esperado: 80/443 = caddy; 3000 = 127.0.0.1 (loopback) se BACKBET_PORT=127.0.0.1:3000
-```
-
-### 4. Nada de Mongo/Redis público
-
-- **Redis**: no `docker-compose.yml` o serviço `redis` **não publica porta**
-  (acesso interno ao Compose apenas) — conferido por design.
-- **MongoDB**: no `docker-compose.yml` o serviço `mongodb` é **interno** ao
-  Compose (sem porta pública); o único ponto exposto é o proxy (`80/443`).
-  - Usuário da aplicação `readWrite` apenas no banco `backbet`
-    (`deploy/mongo/init-app-user.sh`).
-  - Com o overlay de proxy ativo, a própria API pode ficar fora da Internet
-    (`BACKBET_PORT=127.0.0.1:3000`).
-- **Variant Zero-port**: com **Cloudflare Tunnel** (`cloudflared` no host)
-  o Caddy nem precisa expor `80/443`; o túnel conecta o host à edge da
-  Cloudflare. Ótimo quando o host só tem acesso de saída.
-
-## Separação de processos (API × saque × contatos × e-mail)
-
-| Processo | Script | Fila / papel |
+| Item | Situação | Onde/passo |
 |---|---|---|
-| API | `dist/index.js` | HTTP + admin + cron (contagem de dependências) |
-| Worker de saque | `dist/scripts/start-withdrawal-worker.js` | `withdrawal_payouts` → adaptador Pix → atualiza Mongo |
-| Worker de contatos | `dist/scripts/start-contact-worker.js` | `contact_queue` → envia e-mail (SMTP/`jsonTransport`) |
-| E-mail (volume) | mesma imagem/script | segundo worker da fila de contato, se necessário |
+| HTTPS | Configurado | Caddy + cert automático (`deploy/proxy/Caddyfile`) |
+| Firewall | Configurado | `deploy/harden-server.sh` (UFW: 22/80/443, deny default) |
+| SSH por chave | Configurado | Mesmo script — recusa desabilitar senha sem chave instalada |
+| SSH root desabilitado | Configurado | `PermitRootLogin no` no script |
+| Updates automáticos | Configurado | `unattended-upgrades` no script |
+| Mongo/Redis privados | Configurado | Serviços internos do Compose + UFW default deny |
+| Logs sem segredos | Configurado | `env.ts` loga só `hasJwtSecret`; guard `check:secrets` |
+| Backups testados | Configurado | `npm run backup:*` + `/docs/BACKUP_RECOVERY.mdx` |
+| Monitoramento/alertas | Configurado | `deploy/observability` + alertas (12 regras) |
+| Scan de dependências | Gate no CI | `npm run audit:prod:critical` falha o build se houver crítica |
 
-No PM2 a separação equivalente já existe: `ecosystem.config.cjs` (API),
-`ecosystem.withdrawal.config.cjs`, `ecosystem.contact.config.cjs` e
-`ecosystem.mailer.config.cjs`.
+### Scan de dependências
 
-## Checklist pré-lançamento (rampa para as fases 26–27)
+| Comando | Escopo | Uso |
+|---|---|---|
+| `npm run audit` | Todas | Relatório completo |
+| `npm run audit:prod` | Só produção | Prioridade de deploy |
+| `npm run audit:prod:critical` | Produção + crítica | Gate do CI |
 
-- [ ] `.env` fora do Git; `JWT_SECRET` forte (`openssl rand -hex 32`);
-- [ ] `MONGODB_URI`/`REDIS_URL` apontando para os serviços internos do Compose;
-- [ ] Firewall: só 80/443 públicos; Mongo/Redis internos (sem porta pública);
-  `/metrics` do Prometheus restrito ou sem exposição pública;
-- [ ] `PUBLIC_DOMAIN` com registro **proxied** na Cloudflare e TLS Full;
-- [ ] `npm run backup:create` agendado e `docs/BACKUP_RECOVERY.mdx` seguido;
-- [ ] Alertas de `deploy/observability` ativos (ver `docs/OBSERVABILITY.mdx`).
+Situação atual (após `npm audit fix`, não forçado): **produção 47 vulnerabilidades, 0 críticas**.
+
+Dívidas monitoradas (exigem major bump):
+
+| Pacote | Severidade | Plano |
+|---|---|---|
+| `@opentelemetry/*` (auto-instrumentation) | alta | major `sdk-node@0.221`; usado só com `TRACING_ENABLED` |
+| `nodemailer` | alta | fix em `nodemailer@9` (major) |
+| `js-yaml` | alta | fix via `pm2@7` (major) |
+| `bull` (uuid transitivo) | moderada | Bull deprecated → migrar p/ BullMQ pós-MVP |
+
+Sem `--force` para não quebrar o MVP; `npm audit fix` não-forçado nas fases de manutenção.
+
+## Endurecimento do servidor
+
+No host Ubuntu, **antes** de subir a aplicação:
+
+```bash
+sudo bash deploy/harden-server.sh
+```
+
+Idempotente e seguro; recomendações: usuário admin com `sudo`, nunca `root` direto; `ufw status verbose` e `ssh -i <chave> usuario@<ip>` testados em nova sessão antes de fechar a atual; `fail2ban` opcional.
+
+## Verificação operacional (pós-deploy)
+
+```bash
+npm run check:secrets                    # sem segredos no Git
+npm run audit:prod:critical              # 0 críticas em produção
+curl -sf https://$PUBLIC_DOMAIN/health   # HTTPS + Caddy ok
+ufw status verbose                       # só 22, 80, 443
+npm run backup:drill                     # ciclo de recuperação ok
+```
+
+**Laboratório (referência):** IP estático `192.168.22.250` — porta `3000` em dev, proxy/TLS conforme acima para público.
+
+**Última atualização:** 20 de setembro de 2026.

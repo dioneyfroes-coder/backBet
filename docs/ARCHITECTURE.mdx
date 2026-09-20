@@ -14,154 +14,117 @@ O BackBet é um monólito modular escrito em TypeScript/Node 22+ que aplica prin
 4. **Infraestrutura (`src/infrastructure/*`)** – persistência, cache, autenticação, observabilidade e config.
 5. **Shared (`src/shared`)** – erros, configs, request context e utilidades reutilizadas.
 
-A seguir detalhamos cada área funcional e as decisões de engenharia que sustentam o projeto.
-
-## Visão Geral dos Bounded Contexts
+## Bounded Contexts
 
 | Contexto | Diretório | Responsabilidades chave | Principais agregados |
 |----------|-----------|-------------------------|----------------------|
-| User Core | `src/core/user` | Cadastro, autenticação local, sincronização com provedores de identidade, atualização de perfil e e-mail. | `User`, `Email` VO |
-| Finance Core | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito e workflow de solicitações de saque (locks/unlock). | `Wallet`, `Money`, `Currency` |
-| Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas. | `Bet`, `Event`, `Money`, `Odds` |
-| Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados e contratos genéricos. | - |
+| User Core | `src/core/user` | Cadastro, autenticação local, perfil, preferências, upload de documentos | `User`, `Email` VO |
+| Finance Core | `src/core/finance` | Carteiras, depósitos/saques, pacotes de crédito, workflow de saques | `Wallet`, `Money`, `Currency` |
+| Betting Core | `src/core/betting` | Eventos, odds, colocação/cancelamento/resolução de apostas | `Bet`, `Event`, `Odds` |
+| Risk Core | `src/core/risk` | Exposição por usuário, contadores de reserva atômica, limites | `RiskProfile`, `RiskExposureCounter` |
+| Treasury | `src/core/treasury` | `HouseTreasuryService`, reconciliação, relatórios financeiros | `HouseWallet`, entradas de legado |
+| Compliance | `src/core/compliance` | Gates de saque via ports de KYC/geolocalização/device | — |
+| Responsible Gambling | `src/core/responsibleGambling` | Limites de depósito/aposta e auto-exclusão | `ResponsibleGamblingProfile` |
+| Audit | `src/core/audit` | Eventos append-only + retenção | `AuditEvent` |
+| SIGAP | `src/core/sigap` | Transmissão regulatória com ciclo ACK/REJECT + retry | `SigapTransmission` |
+| Games | `src/core/games` | Mini games (Coin Flip) | `GameRound` |
+| Shared Kernel | `src/core/shared` | `AggregateRoot`, `UniqueId`, `Result`, `DomainError`, DTOs paginados | — |
 
-Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) consumidas pela camada de aplicação. Implementações concretas são providas por factories que escolhem entre MongoDB/Mongoose e stores in-memory, permitindo testes rápidos e produção durável.
+Cada contexto expõe interfaces (`IUserRepository`, `IWalletRepository`, `IBetRepository`, etc.) consumidas pela camada de aplicação. Implementações concretas são providas por factories (in-memory / Mongoose).
 
 ## Camadas em Detalhe
 
 ### 1. API Layer (`src/infrastructure/api`)
-- **`ApiServer.ts`** monta Express 5 com `helmet`, CORS dinâmico, `express-rate-limit`, parsers, Swagger UI (`/api/docs`) e endpoints de saúde.
-- Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware` e handlers de erro padronizados.
-- Autenticação:
-  - Produção: Passport (`passport-jwt`) ou outro provedor de identidade configurado.
-  - Dev/Test: bypass opcional (`ALLOW_DEV_BEARER_BYPASS`) que aceita `Authorization: Bearer <userId>` sem JWT.
-- Rotas residem em `routes/*.ts` e importam controllers do respectivo módulo (`controllers/*Controller.ts`). Todas são registradas via `createApiRouter` no `server.ts` por prefixos: `/auth`, `/users`, `/wallets`, `/finance`, `/bets`.
+- **`ApiServer.ts`** monta Express 5 com `helmet`, CORS por allowlist, `express-rate-limit` (global + por rota), parsers (`express.json({ limit: '10mb' })`), Swagger UI (`/api/docs`) e endpoints de saúde.
+- Middlewares próprios: `requestIdMiddleware`, `loggingMiddleware` (logs JSON request_start/end/error) e handlers de erro padronizados (`BaseController`).
+- Autenticação: Passport (`passport-jwt`) em produção; bypass explícito em dev (`ALLOW_DEV_BEARER_BYPASS`).
+- Rotas residem em `routes/*.ts` e importam controllers do respectivo módulo; registradas via `createApiRouter` sob `/api/v1`.
 
 ### 2. Application Layer
-- Use cases ficam em `src/core/<context>/application/use-cases`. Ex: `RegisterUser`, `UpdateProfile`, `DepositFunds`, `PlaceBet`.
-- Cada caso injeta repositórios + serviços via construtor (DI manual) e retorna `Result<T>` para padronizar sucesso/erro.
-- Hooks de cache (`cacheUserProfile`, `cacheWalletBalance`, etc.) são chamados aqui para manter o domínio puro.
+- Use cases em `src/core/<context>/application/use-cases` (ex.: `RegisterUser`, `DepositFunds`, `PlaceBet`, `RequestWithdrawal`, `ReconcileTreasury`).
+- Cada caso injeta repositórios + serviços via construtor (DI manual) e retorna `Result<T>`.
+- Hooks de cache são chamados aqui para manter o domínio puro.
 
 ### 3. Domain Layer
 - Entidades estendem `AggregateRoot` e expõem métodos para mutações válidas (`Wallet.lockFunds`, `Bet.cancel`).
-- Value Objects encapsulam validações (`Email`, `Money`, `Odds`).
-- Erros de domínio herdam de `DomainError`, permitindo tradução direta para `AppError` na camada API.
+- Value Objects encapsulam validações (`Email`, `Money`, `Odds`, `BetAmount`).
+- Erros de domínio herdam de `DomainError`, traduzidos para `AppError` na camada API.
 
 ### 4. Infraestrutura
-- **Persistência (`src/infrastructure/persistence`)**: factories (`factory.ts`) escolhem Mongoose (`persistence/mongoose/*`) ou adaptadores in-memory.
-- **Cache (`src/infrastructure/cache`)**: `RedisClient` (ioredis), métricas internas e hooks declarativos. TTLs configurados em `shared/config/cacheConfig.ts`.
-- **Autenticação (`src/infrastructure/auth`)**: `JwtService`, adaptadores para provedores de identidade (ex.: Passport) e middlewares complementares.
+- **Persistência (`src/infrastructure/persistence`)**: `factory.ts` escolhe Mongoose (`persistence/mongoose/*`) ou adaptadores in-memory; conexão Mongo garante replica set para transações.
+- **Cache (`src/infrastructure/cache`)**: `RedisClient` (ioredis), hooks declarativos e TTLs em `shared/config/cacheConfig.ts`.
+- **Auth (`src/infrastructure/auth`)**: `JwtService` + estratégias Passport.
 - **Observabilidade (`src/infrastructure/observability`)**: snapshots (cache/resiliência/dependências) e tracing OpenTelemetry (`tracing.ts`).
-- **Config (`src/shared/config/*.ts`)**: single source of truth para envs, rate limit, CORS, security, cache e OTLP.
+- **Jobs**: `SigapTransmissionJob`, `AuditRetentionJob`, workers Bull de contato/saque.
+- **Config (`src/shared/config/*.ts`)**: fonte única para envs, rate limit, CORS, security, cache, audit, SIGAP e OTLP.
 
 ### 5. Shared Layer (`src/shared`)
-- `errors/AppError`, `observability/requestContext`, helpers de logging e tipos comuns.
-- Config loaders (`env.ts`, `appConfig.ts`, `cacheConfig.ts`, `observabilityConfig.ts`).
+- `errors/AppError`, `observability/requestContext` (AsyncLocalStorage), helpers de logging e tipos comuns; loaders `env.ts`/`appConfig.ts`/`cacheConfig.ts`/`observabilityConfig.ts`.
 
 ## Fluxo de Requisição
 
-1. **Entrada HTTP** – `ApiServer` aplica middlewares (helmet, CORS, rate-limit, request-id, logging).
-2. **Autenticação** – Passport/JWT (ou outro provedor configurado) ou bypass preenche `req.auth.userId`; rotas críticas usam `protectedRoute` para validar token.
-3. **Controller/DTO** – Envelopes `BaseController` + Zod validam input e produzem resposta uniforme.
-4. **Use Case** – Execução de `RegisterUser`, `DepositFunds`, `PlaceBet`, etc., orquestrando domínios e cache.
-5. **Repositórios** – Factories resolvem `create<User|Wallet|Bet>Repository()` e tocam Mongo ou memória.
-6. **Cache / Side effects** – Hooks Redis atualizam perfis, saldos, odds. Eventos (log/tracing) são emitidos.
-7. **Resposta** – Controller traduz `Result` para o envelope JSON com `success`, `data/error`, `meta` (timestamp + `requestId`).
+1. **Entrada HTTP** – `ApiServer` aplica helmet, CORS, rate-limit, request-id e logging.
+2. **Autenticação** – Passport/JWT preenche `req.auth.userId`; rotas críticas usam `protectedRoute`; rotas admin usam `requireAdminRole`.
+3. **Controller/DTO** – `BaseController` + Zod validam input e produzem resposta uniforme.
+4. **Use Case** – Execução orquestrando domínios, repositórios e cache.
+5. **Repositórios** – Factories resolvem `create<User|Wallet|Bet>Repository()`.
+6. **Cache/Side effects** – Hooks Redis atualizam perfis, saldos, odds; eventos de auditoria/tracing emitidos.
+7. **Resposta** – Envelope JSON com `success`, `data/error` e `meta` (timestamp + `requestId`).
 
-## Persistência e Repositórios
+## Persistência e Transações
 
-| Recurso | Interface | Implementações | Observações |
-|---------|-----------|----------------|-------------|
-| Usuários | `IUserRepository` | `MongooseUserRepository`, `UserRepository` (in-memory) | Índices únicos em email/username; sincroniza IDs do provedor de identidade quando aplicável. |
-| Carteiras | `IWalletRepository` | `MongooseWalletRepository`, `WalletRepository` | Histórico embutido e locks de saque. |
-| Apostas/Eventos | `IBetRepository`, `IEventRepository` | `MongooseBetRepository`, `BetRepository`, `EventRepository` | Índices por `status`/`userId`/`eventId`. |
-| Pacotes de crédito | `ICreditPackageRepository` | `MongooseCreditPackageRepository`, `CreditPackageRepository` | Mantém catálogos com tiers, bônus e ativos/inativos. |
-| Solicitações de saque | `IWithdrawalRequestRepository` | `MongooseWithdrawalRequestRepository`, `WithdrawalRequestRepository` | Controla lifecycle (`PENDING`, `APPROVED`, `REJECTED`) com logs de aprovação. |
-
-Factories `create<User|Wallet|Bet|Event>Repository()` leem `USE_MONGOOSE_PERSISTENCE`. Em produção, `server.ts` garante `connectMongoDB()` antes de montar o `ApiServer` e registra handlers de shutdown para `disconnectMongoDB()` e `redisClient.quit()`.
+- Mongo roda como **replica set** (`rs0`); transações cobrem **wallet/ledger/bet/treasury** de forma atômica (ACID).
+- **Concorrência**: locking otimista (`HouseWallet.version` → `409 CONFLICT` em escrita obsoleta) + `IdempotencyService` (`SET NX` no Redis; replay devolve o mesmo resultado; payload diferente → `409`) + retry transitório com backoff exponencial/jitter (`retryTransient.ts`) em `WalletService.run()` e `BetService.placeBet()`.
+- Factories leem `USE_MONGOOSE_PERSISTENCE`; em produção `server.ts` garante `connectMongoDB()` antes de montar o server e registra shutdown limpo.
 
 ## Cache, Rate Limiting e Confiabilidade
 
-- **Cache Redis**: habilitado via `CACHE_ENABLED`. Hook especiais:
-  - `cacheUserProfileMiddleware`, `cacheWalletBalanceMiddleware`, `cacheWalletHistoryMiddleware`, `cacheEventOddsMiddleware`.
-  - Flush helpers após mutações (`flushWalletCache`, `flushEventOddsCache`).
-- **Rate limiting**:
-  - Global (`express-rate-limit`) configurável por `RATE_LIMIT_*`.
-  - Por rota via `createRouteRateLimiter` com variáveis dedicadas (`AUTH_*_RATE_LIMIT_*`, `WALLET_*_RATE_LIMIT_*`, `BET_*_*`).
-- **Request Context**: `AsyncLocalStorage` propaga `requestId/userId` para logs, snapshots e handlers de erro.
-- **Health/Readiness**: `/health`, `/readiness`, `/health/cache` expostos pelo `ApiServer`. `dependencyHealthSnapshot` sinaliza status e será consumido por PM2 WebUI/alertas.
+- **Cache Redis** (`CACHE_ENABLED`): hooks `cacheUserProfile`, `cacheWalletBalance`, `cacheWalletHistory`, `cacheEventOdds` + flush após mutações.
+- **Rate limiting**: global (`RATE_LIMIT_*`) e por rota (`AUTH_*`, `WALLET_*`, `BET_*`).
+- **Request context**: `AsyncLocalStorage` propaga `requestId/userId` para logs e erros.
+- **Health/Readiness**: `/health`, `/readiness`, `/health/cache` e snapshots de dependência alimentam PM2 WebUI e alertas.
 
 ## Observabilidade
 
-- **Snapshots**: `cacheMetricsSnapshot`, `resilienceMetricsSnapshot` e `dependencyHealthSnapshot` guardam o estado mais recente e são devolvidos via `/health/cache` e `/readiness`. Eles substituem os gauges Prometheus e alimentarão PM2 WebUI/alertas de e-mail.
-- **Tracing**: `src/infrastructure/observability/tracing.ts` inicializa OpenTelemetry (Express, Mongoose, ioredis instrumentations) quando `TRACING_ENABLED=true`.
-- **Logging estruturado**: middleware escreve JSON com `request_start`, `request_end` e `request_error`, sempre incluindo `requestId`, método, rota e duração.
-- **Endpoint `/metrics`**: mantido apenas por compatibilidade; retorna `410 Gone` até que `OBS_ENABLE_PROMETHEUS=true` durante transições.
+- **Logs JSON**: middleware escreve `request_start`, `request_end` e `request_error` com `requestId`, método, rota e duração — nunca segredos.
+- **Snapshots**: `cacheMetricsSnapshot`, `resilienceMetricsSnapshot` e `dependencyHealthSnapshot` expostos via `/health/cache` e `/readiness`.
+- **Tracing**: OpenTelemetry (Express/Mongoose/ioredis) quando `TRACING_ENABLED=true`, exportado via OTLP.
+- **Métricas**: `/metrics` responde `410 Gone` por padrão; só é ativo com `OBS_ENABLE_PROMETHEUS=true` (uso opcional em dev). Em produção, alertas por regras em `deploy/observability/alerting/alerts.yml` (12 regras) + e-mail.
+- **Drill centrais**: `npm run backup:*`, `npm run security:assess`, `npm run health-monitor:start`.
 
 ## Fluxos Críticos
 
 ### Registro de Usuário + Carteira
-```
-POST /api/v1/auth/register
-→ AuthController valida DTO (Zod) e chama RegisterUser use case
-→ UserService cria User (Email VO) e persiste via IUserRepository
-→ WalletService cria Wallet padrão (BRL) e persiste via IWalletRepository
-→ Cache invalida perfil/carteira e a resposta inclui `status`, `isActive`, snapshot da carteira e (quando o usuário já está ativo) `accessToken`/`refreshToken` + `sessionId`
-→ Caso o status permaneça `PENDING_VERIFICATION`, o frontend faz polling usando `GET /api/v1/auth/register/status/:userId` até `isActive=true`
-```
+`POST /api/v1/auth/register` → AuthController valida (Zod) → `RegisterUser` cria `User` e `Wallet` (BRL) → resposta inclui `accessToken`/`refreshToken` quando ativo; usuário `PENDING_VERIFICATION` faz polling em `GET /api/v1/auth/register/status/:userId` até `isActive=true`.
 
 ### Depósito / Saque
-```
-POST /api/v1/wallets/deposit | withdraw
-→ WalletController verifica rate limit específico e autenticação
-→ IdempotencyService reserva Idempotency-Key quando fornecida
-→ WalletService.deposit/withdraw usa Value Objects Money/Currency
-→ Persistência atualiza histórico + locks
-→ cacheWalletBalance/cacheWalletHistory são atualizados
-```
-
-### Concorrência e idempotência
-
-- `HouseWallet.version` é incrementado a cada mutação persistida; o repositório Mongoose inclui a versão anterior no filtro da atualização e retorna `409 CONFLICT` em caso de conflito.
-- `IdempotencyService` usa `SET NX` no Redis para operações financeiras e workers. O resultado concluído pode ser reutilizado; payloads diferentes com a mesma chave são rejeitados.
-- O fallback em memória existe apenas para testes/desenvolvimento. Em produção, Redis e Mongo devem estar habilitados e monitorados.
-- A transação ACID completa entre carteira, aposta e efeitos externos continua pendente.
+`POST /api/v1/wallets/deposit | withdraw` → rate limit + auth → reserva `Idempotency-Key` → `WalletService.deposit/withdraw` (Money/Currency) em transação + ledger → cache atualizado. Webhook `POST /api/v1/webhooks/pix` (HMAC `X-BackBet-Signature`) credita/estorna via `PIX_PAID`/`PIX_REFUNDED`.
 
 ### Colocar/Cancelar Aposta
-```
-POST /api/v1/bets
-→ BetController chama PlaceBet use case
-→ BetService valida usuário ativo, mercado aberto e odds
-→ WalletService.withdraw bloqueia fundos
-→ BetRepository persiste Bet PENDING; cache de odds é consultado
-→ Cancelamentos chamam WalletService.deposit para reversão
-```
+`POST /api/v1/bets` → `BetService` valida usuário ativo, mercado aberto, odds e exposição (`risk`) → bloqueia fundos na carteira em transação → persiste `Bet` `PENDING` → cancelamento reverte via `WalletService.deposit` em transação.
+
+### Transmissão SIGAP
+`SigapTransmissionJob` envia apostas/eventos ao adapter (mock em dev); o resultado é `SigapTransmissionResult = ACKED | REJECTED`. REJECTED dispara **retry** (padrão `SIGAP_RETRY_MAX_ATTEMPTS=5`, backoff) e incrementa a métrica `backbet_sigap_submission_rejected_total`. Auditoria registra cada tentativa. Detalhes: `docs/SIGAP_CONFORMIDADE.mdx`.
+
+### Auditoria
+`AuditService.recordAdminAction` persiste `AuditEvent` (append-only); `AuditRetentionJob` remove eventos mais antigos que `AUDIT_RETENTION_DAYS` (1825 = 5 anos), registrando um evento `DATA_RETENTION` a cada execução. `AdminController` registra `bet.settle`, `event.status`, `risk.user.reconcile`.
 
 ## Segurança
 
-- Autenticação: Passport/JWT (produção) ou JWT/bypass em dev.
-- Autorização: `protectedRoute` + guardas adicionais (ex.: aprovação de withdraw).
-- Segurança HTTP: `helmet`, CORS com allowlist, HSTS opcional, `x-request-id` obrigatório.
-- Configurações sensíveis carregadas por `shared/config/env.ts`, mantendo secrets fora do código.
+- Autenticação JWT (Passport) + `requireAdminRole` para backoffice; bcrypt custo 12.
+- Helmet, CORS allowlist, rate limiting, payload limit e validação Zod em todas as entradas.
+- `npm run check:secrets` falha o build se encontrar segredo rastreado pelo Git; boot de `env.ts` lança sem `JWT_SECRET` e nunca loga valores.
+- Endurecimento pré-deploy em `deploy/harden-server.sh` (UFW, SSH por chave, unattended-upgrades) — detalhes em `docs/DEPLOY.mdx`.
 
 ## Estrutura de Diretórios (resumo)
 
 ```
 src/
 ├── core/
-│   ├── shared/
-│   ├── user/
-│   │   ├── domain/
-│   │   └── application/use-cases/
-│   ├── finance/
-│   └── betting/
+│   ├── shared/ user/ finance/ betting/ risk/ treasury/
+│   ├── compliance/ responsibleGambling/ audit/ sigap/ games/
 ├── infrastructure/
-│   ├── api/
-│   ├── auth/
-│   ├── cache/
-│   ├── observability/
-│   ├── persistence/
-│   └── config/
+│   ├── api/ auth/ cache/ observability/ persistence/ jobs/
 ├── shared/
 ├── index.ts
 ├── server.ts
@@ -170,12 +133,12 @@ src/
 
 ## Roadmap Arquitetural
 
-1. **Eventos de domínio/Outbox** – formalizar `UserCreated`, `BetPlaced`, `FundsWithdrawn` e publicar para integrações futuras.
+1. **Eventos de domínio/Outbox** – formalizar `BetPlaced`, `FundsWithdrawn` etc. para integrações futuras.
 2. **Persistência única (Mongo)** – remover fallback in-memory em produção e habilitar migrações automáticas.
 3. **Feature Flags** – mover toggles críticos (bypass auth, cache) para um provider dedicado.
-4. **Escala Horizontal** – preparar `ApiServer` para múltiplas instâncias atrás de um ingress e externalizar sessões do provedor de identidade.
-5. **Observabilidade avançada** – completar integração PM2 WebUI + alertas por e-mail usando os snapshots operacionais.
+4. **Escala Horizontal** – múltiplas instâncias atrás de um ingress; filas Bull requeren Redis compartilhado (já é o caso).
+5. **Provedores reais** – adapter SIGAP mTLS, KYC/geolocalização/PSP (W-01..W-05, ver `docs/SIGAP_CONFORMIDADE.mdx`).
 
 ---
 
-**Última atualização:** 3 de dezembro de 2025
+**Última atualização:** 20 de setembro de 2026.
