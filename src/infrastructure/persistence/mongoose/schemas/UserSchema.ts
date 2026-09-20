@@ -11,6 +11,10 @@ export interface IUserDocument extends Document<string> {
   updatedAt: Date;
   pixKey?: string | null;
   pixUpdatedAt?: Date | null;
+  passwordRecovery?: {
+    token: string;
+    expiresAt: Date;
+  } | null;
   documents?: Array<{
     id: string;
     type?: string | null;
@@ -67,6 +71,13 @@ export const userSchema = new Schema<IUserDocument>(
     },
     pixUpdatedAt: {
       type: Date,
+      default: null,
+    },
+    passwordRecovery: {
+      type: {
+        token: { type: String, required: true },
+        expiresAt: { type: Date, required: true },
+      },
       default: null,
     },
     preferences: {
