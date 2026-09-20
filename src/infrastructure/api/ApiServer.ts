@@ -153,8 +153,17 @@ export class ApiServer {
       );
     }
 
-    // Body parsing
-    this.app.use(express.json({ limit: '10mb' }));
+    // Body parsing. O `verify` captura o corpo CRU (rawBody) para que
+    // webhooks assinados (HMAC) validem a assinatura sobre os bytes exatos
+    // enviados pelo PSP.
+    this.app.use(
+      express.json({
+        limit: '10mb',
+        verify: (req: Request, _res: Response, buf: Buffer) => {
+          (req as Request & { rawBody?: string }).rawBody = buf.toString('utf8');
+        },
+      }),
+    );
     this.app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
     // Serve uploaded files in local development via /uploads

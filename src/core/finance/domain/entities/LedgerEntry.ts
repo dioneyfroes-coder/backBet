@@ -7,6 +7,7 @@
 
 export type LedgerOperationType =
   | 'DEPOSIT'
+  | 'PIX_REFUND'
   | 'BET_DEBIT'
   | 'BET_REFUND'
   | 'BET_WIN'

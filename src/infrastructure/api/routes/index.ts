@@ -10,6 +10,11 @@ import { createAdminRoutes, AdminRoutesDeps } from './adminRoutes';
 import { createGameRoutes, GameRoutesDeps } from './gameRoutes';
 import { createContactRoutes } from './contactRoutes';
 import { createPasswordRecoveryRoutes } from './passwordRecoveryRoutes';
+import { createPixWebhookRoutes, PixWebhookRoutesDeps } from './pixWebhookRoutes';
+import { createPixProvider } from '@/infrastructure/payments/pix';
+import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRepository';
+import { createLedgerRepository } from '@/infrastructure/persistence/factory';
+import { PixProviderPort } from '@/core/finance/domain/ports/PixProviderPort';
 import {
   createUserRepository,
   createWalletRepository,
@@ -38,6 +43,7 @@ export type ApiRoutesDeps = {
   events?: EventRoutesDeps;
   admin?: AdminRoutesDeps;
   games?: GameRoutesDeps;
+  pixWebhook?: PixWebhookRoutesDeps;
 };
 
 export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router> {
@@ -61,6 +67,12 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
   const riskRepository: IRiskRepository =
     deps.admin?.riskRepository || (await createRiskRepository());
 
+  // Provedor Pix e Ledger compartilhados entre a criação de charge (wallets) e o
+  // webhook de confirmação — o mock mantém o registry de charges em memória, então
+  // o MESMO provider deve atender os dois fluxos.
+  const sharedPixProvider: PixProviderPort = await createPixProvider();
+  const sharedLedgerRepository: ILedgerRepository = await createLedgerRepository();
+
   router.use('/', createBaseRoutes(deps.base ?? {}));
 
   router.use(
@@ -83,8 +95,10 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
   router.use(
     '/wallets',
     await createWalletRoutes({
-      walletRepository,
       ...(deps.wallet || {}),
+      walletRepository,
+      ledgerRepository: sharedLedgerRepository,
+      pixProvider: deps.wallet?.pixProvider ?? sharedPixProvider,
     }),
   );
   router.use(
@@ -122,6 +136,16 @@ export async function createApiRouter(deps: ApiRoutesDeps = {}): Promise<Router>
   );
   // Public contact endpoint
   router.use('/contact', await createContactRoutes());
+  // Public Pix webhook (autenticação por assinatura HMAC)
+  router.use(
+    '/webhooks',
+    await createPixWebhookRoutes({
+      ...(deps.pixWebhook || {}),
+      walletRepository,
+      ledgerRepository: deps.pixWebhook?.ledgerRepository ?? sharedLedgerRepository,
+      pixProvider: deps.pixWebhook?.pixProvider ?? sharedPixProvider,
+    }),
+  );
   router.use(
     '/admin',
     await createAdminRoutes({

@@ -8,6 +8,7 @@ import { ILedgerRepository } from '@/core/finance/domain/repositories/ILedgerRep
  */
 export const BALANCE_EFFECT: Record<LedgerOperationType, number> = {
   DEPOSIT: 1,
+  PIX_REFUND: -1,
   BET_DEBIT: -1,
   BET_REFUND: 1,
   BET_WIN: 1,
@@ -25,6 +26,7 @@ export const BALANCE_EFFECT: Record<LedgerOperationType, number> = {
  */
 export const LOCKED_EFFECT: Record<LedgerOperationType, number> = {
   DEPOSIT: 0,
+  PIX_REFUND: 0,
   BET_DEBIT: 0,
   BET_REFUND: 0,
   BET_WIN: 0,

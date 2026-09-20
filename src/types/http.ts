@@ -21,6 +21,7 @@ export type RequestWithContext<
   Locals extends RequestLocals = RequestLocals,
 > = TypedRequest<Params, ResBody, ReqBody, ReqQuery, Locals> & {
   id?: string;
+  rawBody?: string;
 };
 
 export type AsyncHandler<Req extends RequestWithContext = RequestWithContext, Res = unknown> = (

@@ -9,6 +9,8 @@ export async function createPixProvider(): Promise<PixProviderPort> {
     return new MockPixProvider({
       latencyMs: appConfig.payments.pix.mockLatencyMs,
       providerName: appConfig.payments.pix.providerName,
+      webhookSecret: appConfig.payments.pix.webhookSecret,
+      chargeTtlMs: appConfig.payments.pix.chargeTtlMs,
     });
   }
 

@@ -395,6 +395,9 @@ export const appConfig = {
       providerName: env.PIX_PROVIDER_NAME || 'backbet-mock-pix',
       mockLatencyMs: parsePositiveInt(env.PIX_MOCK_LATENCY_MS, 25),
       defaultPixKey: env.PIX_DEFAULT_KEY || 'pix@backbet.mock',
+      webhookEnabled: parseBoolean(env.PIX_WEBHOOK_ENABLED, true),
+      webhookSecret: env.PIX_WEBHOOK_SECRET || 'backbet-mock-webhook-secret',
+      chargeTtlMs: parsePositiveMs(env.PIX_CHARGE_TTL_MS, 5 * 60 * 1000),
       features: {
         depositsEnabled: parseBoolean(env.PIX_ENABLE_DEPOSITS, true),
         withdrawalsEnabled: parseBoolean(env.PIX_ENABLE_WITHDRAWALS, true),

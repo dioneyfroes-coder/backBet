@@ -151,7 +151,12 @@ Sessão/usuário: `GET/PUT /api/v1/users/me`, `POST /api/v1/users/me/documents`,
 `GET /api/v1/users/me/preferences`.
 
 Carteira: `GET /api/v1/wallets/me`, `POST /api/v1/wallets/deposit`,
+`POST /api/v1/wallets/deposit/pix-charge` (charge Pix **PENDING** assíncrona, sem crédito imediato),
 `POST /api/v1/wallets/withdraw`, `GET /api/v1/wallets/history`.
+
+Webhook Pix (público, autenticado por assinatura HMAC-SHA256 no header `X-BackBet-Signature`):
+`POST /api/v1/webhooks/pix` — eventos `PIX_PAID` (credita) / `PIX_REFUNDED` (estorna) / `PIX_CANCELED` (ignora);
+requer `PIX_WEBHOOK_ENABLED=true`.
 
 Apostas: `POST /api/v1/bets`, `GET /api/v1/bets`, `POST /api/v1/bets/:betId/cancel`.
 

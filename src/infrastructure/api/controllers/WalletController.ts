@@ -6,6 +6,7 @@ import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
+import { CreatePixCharge } from '@core/finance/application/use-cases/CreatePixCharge';
 import { flushWalletCache } from '@/infrastructure/cache/cacheHooks';
 import { appConfig } from '@/shared/config/appConfig';
 import { UserService } from '@core/user/domain/services/UserService';
@@ -21,6 +22,7 @@ export class WalletController extends BaseController {
     private withdrawUseCase: Withdraw,
     private getHistoryUseCase: GetHistory,
     private userService: UserService,
+    private createPixChargeUseCase?: CreatePixCharge,
   ) {
     super();
   }
@@ -361,6 +363,65 @@ export class WalletController extends BaseController {
     return this.ok(res, {
       transactions: result.transactions,
       pagination: { limit, offset, total: result.total },
+    });
+  }
+
+  /**
+   * @openapi
+   * /api/v1/wallets/deposit/pix-charge:
+   *   post:
+   *     tags:
+   *       - Wallets
+   *     security:
+   *       - bearerAuth: []
+   *     summary: Cria uma charge Pix (QR Code) sem creditar a carteira
+   *     description: >
+   *       Modela o fluxo assíncrono real: o usuário recebe o QR agora, paga no
+   *       PSP e o crédito só ocorre quando o webhook de confirmação
+   *       (`POST /api/v1/webhooks/pix`) for processado.
+   *     responses:
+   *       '201':
+   *         description: Charge criada (status PENDING, sem crédito)
+   *       '503':
+   *         description: Depósitos via Pix indisponíveis
+   */
+  async depositCharge(req: AuthenticatedRequest, res: Response): Promise<Response> {
+    const userId = getRequestUserId(req);
+
+    if (!userId) {
+      return this.unauthorized(res, 'Autenticação requerida');
+    }
+
+    if (!this.createPixChargeUseCase) {
+      return this.serviceUnavailable(res, 'Criação de charge Pix indisponível');
+    }
+
+    if (!appConfig.payments.pix.features.depositsEnabled) {
+      return this.serviceUnavailable(res, 'Depósitos via Pix estão temporariamente indisponíveis');
+    }
+
+    const payload = this.validateSchema(DepositDTO, req.body);
+    if (!payload) {
+      return this.badRequest(res, 'Dados inválidos');
+    }
+
+    const { pixCharge } = await this.createPixChargeUseCase.execute(
+      userId,
+      payload.amount,
+      payload.currency,
+      payload.description,
+    );
+
+    return this.created(res, {
+      message: 'Charge Pix criada; aguardando confirmação do pagamento',
+      pix: {
+        chargeId: pixCharge.chargeId,
+        reference: pixCharge.reference,
+        status: pixCharge.status,
+        provider: pixCharge.provider,
+        qrCode: pixCharge.qrCode,
+        expiresAt: pixCharge.expiresAt,
+      },
     });
   }
 

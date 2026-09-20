@@ -17,6 +17,7 @@ import { GetWallet } from '@core/finance/application/use-cases/GetWallet';
 import { Deposit } from '@core/finance/application/use-cases/Deposit';
 import { Withdraw } from '@core/finance/application/use-cases/Withdraw';
 import { GetHistory } from '@core/finance/application/use-cases/GetHistory';
+import { CreatePixCharge } from '@core/finance/application/use-cases/CreatePixCharge';
 import { IWalletRepository } from '@core/finance/domain/repositories/IWalletRepository';
 import { ILedgerRepository } from '@core/finance/domain/repositories/ILedgerRepository';
 import { appConfig } from '@/shared/config/appConfig';
@@ -84,6 +85,7 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     moneySecurity,
   );
   const getHistoryUseCase = new GetHistory(walletService);
+  const createPixChargeUseCase = new CreatePixCharge(pixProvider, moneySecurity);
 
   const walletController = new WalletController(
     getWalletUseCase,
@@ -91,6 +93,7 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     withdrawUseCase,
     getHistoryUseCase,
     userService,
+    createPixChargeUseCase,
   );
 
   const depositLimiter = createRouteRateLimiter({
@@ -116,6 +119,13 @@ export async function createWalletRoutes(deps: WalletRoutesDeps = {}): Promise<R
     protectedRoute,
     depositLimiter,
     asyncHandler((req: AuthenticatedRequest, res) => walletController.deposit(req, res)),
+  );
+
+  router.post(
+    '/deposit/pix-charge',
+    protectedRoute,
+    depositLimiter,
+    asyncHandler((req: AuthenticatedRequest, res) => walletController.depositCharge(req, res)),
   );
 
   router.post(

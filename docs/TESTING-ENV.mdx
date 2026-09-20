@@ -184,12 +184,14 @@ Testes adicionados na Fase 20 (rodam no `npm run check` normal, sem infra):
 | `src/infrastructure/api/__tests__/Settlement.integration.test.ts` | **settlement via HTTP** — WON credita retorno, LOST não credita, replay com `Idempotency-Key` não paga duas vezes, `result` inválido → 400, não-admin → 403 |
 | `src/infrastructure/withdrawals/__tests__/WithdrawalPayoutWorker.safety.test.ts` | **worker**: entrega duplicada (sequencial e concorrente) paga 1x; timeout do provedor não debita e retry conclui; resposta duplicada do provedor não debita 2x (guarda do ledger) |
 | `src/infrastructure/api/__tests__/RiskLimit.integration.test.ts` | **Fase 20.1** — limita a exposição via `RISK_CONFIG` e prova via HTTP: aposta que estoura o teto → `400 RISK_REJECTED` sem debitar a carteira (e aposta menor continua passando); blacklist → `RISK_REJECTED` sem débito; fecha a lacuna B7 da matriz |
+| `src/infrastructure/api/__tests__/PixWebhook.integration.test.ts` | **Fase 18** — **webhook Pix** via HTTP: assinatura inválida → 401 sem crédito; `PIX_PAID` credita via rota `/api/v1/wallets/deposit/pix-charge`; duplicado/`IDEMPOTENCY`-like → `replayed` sem dupla cobrança; `EXPIRED` → `expired_ignored`; `amount`/`reference` divergentes → 422 sem crédito; refund estorna e cancel não debita |
+| `src/core/finance/application/use-cases/__tests__/ProcessPixWebhook.test.ts` | **Fase 18** — caso de uso do webhook Pix: cada cenário P1-P7 isolado (assinatura, charge não encontrada, expiração, refund, mismatch de valor/reference) sem HTTP |
 
-**Risco registrado**: os cenários de **webhook Pix** (P1-P7) da matriz estão
-marcados como *funcionalidade não existe* — o sistema confirma pagamento de
-forma **síncrona** (depósito/`confirmPayment`), sem rota de webhook. Não são
-testáveis antes de implementar a funcionalidade; entra no backlog da integração
-Pix real.
+**Fase 18 — webhook Pix implementado**: as endpoints de recebimento de Pix
+passaram a existir e os cenários P1-P7 da matriz estão **cobertos** (rota pública
+`POST /api/v1/webhooks/pix` autenticada por assinatura HMAC-SHA256 no header
+`X-BackBet-Signature`, com `rawBody` capturado pelo `ApiServer`). Continua
+funcionando o **fluxo síncrono** legado (`POST /wallets/deposit`).
 
 ## Testes de carga (Fase 2/2b)
 

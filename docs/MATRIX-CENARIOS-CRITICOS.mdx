@@ -67,34 +67,39 @@ Legenda de status:
 
 | # | Cenário | Status | Onde é validado |
 |---|---------|--------|-----------------|
-| P1 | Webhook Pix duplicado não credita duas vezes | **Funcionalidade não existe** | — |
-| P2 | Webhook com payload/assinatura inválidos é rejeitado | **Funcionalidade não existe** | — |
-| P3 | Pagamento atrasado confirmado após expiração | **Funcionalidade não existe** | — |
-| P4 | Confirmação de pagamento credita o depósito | **Funcionalidade não existe** (equivalente síncrono coberto) | `Deposit.execute` chama `createCharge` + `confirmPayment` síncronos (`src/core/finance/application/use-cases/Deposit.ts`), coberto pelos testes de `WalletController`/`WalletService` |
-| P5 | Cancelamento/estorno de pagamento | **Funcionalidade não existe** | — |
-| P6 | Valor divergente entre charge e webhook | **Funcionalidade não existe** | — |
-| P7 | Reference divergente (webhook não casa com depósito) | **Funcionalidade não existe** | — |
+| P1 | Webhook Pix duplicado não credita duas vezes | **Coberto** | `src/core/finance/application/use-cases/__tests__/ProcessPixWebhook.test.ts` (charge já `PAID` → `replayed`, sem `deposit`) + `src/infrastructure/api/__tests__/PixWebhook.integration.test.ts` (2º `PIX_PAID` → `replayed`, saldo 50) |
+| P2 | Webhook com payload/assinatura inválidos é rejeitado | **Coberto** | `ProcessPixWebhook.test.ts` (`PIX_WEBHOOK_SIGNATURE_INVALID` 401) + integração (assinatura errada → 401; `type` inválido → 400) |
+| P3 | Pagamento atrasado confirmado após expiração | **Coberto** | `ProcessPixWebhook.test.ts` (charge `EXPIRED` → `expired_ignored`, sem crédito) + integração (`chargeTtlMs:-60000` → `expired_ignored`, saldo 0) |
+| P4 | Confirmação de pagamento credita o depósito | **Coberto** | `ProcessPixWebhook.test.ts` (`PIX_PAID` → `deposit` com `channel: PIX`) + integração (`POST /api/v1/wallets/deposit/pix-charge` → charge PENDING sem crédito; webhook `PIX_PAID` credita 100) |
+| P5 | Cancelamento/estorno de pagamento | **Coberto** | `ProcessPixWebhook.test.ts` (`PIX_REFUNDED` → débito `PIX_REFUND`; `PIX_CANCELED` sem débito) + integração (refund → saldo volta a 0; cancel não debita) |
+| P6 | Valor divergente entre charge e webhook | **Coberto** | `ProcessPixWebhook.test.ts` (`PIX_WEBHOOK_AMOUNT_MISMATCH` 422) + integração (amount 999 → 422, saldo 0) |
+| P7 | Reference divergente (webhook não casa com depósito) | **Coberto** | `ProcessPixWebhook.test.ts` (`PIX_WEBHOOK_REFERENCE_MISMATCH` 422) + integração (reference inventada → 422, saldo 0) |
 
-> **Por que os cenários P1-P7 estão marcados como "funcionalidade não existe":**
-> o código atual **não implementa recebimento de webhook Pix**. O pagamento é
-> confirmado de forma **síncrona** no depósito via `MockPixProvider`
-> (`payWithdrawal`/`confirmPayment`), e o saque assume `COMPLETED` imediatamente
-> quando o port de pagamento responde sucesso. O único webhook recebido pelo
-> sistema é o de jogo (outgoing gate, `WebhookGameIntegrationAdapter.ts`).
-> Os 7 cenários de webhook Pix do plano **não podem ser testados** até que a
-> funcionalidade seja construída (rota `POST /api/v1/webhooks/pix`, identificação
-> da charge por reference, validação de valor/status e idempotência por evento
-> externo). Isso é **dívida/risco registrado da Fase 20** e deve entrar no
-> backlog da integração Pix real (mock PSP síncrono atual não cobre).
+> **Fluxo novo (Fase 18)**: o codeback agora **implementa o recebimento de
+> webhook Pix** de forma assíncrona e determinística (sem PSP externo):
+> - `POST /api/v1/wallets/deposit/pix-charge` cria uma charge **PENDING** (QR
+>   EMV com CRC16) **sem creditar** a carteira (`CreatePixCharge.ts`);
+> - `POST /api/v1/webhooks/pix` (público, autenticado por assinatura
+>   HMAC-SHA256 no header `X-BackBet-Signature`) processa
+>   `PIX_PAID`/`PIX_REFUNDED`/`PIX_CANCELED` (`ProcessPixWebhook.ts`):
+>   valida assinatura → identifica a charge por `chargeId` → confere
+>   `reference`/`amount`/`currency` e expiração → credita via
+>   `WalletService.deposit` (`DEPOSIT:<chargeId>`) ou estorna via
+>   `WalletService.withdraw` (`PIX_REFUND:<chargeId>`), ambos com idempotência
+>   de ledger + `IdempotencyService`.
+> O fluxo **síncrono legado** (`POST /wallets/deposit`, crédito imediato)
+> permanece intacto e é usado pelos demais cenários (Settlement, RiskLimit,
+> Security). O `MockPixProvider` mantém um registry em memória das charges,
+> calcula expiração, gera QR EMV com CRC16 e valida a assinatura com
+> `PIX_WEBHOOK_SECRET`.
 
 ---
 
 ## Lacunas registradas que exigem decisão
 
-1. **Webhook Pix** (P1-P7) — precisa de funcionalidade nova antes de qualquer
-   teste. Recomendado: implementar rota de webhook com idempotência por
-   `chargeId`, validação de `reference`/`amount`/`status` e guarda contra
-   duplicidade, seguida dos 7 testes acima.
+1. ~~**Webhook Pix** (P1-P7)~~ — **fechada na Fase 18** com a rota
+   `POST /api/v1/webhooks/pix` (assinatura HMAC, validação de `reference`/`amount`/`status`,
+   expiração e idempotência por `chargeId`), coberta pelos 7 cenários da matriz.
 2. **Rollback real com transação Mongo** (W1/B8) — a simulação in-memory prova a
    orquestração do `BetService` (saldo restaurado, sem aposta, sem movimento de
    ledger), mas o rollback efetivo com `withTransaction` do MongoDB exige a

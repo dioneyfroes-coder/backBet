@@ -177,6 +177,7 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 2. O adapter atual (`MockPixProvider`) gera QR Codes/payouts determinísticos e confirma o pagamento imediatamente, propagando os campos para `wallet.recordTransaction(...metadata)`.
 3. Os responses expõem `pix.*` para que o front exiba referência, status e provider. Em produção basta criar outro adapter e mudar `PIX_PROVIDER` sem modificar controllers/use cases.
 4. `PIX_ENABLE_DEPOSITS` / `PIX_ENABLE_WITHDRAWALS` podem ser usados como kill switches: quando `false`, os controllers retornam `503 SERVICE_UNAVAILABLE` antes de chamar o Pix ou tocar na carteira.
+5. **Fluxo assíncrono (Fase 18, webhook)** — `POST /api/v1/wallets/deposit/pix-charge` cria uma charge **PENDING** (QR EMV com CRC16) **sem creditar** a carteira; o credito ocorre quando o PSP notifica `PIX_PAID` em `POST /api/v1/webhooks/pix` (público, assinado com HMAC-SHA256 via header `X-BackBet-Signature`, secret `PIX_WEBHOOK_SECRET`). `PIX_REFUNDED` estorna (`PIX_REFUND`); `PIX_CANCELED` é ignorado; pagamento após `PIX_CHARGE_TTL_MS` é `expired_ignored`. Idempotência por `chargeId` (ledger `DEPOSIT:<chargeId>`/`PIX_REFUND:<chargeId>` + `IdempotencyService`). Desabilitável por `PIX_WEBHOOK_ENABLED`.
 
 ### Integração com Betting
 - `BetService.placeBet` usa `IWalletService.withdraw` para reservar stake; cancelamentos devolvem via `deposit` e vitórias pagam `wallet.deposit(potentialReturn)`.
@@ -196,6 +197,8 @@ Todos envolvem `executeWithWalletErrorMapping`, traduzindo `DomainError` em `App
 |--------|---------|----------|------------------|-------------|
 | `GET` | `/api/v1/wallets/me` | `protectedRoute` | `cacheWalletBalanceMiddleware` (Redis) | Retorna `wallet.toDTO()` sempre com `Cache-Control: no-store` (sem ETag) e 404 se carteira não existir.
 | `POST` | `/api/v1/wallets/deposit` | `protectedRoute` | `createRouteRateLimiter` usando `WALLET_DEPOSIT_RATE_LIMIT_*` | Payload `DepositDTO`; dispara `flushWalletCache`.
+| `POST` | `/api/v1/wallets/deposit/pix-charge` | `protectedRoute` | mesmo limiter de depósito | Payload `DepositDTO`; cria charge Pix **PENDING** (QR EMV) **sem crédito**; credita via webhook `PIX_PAID`.
+| `POST` | `/api/v1/webhooks/pix` | pública (assinatura HMAC `X-BackBet-Signature`) | — | Recebe `PixWebhookEvent`; 401 se assinatura inválida; 404 charge não encontrada; 422 `reference`/`amount` divergentes; 401/400 se `PIX_WEBHOOK_ENABLED=false`.
 | `POST` | `/api/v1/wallets/withdraw` | `protectedRoute` | Rate limit `WALLET_WITHDRAW_RATE_LIMIT_*` | Usa `WithdrawDTO`; aceita `pixKey` opcional e cai para a chave padrão do usuário antes de rejeitar o saque.
 | `GET` | `/api/v1/wallets/history` | `protectedRoute` | `cacheWalletHistoryMiddleware` (cache por `limit/offset`) | Responde `{ transactions, pagination }`.
 
