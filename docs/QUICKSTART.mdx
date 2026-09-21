@@ -51,7 +51,7 @@ Depois `npm run dev` e valide `/health`, `/readiness` e `/health/cache`.
 docker compose up -d --build
 ```
 
-Sobe o host único: Mongo (rs0) + Redis + API + workers. A API fica em `http://localhost:3000`.
+Sobe o host único: Mongo (rs0) + Redis + API + workers. A API fica na porta publicada do `.env` (`BACKBET_PORT`, default `3000`): `http://localhost:${BACKBET_PORT:-3000}`.
 
 - `docker-compose.test.yml` — infra de teste isolada (Mongo replica set + Redis + `integration-tests` na rede Docker).
 - `docker-compose.proxy.yml` — Caddy/TLS opcional.

@@ -46,11 +46,10 @@ npm run smoke
 - Workflows que dependem de Mongo/Redis reais usam os helpers de teste ou containers (`npm run test:infra:reset` + `test:integration:full`).
 - O Jest deve passar limpo (`npm test`). Falhas intermitentes viram issues antes do merge.
 - Atualize snapshots e dados seeds quando alterar contratos das rotas ou DTOs.
-- **Nunca crie propósito em torno da falha pré-existente `FI-05`** — ela é tratada em separado e não é esteira para novos testes.
 
 ## Documentação e Observabilidade
 
-- Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_CONTRACT`, `docs/OBSERVABILITY`, `docs/QUICKSTART`) — a documentação é consolidada (14 páginas) e deve acompanhar o código.
+- Alterou comportamento público? Atualize o doc correspondente (`docs/ARCHITECTURE`, `docs/API_CONTRACT`, `docs/OBSERVABILITY`, `docs/QUICKSTART`) — a documentação é consolidada (15 páginas) e deve acompanhar o código.
 - Mantenha payloads e env vars consistentes com os exemplos existentes.
 - Adicione logs/snapshots/traces em fluxos críticos; documente brevemente no PR onde encontrar esses sinais.
 

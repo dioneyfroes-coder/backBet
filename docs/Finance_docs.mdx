@@ -59,7 +59,7 @@ Suite principal: `src/core/finance/domain/services/__tests__/FinancialInvariants
 | **FI-09** | CANCEL gera exatamente um reembolso `BET_REFUND` | Fluxo único em `BetService.cancelBet` + guard `BET_REFUND:<betId>` | FI-09 |
 | **FI-10** | LOSS não gera prêmio | Ramo `if (result === 'WON')` exclusivo em `BetService.resolveBet` | FI-10 |
 
-> **Nota de estado (20/09/2026)**: a suíte roda 1105 testes; a única falha conhecida é `FI-05` (`FinancialInvariants.test.ts`), **pré-existente e fora do escopo atual** — está sendo tratada em separado. Os demais FI-0X passam.
+> **Nota de estado (21/09/2026)**: todos os FI-01..FI-10 passam (`npm test` verde); **0 falhas** conhecidas na suíte (1094 testes passando). O FI-05 (aposta nunca liquidada duas vezes) é coberto por `FinancialInvariants.test.ts` e reforçado pelos testes de replay/integração.
 
 ## Evidência mais detalhada (código)
 

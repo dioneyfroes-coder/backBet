@@ -28,7 +28,7 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 | `npm run test:infra:reset` | Sobe infra de teste do zero | Docker |
 | `npm run check` | Gate completo: `check:secrets` + lint + cobertura + build | — |
 
-**Estado atual (20/09/2026)**: **1105 testes** (1071 passando, 33 skipped, 1 falha pré-existente `FI-05` fora do escopo atual), **142 suítes passando**; cobertura **~84,5% stmts / ~85% lines / ~81% fns / ~71% branches**; `npm run check` verde.
+**Estado atual (21/09/2026)**: **1094 testes passando**, 41 skipped (suítes de integração que exigem Docker), **0 falhas**; **145 suítes passando**; cobertura **~84% stmts / ~84,5% lines / ~80,7% fns / ~67,4% branches**; `npm run check` verde.
 
 ### Infra de teste
 
@@ -111,7 +111,7 @@ Legenda: **Coberto** = teste automático; **Novo (Fase 20)** = adicionado na Fas
 | B3 | Aposta simultânea sem dupla cobrança | Coberto | `BetService.critical.test.ts` |
 | B4-B6 | Evento encerrado / mercado fechado / odd inexistente bloqueiam | Coberto | `BetService.ts:232-276` + testes |
 | B7 | Limite de exposição (HTTP: `RISK_REJECTED` 400 sem débito) | Coberto | `RiskLimit.integration.test.ts` |
-| B8 | Rollback real com transação Mongo (`withTransaction`) | **Parcial** | simulação in-memory feita; caso de integração é próximo passo |
+| B8 | Rollback real com transação Mongo (`withTransaction`) | Coberto | `failure.integration.test.ts` T4 (rollback real: débito, aposta e exposição revertidos) + `crash.integration.test.ts` C1a/C1b |
 
 ### Settlement
 | # | Cenário | Status |
@@ -134,9 +134,9 @@ S1-S7: ACKED com `ackId`, reenvio idempotente, REJECT persistido, FAILED + retry
 
 ## Lacunas registradas
 
-1. **Rollback real com transação Mongo** (W1/B8) — a simulação in-memory prova a orquestração; adicionar caso na suíte de integração (replica set) é o próximo passo.
-2. **Adapter SIGAP real** — S1-S7 cobertos contra o mock; transmissão real (mTLS/TLS 1.2, e-CNPJ, Bearer) fica bloqueada por credenciais/ambiente SPA (ver `docs/SIGAP_CONFORMIDADE.mdx`).
-3. **FI-05** — falha pré-existente em `FinancialInvariants.test.ts`, fora do escopo atual, tratada em separado.
+1. **Adapter SIGAP real** — S1-S7 cobertos contra o mock; transmissão real (mTLS/TLS 1.2, e-CNPJ, Bearer) fica bloqueada por credenciais/ambiente SPA (ver `docs/SIGAP_CONFORMIDADE.mdx`).
+
+> O rollback real com transação Mongo (B8/W1) e o FI-05 foram fechados: T4/C1a/C1b na suíte de integração (replica set) e `FinancialInvariants.test.ts` verde.
 
 ## Troubleshooting de testes
 
