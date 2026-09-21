@@ -16,6 +16,8 @@ Este documento é a **fonte única de verdade** do status técnico e decisório 
 - **Cobertura**: ~**84,5%** statements · ~**85%** lines · ~**81%** functions · ~**71%** branches.
 - **Gates**: `npm run check` (secrets + lint + cobertura + build), typecheck e smoke **verdes**.
 - **Lab**: IP estático `192.168.22.250` (dev porta `3000`).
+- **Restart total validado (21/09/2026, item #18)**: `docker compose down` + `up -d` do lab → `/health` 200, `/readiness` `ready` (redis e mongo `up`), `/health/cache` 200; `withdrawal-worker` e `contact-worker` sobem, filas Bull presentes (`withdrawal_payouts`, `contact_queue`) e `withdrawal_recovery_run` roda na subida (scanned=0, sem request órfão); Mongo manteve-se PRIMARY (`myState=1`) com o volume persistindo; containers `backbet`/`mongodb`/`redis` `healthy`.
+- **P2 executado (21/09/2026)**: crash nos piores momentos 9/9 (`crash.integration.test.ts` C1a–C7); dois workers reais disputando o mesmo payout (`multi-worker.integration.test.ts`, 1/1); backup→checksum→restore→contagens→reconciliação == origem (`backup.integration.test.ts`, 1/1); baseline de performance nível 50 em `scripts/load-results/fase14/`. Detalhes em `docs/PERFORMANCE-BASELINE.mdx`.
 
 ## Definition of Done (seção 41 do plano)
 
