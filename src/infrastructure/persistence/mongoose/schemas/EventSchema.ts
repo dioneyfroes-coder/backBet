@@ -22,6 +22,7 @@ export interface IEventDocument extends Document {
   status: EventStatus;
   participants: string[];
   markets: IEventMarketSubDoc[];
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,6 +77,11 @@ const eventSchema = new Schema<IEventDocument>(
         ],
       },
     ],
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+    },
   },
   { timestamps: true, collection: 'events' },
 );

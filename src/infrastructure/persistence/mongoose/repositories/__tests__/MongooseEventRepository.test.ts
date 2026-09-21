@@ -51,6 +51,7 @@ const makeDoc = () => ({
       ],
     },
   ],
+  version: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -104,6 +105,8 @@ describe('MongooseEventRepository (mocked model)', () => {
     expect(event).not.toBeNull();
     expect(event?.id).toBe(FOOTBALL_EVENT);
     expect(event?.status).toBe('SCHEDULED');
+    expect(event?.version).toBe(1);
+    expect(event?.baseVersion).toBe(1);
     expect(event?.category).toBe('Football');
     expect(event?.participants).toEqual(['FC Tech', 'Dev United']);
     const market = event?.markets.get('mkt-1x2');
@@ -137,10 +140,11 @@ describe('MongooseEventRepository (mocked model)', () => {
     expect(options).toMatchObject({ upsert: true });
   });
 
-  it('update altera status e persiste com o mesmo id', async () => {
+  it('update altera status com CAS de versão (version 1 → 2) e persiste com o mesmo id', async () => {
     const spy = jest.spyOn(EventModel, 'findOneAndUpdate').mockResolvedValue({
       ...makeDoc(),
       status: 'LIVE',
+      version: 2,
     } as never);
 
     const repo = new MongooseEventRepository();
@@ -148,16 +152,35 @@ describe('MongooseEventRepository (mocked model)', () => {
     event.start();
     await repo.update(event);
 
-    const [filter, data] = spy.mock.calls[0] as unknown as [Record<string, unknown>, Record<string, unknown>];
-    expect(filter).toEqual({ id: FOOTBALL_EVENT });
-    expect(data).toMatchObject({ id: FOOTBALL_EVENT, status: 'LIVE' });
+    const [filter, data] = spy.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    expect(filter).toEqual({ id: FOOTBALL_EVENT, version: 1 });
+    expect(data).toMatchObject({ id: FOOTBALL_EVENT, status: 'LIVE', version: 2 });
+    expect(event.baseVersion).toBe(2);
   });
 
   it('update lança NOT_FOUND quando o evento não existe', async () => {
     jest.spyOn(EventModel, 'findOneAndUpdate').mockResolvedValue(null as never);
+    jest.spyOn(EventModel, 'exists').mockResolvedValue(false as never);
 
     const repo = new MongooseEventRepository();
     await expect(repo.update(makeEventDomain())).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('update lança CONFLICT quando a versão não bate (update concorrente)', async () => {
+    jest.spyOn(EventModel, 'findOneAndUpdate').mockResolvedValue(null as never);
+    jest.spyOn(EventModel, 'exists').mockResolvedValue(true as never);
+
+    const repo = new MongooseEventRepository();
+    const stale = makeEventDomain();
+    stale.start();
+    await expect(repo.update(stale)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      statusCode: 409,
+      details: { eventId: FOOTBALL_EVENT, expectedVersion: 1 },
+    });
   });
 
   it('findAll aplica filtros de status/categoria/intervalo e ordena por startDate', async () => {

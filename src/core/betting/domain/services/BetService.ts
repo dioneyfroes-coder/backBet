@@ -39,6 +39,15 @@ export class BetService {
 
     const odd = this.getOddOrThrow(market, input.oddId);
 
+    // Snapshot do estado validado ANTES da transação. A revalidação dentro da
+    // transação (item #6) garante que status/mercado/odd não mudaram no
+    // intervalo, fechando a race placeBet vs suspendMarket/updateOdd.
+    const snapshot = {
+      eventStatus: event.status,
+      marketStatus: market.status,
+      oddValue: odd.value,
+    };
+
     // Risk check (if configured) before withdrawing funds
     if (this.riskService) {
       const allowed = await this.riskService.canPlaceBet(
@@ -56,6 +65,7 @@ export class BetService {
 
     const operation = async (session?: TransactionSession) => {
       const options: WalletRepositoryOptions | undefined = session ? { session } : undefined;
+      await this.assertBettingContextFresh(input, snapshot, options);
       const betId = new UniqueId().value;
       const wallet = options
         ? await this.walletService.withdraw(
@@ -300,6 +310,62 @@ export class BetService {
         code: 'MARKET_NOT_OPEN_FOR_BETTING',
         message: 'Market is not open for betting',
         details: { status: market.status, marketId: market.id },
+      });
+    }
+  }
+
+  /**
+   * Revalida DENTRO da transação (mesma sessão / snapshot isolado) que o
+   * estado de evento/mercado/odd ainda corresponde ao snapshot visto pelo
+   * cliente antes do débito. Se uma suspensão/atualização de odd foi
+   * commitada antes do snapshot da transação, a aposta é rejeitada sem
+   * efeito financeiro (item #6 do plano).
+   */
+  private async assertBettingContextFresh(
+    input: ICreateBetDTO,
+    snapshot: { eventStatus: string; marketStatus: string; oddValue: number },
+    options?: WalletRepositoryOptions,
+  ): Promise<void> {
+    const fresh = options?.session
+      ? await this.eventRepository.findById(input.eventId, { session: options.session })
+      : await this.eventRepository.findById(input.eventId);
+    if (!fresh) {
+      throw new DomainError({
+        code: 'EVENT_NOT_FOUND',
+        message: 'Event not found',
+        details: { eventId: input.eventId },
+      });
+    }
+    if (fresh.status !== snapshot.eventStatus || fresh.status !== 'SCHEDULED') {
+      throw new DomainError({
+        code: 'EVENT_NOT_OPEN_FOR_BETTING',
+        message: 'Event is not open for betting (altered during placement)',
+        details: { expected: snapshot.eventStatus, actual: fresh.status, eventId: input.eventId },
+      });
+    }
+    const market = this.getMarketOrThrow(fresh, input.marketId);
+    if (market.status !== snapshot.marketStatus || market.status !== 'OPEN') {
+      throw new DomainError({
+        code: 'MARKET_NOT_OPEN_FOR_BETTING',
+        message: 'Market is not open for betting (altered during placement)',
+        details: {
+          expected: snapshot.marketStatus,
+          actual: market.status,
+          marketId: input.marketId,
+        },
+      });
+    }
+    const odd = this.getOddOrThrow(market, input.oddId);
+    if (odd.value !== snapshot.oddValue) {
+      throw new DomainError({
+        code: 'ODD_CHANGED',
+        message: 'Odds changed during bet placement; refresh and retry',
+        details: {
+          marketId: input.marketId,
+          oddId: input.oddId,
+          expected: snapshot.oddValue,
+          actual: odd.value,
+        },
       });
     }
   }

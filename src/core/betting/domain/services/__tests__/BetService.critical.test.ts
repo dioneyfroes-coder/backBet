@@ -12,6 +12,8 @@ import { LedgerEntry } from '@/core/finance/domain/entities/LedgerEntry';
 import { Bet } from '../../entities/Bet';
 import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { Event, Market } from '../../entities/Event';
+import { Odds } from '@core/odds/domain/value-objects/Odds';
 import { TransactionRunner, TransactionSession } from '@/core/shared/types/Transaction';
 import { ICreateBetDTO } from '@core/betting/types/bet.types';
 
@@ -215,5 +217,158 @@ describe('BetService — cenários críticos (Fase 20)', () => {
     await expect(harness.betRepo.findByUserId(USER_ID)).resolves.toHaveLength(1);
     const { entries } = await harness.walletService.getLedgerHistory(USER_ID, 500, 0);
     expect(entries.filter((entry) => entry.type === 'BET_DEBIT')).toHaveLength(1);
+  });
+
+  describe('placeBet — race Event/Market/odd (item #6)', () => {
+    const buildEventVariant = (
+      overrides: { status?: Event['status']; marketStatus?: Market['status']; oddValue?: number },
+    ): Event =>
+      new Event(
+        FOOTBALL_EVENT,
+        'FC Tech vs Dev United',
+        new Date(Date.now() + 60 * 60 * 1000),
+        overrides.status ?? 'SCHEDULED',
+        'Football',
+        ['FC Tech', 'Dev United'],
+        new Map([
+          [
+            MARKET_ID,
+            new Market(
+              MARKET_ID,
+              'Resultado Final',
+              overrides.marketStatus ?? 'OPEN',
+              new Map([[ODD_ID, new Odds(overrides.oddValue ?? 1.9)]]),
+            ),
+          ],
+        ]),
+      );
+
+    const fundUser = async (harness: ReturnType<typeof createHarness>): Promise<void> => {
+      await harness.walletService.createWallet({ userId: USER_ID, currency: 'BRL' });
+      await harness.walletService.deposit(USER_ID, 1000, {
+        type: 'DEPOSIT',
+        referenceId: `seed-race-${Date.now()}`,
+        source: 'DEPOSIT',
+      });
+    };
+
+    const mockSequentialReads = (
+      harness: ReturnType<typeof createHarness>,
+      first: Event,
+      second: Event,
+    ): jest.SpyInstance => {
+      let call = 0;
+      return jest.spyOn(harness.eventRepo, 'findById').mockImplementation(async () => {
+        call += 1;
+        return call === 1 ? first : second;
+      });
+    };
+
+    it('mercado suspenso entre a leitura e a transação: aposta rejeitada sem efeito financeiro', async () => {
+      const harness = createHarness();
+      const betService = new BetService(
+        harness.betRepo,
+        harness.eventRepo,
+        harness.walletService,
+        allowedRisk,
+      );
+      await fundUser(harness);
+
+      const spy = mockSequentialReads(
+        harness,
+        buildEventVariant({ marketStatus: 'OPEN' }),
+        buildEventVariant({ marketStatus: 'SUSPENDED' }),
+      );
+
+      await expect(betService.placeBet(baseInput(USER_ID))).rejects.toMatchObject({
+        code: 'MARKET_NOT_OPEN_FOR_BETTING',
+      });
+
+      const wallet = await harness.walletService.findByUserId(USER_ID);
+      expect(wallet?.balance).toBe(1000);
+      expect(wallet?.lockedBalance).toBe(0);
+      await expect(harness.betRepo.findByUserId(USER_ID)).resolves.toEqual([]);
+      const { entries } = await harness.walletService.getLedgerHistory(USER_ID, 500, 0);
+      expect(entries.filter((entry) => entry.type === 'BET_DEBIT')).toHaveLength(0);
+
+      spy.mockRestore();
+    });
+
+    it('odd alterada entre a leitura e a transação: rejeita com ODD_CHANGED (refresh do cliente)', async () => {
+      const harness = createHarness();
+      const betService = new BetService(
+        harness.betRepo,
+        harness.eventRepo,
+        harness.walletService,
+        allowedRisk,
+      );
+      await fundUser(harness);
+
+      const spy = mockSequentialReads(
+        harness,
+        buildEventVariant({ oddValue: 1.9 }),
+        buildEventVariant({ oddValue: 1.7 }),
+      );
+
+      await expect(betService.placeBet(baseInput(USER_ID))).rejects.toMatchObject({
+        code: 'ODD_CHANGED',
+      });
+
+      const wallet = await harness.walletService.findByUserId(USER_ID);
+      expect(wallet?.balance).toBe(1000);
+      await expect(harness.betRepo.findByUserId(USER_ID)).resolves.toEqual([]);
+
+      spy.mockRestore();
+    });
+
+    it('evento passa a LIVE entre a leitura e a transação: aposta rejeitada', async () => {
+      const harness = createHarness();
+      const betService = new BetService(
+        harness.betRepo,
+        harness.eventRepo,
+        harness.walletService,
+        allowedRisk,
+      );
+      await fundUser(harness);
+
+      const spy = mockSequentialReads(
+        harness,
+        buildEventVariant({ status: 'SCHEDULED' }),
+        buildEventVariant({ status: 'LIVE' }),
+      );
+
+      await expect(betService.placeBet(baseInput(USER_ID))).rejects.toMatchObject({
+        code: 'EVENT_NOT_OPEN_FOR_BETTING',
+      });
+
+      const wallet = await harness.walletService.findByUserId(USER_ID);
+      expect(wallet?.balance).toBe(1000);
+      await expect(harness.betRepo.findByUserId(USER_ID)).resolves.toEqual([]);
+
+      spy.mockRestore();
+    });
+
+    it('estado estável: aposta aceita normalmente (revalidação é no-op)', async () => {
+      const harness = createHarness();
+      const betService = new BetService(
+        harness.betRepo,
+        harness.eventRepo,
+        harness.walletService,
+        allowedRisk,
+      );
+      await fundUser(harness);
+
+      const spy = jest.spyOn(harness.eventRepo, 'findById').mockImplementation(async () =>
+        buildEventVariant({ marketStatus: 'OPEN', oddValue: 1.9 }),
+      );
+
+      const bet = await betService.placeBet(baseInput(USER_ID));
+      expect(bet.status).toBe('PENDING');
+
+      const wallet = await harness.walletService.findByUserId(USER_ID);
+      expect(wallet?.balance).toBe(900);
+
+      spy.mockRestore();
+    });
   });
 });

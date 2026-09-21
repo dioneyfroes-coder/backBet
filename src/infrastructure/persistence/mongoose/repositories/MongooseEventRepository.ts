@@ -38,13 +38,23 @@ export class MongooseEventRepository implements IEventRepository {
   async update(event: Event): Promise<void> {
     try {
       const updated = await EventModel.findOneAndUpdate(
-        { id: event.id },
+        { id: event.id, version: event.baseVersion },
         this.toDocumentData(event),
         { new: true },
       );
       if (!updated) {
-        throw new AppError('NOT_FOUND', 'Evento não encontrado', 404, { eventId: event.id });
+        const exists = await EventModel.exists({ id: event.id });
+        if (!exists) {
+          throw new AppError('NOT_FOUND', 'Evento não encontrado', 404, { eventId: event.id });
+        }
+        throw new AppError(
+          'CONFLICT',
+          'Evento foi modificado por outra operação; recarregue e tente novamente',
+          409,
+          { eventId: event.id, expectedVersion: event.baseVersion },
+        );
       }
+      event.markPersisted();
     } catch (error: unknown) {
       if (error instanceof AppError) {
         throw error;
@@ -56,10 +66,16 @@ export class MongooseEventRepository implements IEventRepository {
     }
   }
 
-  async findById(id: string): Promise<Event | null> {
+  async findById(id: string, options?: { session?: unknown }): Promise<Event | null> {
     try {
-      await this.ensureSeededIfEmpty();
-      const doc = await EventModel.findOne({ id }).lean<EventDoc | null>();
+      if (!options?.session) {
+        await this.ensureSeededIfEmpty();
+      }
+      const query = EventModel.findOne({ id });
+      if (options?.session) {
+        query.session(options.session as never);
+      }
+      const doc = await query.lean<EventDoc | null>();
       return doc ? this.toDomain(doc) : null;
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
@@ -235,6 +251,7 @@ export class MongooseEventRepository implements IEventRepository {
           ),
         ]),
       ),
+      doc.version ?? 1,
     );
   }
 
@@ -252,6 +269,7 @@ export class MongooseEventRepository implements IEventRepository {
       result?: string | null;
       odds: Array<{ id: string; value: number }>;
     }>;
+    version: number;
   } {
     return {
       id: event.id,
@@ -270,6 +288,7 @@ export class MongooseEventRepository implements IEventRepository {
           value: odd.value,
         })),
       })),
+      version: event.version,
     };
   }
 }

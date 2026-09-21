@@ -2,6 +2,7 @@ import { IEventRepository } from '../repositories/IEventRepository';
 import { Event } from '../entities/Event';
 import { EventStatus } from '../../types/bet.types';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
+import { retryTransient } from '@/core/shared/domain/errors/retryTransient';
 
 export type EventFilters = {
   status?: EventStatus;
@@ -67,6 +68,16 @@ export class EventCatalogService {
   }
 
   async updateEventStatus(eventId: string, action: EventStatusAction): Promise<Event> {
+    return retryTransient(
+      () => this.doUpdateEventStatus(eventId, action),
+      { label: 'EventCatalogService.updateEventStatus' },
+    );
+  }
+
+  private async doUpdateEventStatus(
+    eventId: string,
+    action: EventStatusAction,
+  ): Promise<Event> {
     const event = await this.getEvent(eventId);
 
     switch (action) {

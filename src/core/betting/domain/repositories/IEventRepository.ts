@@ -1,10 +1,14 @@
 import { Event } from '../entities/Event';
 import { EventStatus } from '../../types/bet.types';
 
+export interface IEventRepositoryOptions {
+  session?: unknown;
+}
+
 export interface IEventRepository {
   create(event: Event): Promise<void>;
   update(event: Event): Promise<void>;
-  findById(id: string): Promise<Event | null>;
+  findById(id: string, options?: IEventRepositoryOptions): Promise<Event | null>;
   findByStatus(status: EventStatus): Promise<Event[]>;
   findByCategory(category: string): Promise<Event[]>; // ou EventCategory
   findUpcoming(limit?: number): Promise<Event[]>;
