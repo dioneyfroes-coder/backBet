@@ -26,15 +26,23 @@ describe('WithdrawalPayoutWorker E2E (simulated retries)', () => {
   it('retries until payment succeeds and updates metrics', async () => {
     const adapter = new TestPaymentAdapter(2); // fail twice then succeed
     const payload = { requestId: 'req-1', userId: 'user-1', amount: 100, currency: 'BRL' } as any;
+    // O gate de claim (APPROVED/FAILED/PROCESSING -> PROCESSING) é obrigatório:
+    // um service que sempre reclama permite que o adapter seja exercitado.
+    const service = {
+      claimForProcessing: jest.fn().mockResolvedValue({ status: 'PROCESSING' }),
+      completePayout: jest.fn().mockResolvedValue(undefined),
+    } as any;
 
     // first attempt -> should throw
-    await expect(processWithdrawalPayload(payload, adapter)).rejects.toThrow();
+    await expect(processWithdrawalPayload(payload, adapter, service)).rejects.toThrow();
     // second attempt -> should throw
-    await expect(processWithdrawalPayload(payload, adapter)).rejects.toThrow();
+    await expect(processWithdrawalPayload(payload, adapter, service)).rejects.toThrow();
     // third attempt -> should succeed
-    await expect(processWithdrawalPayload(payload, adapter)).resolves.toBeUndefined();
+    await expect(processWithdrawalPayload(payload, adapter, service)).resolves.toBeUndefined();
 
     expect(adapter.attempts).toBe(3);
+    expect(service.claimForProcessing).toHaveBeenCalledTimes(3);
+    expect(service.completePayout).toHaveBeenCalledTimes(1);
 
     // primary assertion: adapter attempted 3 times and final attempt succeeded
     expect(adapter.attempts).toBe(3);

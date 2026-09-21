@@ -11,6 +11,17 @@ import { randomUUID } from 'crypto';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OLD_PIX_CHANGE = new Date(Date.now() - 30 * DAY_MS);
+
+// Ponto no dia UTC de HOJE, mas fora da janela de velocidade: `now - ms` pode
+// cruzar a meia-noite UTC e cair no dia anterior, saindo da janela diária
+// (startOfUtcDay), tornando o teste dependente do relógio. A ancoragem ao
+// início do dia garante que os lançamentos contem no limite diário em qualquer
+// horário; as regras diárias (valor/quantidade) rodam ANTES da velocidade.
+const todayAgo = (ms: number): Date => {
+  const now = new Date();
+  const startOfUtcDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return new Date(Math.max(startOfUtcDay, now.getTime() - ms));
+};
 const MIM = {
   id: 'user-1',
   email: new Email('mim@example.com'),
@@ -188,7 +199,7 @@ describe('MoneySecurityService — Fase 13: segurança específica de dinheiro',
           'user-1',
           'WITHDRAWAL_HOLD',
           9000 * 100,
-          new Date(Date.now() - 20 * 60 * 1000),
+          todayAgo(20 * 60 * 1000),
         );
       }
       await expectBlock(
@@ -204,7 +215,7 @@ describe('MoneySecurityService — Fase 13: segurança específica de dinheiro',
           'user-1',
           'WITHDRAWAL_HOLD',
           100 * 100,
-          new Date(Date.now() - 20 * 60 * 1000),
+          todayAgo(20 * 60 * 1000),
         );
       }
       await expectBlock(

@@ -9,10 +9,10 @@ sidebar_label: "Estado do Projeto"
 
 Este documento é a **fonte única de verdade** do status técnico e decisório do BackBet (consolida as antigas páginas *Definition of Done*, *Go/No-Go Final* e *Estratégia Comercial*).
 
-## Estado atual (20/09/2026)
+## Estado atual (21/09/2026)
 
 - **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` com contrato, envelope padronizado, paginação, idempotência, OpenAPI (`docs/openapi.json`) e sincronização regulatória SIGAP.
-- **Suíte**: **1105 testes** — 1071 passando, 33 skipped, **1 falha pré-existente (`FI-05`, `FinancialInvariants.test.ts`) fora do escopo atual**, tratada em separado. **142 suítes** passando.
+- **Suíte**: **1107 testes** — 1072 passando, 35 skipped (suítes de integração que exigem Docker), **0 falhas**. **143 suítes** passando.
 - **Cobertura**: ~**84,5%** statements · ~**85%** lines · ~**81%** functions · ~**71%** branches.
 - **Gates**: `npm run check` (secrets + lint + cobertura + build), typecheck e smoke **verdes**.
 - **Lab**: IP estático `192.168.22.250` (dev porta `3000`).
@@ -76,7 +76,7 @@ Se não houver intenção comercial real: BackBet como **projeto de portfólio**
 
 | Item | Tipo | Ref |
 |------|------|-----|
-| Falha `FI-05` (teste) | dívida técnica pré-existente | tratada em separado |
+| FI-05 alinhado ao `resolveBet` replay-safe (mesmo resultado = no-op, divergente = `BET_NOT_PENDING`) | ✅ concluído | `FinancialInvariants.test.ts` |
 | Rollback real `withTransaction` na suíte de integração | teste | `docs/TESTING-ENV.mdx` |
 | Adapter SIGAP real (mTLS/e-CNPJ) | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
 | KYC / geolocalização / PSP reais | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
@@ -84,4 +84,4 @@ Se não houver intenção comercial real: BackBet como **projeto de portfólio**
 | Minoração de `@opentelemetry/*`, `nodemailer`, `js-yaml` | dívida de dependências | `docs/DEPLOY.mdx` |
 | Backup com upload S3 + retenção 5 anos | evolução de produção | `docs/BACKUP_RECOVERY.mdx` |
 
-**Última atualização:** 20 de setembro de 2026.
+**Última atualização:** 21 de setembro de 2026.

@@ -47,7 +47,6 @@ describe('WithdrawalPayoutWorker state transitions', () => {
 
   it('never re-runs the payment adapter when the state update fails after a successful payout', async () => {
     adapter.payWithdrawal.mockResolvedValue({ success: true, transactionId: 'tx-2' });
-    service.markProcessing.mockRejectedValue(new Error('state failed'));
     service.completePayout.mockRejectedValue(new Error('persist failed'));
     const payload = { requestId: 'req-guard-1', userId: 'user-1', amount: 50, currency: 'BRL' } as any;
 

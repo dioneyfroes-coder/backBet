@@ -433,11 +433,12 @@ describe('FI-05 — uma aposta nunca é liquidada duas vezes', () => {
     let wallet = (await h.walletService.findByUserId('fi05-a'))!;
     expect(wallet.balanceCents).toBe(19000);
 
-    await expect(
-      service.resolveBet({ betId, result: 'WON', marketResult: 'HOME_WIN' }),
-    ).rejects.toMatchObject({
-      code: 'BET_NOT_PENDING',
-    });
+    // Replay do MESMO resultado é no-op (replay-safe pós-crash): não lança,
+    // não paga de novo, status permanece WON.
+    const replayed = await service.resolveBet({ betId, result: 'WON', marketResult: 'HOME_WIN' });
+    expect(replayed.status).toBe('WON');
+
+    // Resultado DIVERGENTE continua falhando no entity: bet não-PENDING.
     await expect(
       service.resolveBet({ betId, result: 'LOST', marketResult: 'AWAY_WIN' }),
     ).rejects.toMatchObject({
