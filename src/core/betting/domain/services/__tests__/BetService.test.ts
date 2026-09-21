@@ -431,7 +431,7 @@ describe('BetService', () => {
       const service = buildService(riskService);
       eventRepository.findById.mockResolvedValue(makeEvent());
 
-      await service.placeBet({
+      const placed = await service.placeBet({
         userId: 'user-c',
         eventId: 'event-1',
         marketId: 'market-a',
@@ -442,13 +442,12 @@ describe('BetService', () => {
       expect(await riskService.getEventExposure('event-1')).toBe(140);
       expect(await riskService.getMarketExposure('market-a')).toBe(140);
 
-      const bet = makeBet();
-      betRepository.findById.mockResolvedValue(bet);
-      await service.cancelBet({ betId: bet.id, reason: 'cancel', canceledBy: 'user-1' });
+      // Cancela a MESMA aposta: libera exatamente o que foi reservado.
+      betRepository.findById.mockResolvedValue(placed);
+      await service.cancelBet({ betId: placed.id, reason: 'cancel', canceledBy: 'user-c' });
 
-      // makeBet liability = 100 BRL @ odds 2 = 100 BRL; 140 - 100 = 40
-      expect(await riskService.getEventExposure('event-1')).toBe(40);
-      expect(await riskService.getMarketExposure('market-a')).toBe(40);
+      expect(await riskService.getEventExposure('event-1')).toBe(0);
+      expect(await riskService.getMarketExposure('market-a')).toBe(0);
     });
   });
 });

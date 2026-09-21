@@ -3,6 +3,7 @@ import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
 import { RiskExposureCounter } from '@/core/risk/domain/entities/RiskExposureCounter';
 import { RiskExposureScope } from '@/core/risk/types/risk.types';
 import { RISK_CONFIG } from '@/core/risk/config/risk-config';
+import { RiskExposureUnderflowError } from '@/core/risk/domain/errors/RiskExposureUnderflowError';
 
 const counterKey = (scope: RiskExposureScope, refId: string): string => `${scope}:${refId}`;
 
@@ -30,7 +31,16 @@ export class InMemoryRiskRepository implements IRiskRepository {
   }
 
   async decreaseExposure(userId: string, amountCents: number): Promise<void> {
-    const existing = this.store.get(userId) ?? new RiskProfile(userId, 0, 0);
+    const existing = this.store.get(userId);
+    if (!existing) {
+      throw new RiskExposureUnderflowError({
+        scope: 'USER',
+        refId: userId,
+        requestedCents: amountCents,
+        currentCents: 0,
+        recordExists: false,
+      });
+    }
     existing.decreaseExposure(amountCents);
     this.store.set(userId, existing);
   }
@@ -97,7 +107,15 @@ export class InMemoryRiskRepository implements IRiskRepository {
     amountCents: number,
   ): Promise<void> {
     const existing = this.counters.get(counterKey(scope, refId));
-    if (!existing) return;
+    if (!existing) {
+      throw new RiskExposureUnderflowError({
+        scope,
+        refId,
+        requestedCents: amountCents,
+        currentCents: 0,
+        recordExists: false,
+      });
+    }
     existing.decreaseExposure(amountCents);
     this.counters.set(counterKey(scope, refId), existing);
   }

@@ -2,6 +2,7 @@ import { RiskService } from '@/core/risk/domain/services/RiskService';
 import { InMemoryRiskRepository } from '@/core/risk/domain/repositories/InMemoryRiskRepository';
 import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 import { RiskProfile } from '@/core/risk/domain/entities/RiskProfile';
+import { RiskExposureUnderflowError } from '@/core/risk/domain/errors/RiskExposureUnderflowError';
 import { Bet } from '@/core/betting/domain/entities/Bet';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { Odds } from '@core/odds/domain/value-objects/Odds';
@@ -388,5 +389,54 @@ describe('RiskService — registerExposure/reduceExposure com riskRepository', (
 
     await rs.reduceMarketExposure('mkt', 100, { session: {} } as any);
     expect(riskRepo.decreaseCounter).toHaveBeenCalledWith('MARKET', 'mkt', 100, { session: {} });
+  });
+});
+
+describe('RiskService — underflow de exposição (item #9)', () => {
+  it('propaga o erro, incrementa a métrica de reconciliação e não mascara em zero', async () => {
+    const riskReconciliationMismatch = { inc: jest.fn() };
+    const riskRepo = {
+      decreaseExposure: jest.fn().mockRejectedValue(
+        new RiskExposureUnderflowError({
+          scope: 'USER',
+          refId: 'u1',
+          requestedCents: 500,
+          currentCents: 100,
+          recordExists: true,
+        }),
+      ),
+      decreaseCounter: jest.fn().mockRejectedValue(
+        new RiskExposureUnderflowError({
+          scope: 'EVENT',
+          refId: 'evt-1',
+          requestedCents: 500,
+          currentCents: 100,
+          recordExists: true,
+        }),
+      ),
+    } as any;
+    const rs = new RiskService(riskRepo, undefined, { riskReconciliationMismatch } as any);
+
+    await expect(rs.reduceExposure('u1', 500)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
+    expect(riskReconciliationMismatch.inc).toHaveBeenCalledWith({ kind: 'user' });
+
+    await expect(rs.reduceEventExposure('evt-1', 500)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
+    expect(riskReconciliationMismatch.inc).toHaveBeenCalledWith({ kind: 'counter' });
+  });
+
+  it('in-memory: redução acima da exposição propaga e preserva a exposição', async () => {
+    const riskReconciliationMismatch = { inc: jest.fn() };
+    const rs = new RiskService(undefined, undefined, { riskReconciliationMismatch } as any);
+    await rs.reserveExposure('u2', 1000);
+
+    await expect(rs.reduceExposure('u2', 5000)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
+    expect(await rs.getExposureForUser('u2')).toBe(10);
+    expect(riskReconciliationMismatch.inc).toHaveBeenCalledWith({ kind: 'user' });
   });
 });
