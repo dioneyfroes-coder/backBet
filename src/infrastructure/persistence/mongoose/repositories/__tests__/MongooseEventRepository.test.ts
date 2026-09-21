@@ -59,12 +59,14 @@ const makeDoc = () => ({
 const chain = (resolvedValue: unknown) => ({
   sort: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
+  collation: jest.fn().mockReturnThis(),
   lean: jest.fn().mockResolvedValue(resolvedValue),
 });
 
 const rejectedChain = (error: Error) => ({
   sort: jest.fn().mockReturnThis(),
   limit: jest.fn().mockReturnThis(),
+  collation: jest.fn().mockReturnThis(),
   lean: jest.fn().mockRejectedValue(error),
 });
 
@@ -218,7 +220,8 @@ describe('MongooseEventRepository (mocked model)', () => {
   });
 
   it('findByStatus e findByCategory retornam domínios', async () => {
-    jest.spyOn(EventModel, 'find').mockReturnValue(chain([makeDoc()]) as never);
+    const findChain = chain([makeDoc()]);
+    jest.spyOn(EventModel, 'find').mockReturnValue(findChain as never);
 
     const repo = new MongooseEventRepository();
     const byStatus = await repo.findByStatus('SCHEDULED');
@@ -226,6 +229,18 @@ describe('MongooseEventRepository (mocked model)', () => {
 
     expect(byStatus[0].name).toBe('FC Tech vs Dev United');
     expect(byCategory[0].category).toBe('Football');
+  });
+
+  it('findByCategory consulta por { category } com collation (índice) em vez de filtrar no Node', async () => {
+    const findChain = chain([makeDoc()]);
+    jest.spyOn(EventModel, 'find').mockReturnValue(findChain as never);
+
+    const repo = new MongooseEventRepository();
+    await repo.findByCategory('football');
+
+    expect((EventModel.find as jest.Mock).mock.calls[0][0]).toEqual({ category: 'football' });
+    expect(findChain.collation).toHaveBeenCalledWith({ locale: 'en', strength: 2 });
+    expect(findChain.sort).toHaveBeenCalledWith({ startDate: 1 });
   });
 
   describe('falha do banco vira AppError INTERNAL_SERVER_ERROR (code/message/status corretos)', () => {

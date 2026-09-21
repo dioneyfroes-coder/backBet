@@ -87,5 +87,11 @@ const eventSchema = new Schema<IEventDocument>(
 );
 
 eventSchema.index({ status: 1, startDate: 1 });
+// Suporta findByCategory (categoria + ordenação por startDate) mantendo a
+// semântica case-insensitive via collation de força 2.
+eventSchema.index(
+  { category: 1, startDate: 1 },
+  { collation: { locale: 'en', strength: 2 } },
+);
 
 export const EventModel = mongoose.model<IEventDocument>('Event', eventSchema);

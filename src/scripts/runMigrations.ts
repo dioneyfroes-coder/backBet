@@ -9,6 +9,7 @@ import { ensureIndexesMigration } from '@/infrastructure/database/migrations/000
 import { ensureFinanceIndexesMigration } from '@/infrastructure/database/migrations/0002-create-finance-indexes';
 import { ensureSessionsCollectionMigration } from '@/infrastructure/database/migrations/0003-create-sessions-collection';
 import { dropWalletTransactionsIndexMigration } from '@/infrastructure/database/migrations/0004-drop-wallet-transactions-index';
+import { ensureEventCategoryIndexMigration } from '@/infrastructure/database/migrations/0005-create-event-category-index';
 
 async function main() {
   const config = getMongoDBConfig();
@@ -20,6 +21,7 @@ async function main() {
       ensureFinanceIndexesMigration,
       ensureSessionsCollectionMigration,
       dropWalletTransactionsIndexMigration,
+      ensureEventCategoryIndexMigration,
     ]);
     console.log('✅ Todas as migrações foram aplicadas.');
   } catch (error) {

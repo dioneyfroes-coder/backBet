@@ -39,6 +39,7 @@ const jestBin = path.join('node_modules', 'jest', 'bin', 'jest.js');
 const defaultSpecs = [
   'src/integration/__tests__/mongo-redis.integration.test.ts',
   'src/integration/__tests__/user-auth-persistence.integration.test.ts',
+  'src/integration/__tests__/event-category-query.integration.test.ts',
   'src/integration/__tests__/load.concurrency.integration.test.ts',
   'src/integration/__tests__/failure.integration.test.ts',
 ];

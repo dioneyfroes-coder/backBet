@@ -101,11 +101,11 @@ export class MongooseEventRepository implements IEventRepository {
   async findByCategory(category: string): Promise<Event[]> {
     try {
       await this.ensureSeededIfEmpty();
-      const normalized = category.toLowerCase();
-      const docs = await EventModel.find({}).sort({ startDate: 1 }).lean<EventDoc[]>();
-      return docs
-        .filter((doc) => doc.category.toLowerCase() === normalized)
-        .map((doc) => this.toDomain(doc));
+      const docs = await EventModel.find({ category })
+        .collation({ locale: 'en', strength: 2 })
+        .sort({ startDate: 1 })
+        .lean<EventDoc[]>();
+      return docs.map((doc) => this.toDomain(doc));
     } catch (error: unknown) {
       const originalError = error instanceof Error ? error.message : 'unknown';
       throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar eventos por categoria', 500, {
