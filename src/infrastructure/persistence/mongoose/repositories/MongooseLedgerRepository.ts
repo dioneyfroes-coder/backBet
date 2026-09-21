@@ -72,19 +72,18 @@ export class MongooseLedgerRepository implements ILedgerRepository {
     types: LedgerOperationType[],
     options: LedgerSumOptions = {},
   ): Promise<{ amountCents: number; count: number }> {
-    const query: Record<string, unknown> = { userId, type: { $in: types } };
+    const match: Record<string, unknown> = { userId, type: { $in: types } };
     if (options.from) {
-      query.createdAt = { $gte: options.from };
+      match.createdAt = { $gte: options.from };
     }
     if (options.statuses) {
-      query.status = { $in: options.statuses };
+      match.status = { $in: options.statuses };
     }
-    const docs = await LedgerEntryModel.find(query).lean<LedgerDoc[]>();
-    let amountCents = 0;
-    for (const doc of docs) {
-      amountCents += doc.amountCents ?? 0;
-    }
-    return { amountCents, count: docs.length };
+    const rows = await LedgerEntryModel.aggregate<{ total: number; totalCount: number }>([
+      { $match: match },
+      { $group: { _id: null, total: { $sum: '$amountCents' }, totalCount: { $sum: 1 } } },
+    ]);
+    return { amountCents: rows[0]?.total ?? 0, count: rows[0]?.totalCount ?? 0 };
   }
 
   async aggregateByTypes(
