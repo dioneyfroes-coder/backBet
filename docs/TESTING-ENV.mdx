@@ -21,6 +21,7 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 | `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) | infra real |
 | `npm run test:load:distributed` | Carga **distribuída** (N carteiras, eixo horizontal) | infra real |
 | `npm run test:crash` | Recuperação de worker após crash | infra real |
+| `npm run test:multiworker` | Dois workers reais disputam o mesmo payout (item #16) | infra real |
 | `npm run test:backup` | Ciclo backup/restore/validação | infra real |
 | `npm run test:load:percentiles` | Baseline de performance 50..500 + CPU/RAM + latências (ver `docs/PERFORMANCE-BASELINE.mdx`) | Docker |
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) | — |
@@ -77,6 +78,16 @@ reconciliação financeira (`FinancialReconciliationService`) é executada; o tr
 suítes de administração (`admin.audit.integration.test.ts`, `api.integration.*`).
 
 - `npm run test:backup` — exercita `backup:create → restore → validate`; o `backup:drill` automatizado restaura em banco temporário sem tocar o original. Runbook: `docs/BACKUP_RECOVERY.mdx`.
+
+### Multi-worker (item #16)
+
+`npm run test:multiworker` (`multi-worker.integration.test.ts`) sobe **dois workers**
+(processos Node reais via `tsx`) disputando o **mesmo payout** sobre Mongo/Redis reais:
+o claim `APPROVED → PROCESSING` é atômico, então exatamente um worker toca o PSP; o
+vencido retorna sem efeito financeiro. Valida **claim** (1 vence), **payout** (1
+chamada ao PSP via marcador compartilhado), **ledger** (1 `WITHDRAWAL_COMPLETED`),
+**state transition** (`COMPLETED`) e **idempotência** (uma 3ª entrega não re-paga),
+fechando com reconciliação financeira wallet vs ledger.
 
 ## Matriz de cenários críticos (dinheiro)
 

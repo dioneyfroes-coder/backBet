@@ -18,6 +18,7 @@
     "test:load:distributed": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/load.distributed.integration.test.ts",
     "test:load:percentiles": "node scripts/percentile-driver.cjs",
     "test:crash": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/crash.integration.test.ts",
+    "test:multiworker": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/multi-worker.integration.test.ts",
     "test:backup": "node scripts/run-integration-tests.cjs -- src/integration/__tests__/backup.integration.test.ts",
     "docker:rebuild": "bash scripts/docker-rebuild-drill.sh",
     "docker:rebuild:ci": "bash scripts/docker-rebuild-drill.sh --yes --down",
