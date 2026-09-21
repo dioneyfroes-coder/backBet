@@ -1,6 +1,5 @@
-import { randomUUID } from 'crypto';
 import { IWalletDTO } from '../../types/wallet.types';
-import { Transaction, TransactionMetadata, TransactionType } from './Transaction';
+import { TransactionMetadata } from './Transaction';
 import { DomainError } from '@/core/shared/domain/errors/DomainError';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { Currency, CurrencyValueObject } from '../value-objects/Currency';
@@ -8,7 +7,6 @@ import { Currency, CurrencyValueObject } from '../value-objects/Currency';
 export class Wallet {
   private _balance: Money;
   private _lockedBalance: Money;
-  private _transactions: Transaction[] = [];
 
   constructor(
     private readonly _userId: string,
@@ -52,14 +50,13 @@ export class Wallet {
     return this._balance.currency;
   }
 
-  deposit(amount: number, context?: TransactionContext): void {
+  deposit(amount: number): void {
     this.ensurePositiveAmount(amount);
     const money = this.createMoney(amount);
     this._balance = this._balance.add(money);
-    this.recordTransaction('deposit', money.amount, context);
   }
 
-  withdraw(amount: number, context?: TransactionContext): void {
+  withdraw(amount: number): void {
     this.ensurePositiveAmount(amount);
     const money = this.createMoney(amount);
     if (this._balance.isLessThan(money)) {
@@ -70,10 +67,9 @@ export class Wallet {
       });
     }
     this._balance = this._balance.subtract(money);
-    this.recordTransaction('withdraw', money.amount, context);
   }
 
-  lock(amount: number, context?: TransactionContext): void {
+  lock(amount: number): void {
     this.ensurePositiveAmount(amount);
     const money = this.createMoney(amount);
     if (this._balance.isLessThan(money)) {
@@ -85,10 +81,9 @@ export class Wallet {
     }
     this._balance = this._balance.subtract(money);
     this._lockedBalance = this._lockedBalance.add(money);
-    this.recordTransaction('lock', money.amount, context);
   }
 
-  unlock(amount: number, context?: TransactionContext): void {
+  unlock(amount: number): void {
     this.ensurePositiveAmount(amount);
     const money = this.createMoney(amount);
     if (this._lockedBalance.isLessThan(money)) {
@@ -100,10 +95,9 @@ export class Wallet {
     }
     this._lockedBalance = this._lockedBalance.subtract(money);
     this._balance = this._balance.add(money);
-    this.recordTransaction('unlock', money.amount, context);
   }
 
-  withdrawLocked(amount: number, context?: TransactionContext): void {
+  withdrawLocked(amount: number): void {
     this.ensurePositiveAmount(amount);
     const money = this.createMoney(amount);
     if (this._lockedBalance.isLessThan(money)) {
@@ -114,7 +108,6 @@ export class Wallet {
       });
     }
     this._lockedBalance = this._lockedBalance.subtract(money);
-    this.recordTransaction('withdraw_locked', money.amount, context);
   }
 
   toDTO(): IWalletDTO {
@@ -124,10 +117,6 @@ export class Wallet {
       lockedBalance: this.lockedBalance,
       currency: this.currency,
     };
-  }
-
-  getTransactions(): Transaction[] {
-    return [...this._transactions];
   }
 
   private createMoney(amount: number): Money {
@@ -141,28 +130,6 @@ export class Wallet {
         message: 'Amount must be positive',
         details: { amount },
       });
-    }
-  }
-
-  private recordTransaction(
-    type: TransactionType,
-    amount: number,
-    context?: TransactionContext,
-  ): void {
-    try {
-      const tx = new Transaction(
-        randomUUID(),
-        this._userId,
-        type,
-        amount,
-        this.currency,
-        context?.description,
-        new Date(),
-        context?.metadata,
-      );
-      this._transactions.unshift(tx);
-    } catch (error) {
-      // Do not block wallet operations if logging fails
     }
   }
 }

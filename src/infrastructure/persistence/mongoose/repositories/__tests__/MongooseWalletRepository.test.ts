@@ -9,7 +9,6 @@ const WALLET_DOC = {
   balanceCents: 1000,
   lockedBalanceCents: 0,
   currency: 'BRL',
-  transactions: [],
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -31,6 +30,10 @@ const rejectedChain = (error: Error) => ({
 describe('MongooseWalletRepository (mocked model)', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('o schema da Wallet não possui mais o array transactions (item #7)', () => {
+    expect(WalletModel.schema.path('transactions')).toBeUndefined();
   });
 
   it('findByUserId mapeia document para domínio', async () => {
@@ -144,28 +147,6 @@ describe('MongooseWalletRepository (mocked model)', () => {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Erro ao deletar carteira',
         statusCode: 500,
-      });
-    });
-
-    it('getHistory', async () => {
-      jest.spyOn(WalletModel, 'findOne').mockReturnValue(rejectedChain(dbError) as never);
-
-      const repo = new MongooseWalletRepository();
-      await expect(repo.getHistory('user-1')).rejects.toMatchObject({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Erro ao buscar histórico de transações',
-        statusCode: 500,
-      });
-    });
-
-    it('getHistory lança NOT_FOUND quando a carteira não existe', async () => {
-      jest.spyOn(WalletModel, 'findOne').mockReturnValue(chain(null) as never);
-
-      const repo = new MongooseWalletRepository();
-      await expect(repo.getHistory('user-1')).rejects.toMatchObject({
-        code: 'NOT_FOUND',
-        message: 'Carteira não encontrada',
-        statusCode: 404,
       });
     });
   });

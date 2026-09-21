@@ -13,7 +13,6 @@ describe('WalletService', () => {
       save: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-      getHistory: jest.fn(),
     };
 
     walletService = new WalletService(mockWalletRepository);
@@ -212,14 +211,38 @@ describe('WalletService', () => {
       expect(mockWalletRepository.findByUserId).toHaveBeenCalledWith('lookup');
     });
 
-    it('getHistory delegates pagination params', async () => {
-      const historyResult = { transactions: [], total: 0 };
-      mockWalletRepository.getHistory.mockResolvedValue(historyResult);
+    it('getHistory lê o Ledger e preserva os parâmetros de paginação', async () => {
+      const entry = {
+        toDTO: () => ({
+          transactionId: 'tx-1',
+          userId: 'user-x',
+          type: 'DEPOSIT',
+          amount: 25,
+          currency: 'BRL',
+          referenceId: undefined,
+          source: 'pix',
+          status: 'COMPLETED',
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          metadata: { description: 'dep' },
+        }),
+      };
+      const ledger = {
+        findByUserId: jest.fn().mockResolvedValue([entry]),
+        countByUserId: jest.fn().mockResolvedValue(1),
+      };
+      const service = new WalletService(mockWalletRepository, ledger as never);
 
-      const result = await walletService.getHistory('user-x', 5, 10);
+      const result = await service.getHistory('user-x', 5, 10);
 
-      expect(result).toBe(historyResult);
-      expect(mockWalletRepository.getHistory).toHaveBeenCalledWith('user-x', 5, 10);
+      expect(ledger.findByUserId).toHaveBeenCalledWith('user-x', { limit: 5, offset: 10 });
+      expect(ledger.countByUserId).toHaveBeenCalledWith('user-x');
+      expect(result.total).toBe(1);
+      expect(result.transactions[0]).toMatchObject({
+        id: 'tx-1',
+        type: 'DEPOSIT',
+        amount: 25,
+        description: 'dep',
+      });
     });
   });
 });

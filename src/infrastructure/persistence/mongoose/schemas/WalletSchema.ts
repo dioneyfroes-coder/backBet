@@ -7,16 +7,6 @@ export interface IWalletDocument extends Document {
   balanceCents: number;
   lockedBalanceCents: number;
   currency: string;
-  transactions: Array<{
-    id: string;
-    type: 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
-    amountCents: number;
-    currency: string;
-    userId: string;
-    description?: string;
-    metadata?: Record<string, unknown> | null;
-    createdAt: Date | string;
-  }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,22 +42,6 @@ const walletSchema = new Schema<IWalletDocument>(
       enum: ['BRL', 'USD', 'EUR'],
       default: 'BRL',
     },
-    transactions: [
-      {
-        id: String,
-        type: {
-          type: String,
-          enum: ['deposit', 'withdraw', 'lock', 'unlock', 'withdraw_locked'],
-          lowercase: true,
-        },
-        amountCents: { type: Number, required: true, min: 0 },
-        currency: String,
-        userId: String,
-        description: String,
-        metadata: Schema.Types.Mixed,
-        createdAt: { type: Date, default: Date.now },
-      },
-    ],
   },
   { timestamps: true },
 );

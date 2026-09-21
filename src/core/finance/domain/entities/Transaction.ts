@@ -1,40 +1,19 @@
-export type TransactionType = 'deposit' | 'withdraw' | 'lock' | 'unlock' | 'withdraw_locked';
+import { LedgerOperationType } from './LedgerEntry';
 
 export type TransactionMetadata = Record<string, unknown> | undefined;
 
+/**
+ * Visão de leitura do histórico financeiro de uma carteira. É derivada do
+ * Ledger (append-only, coleção própria) — a Wallet não mantém mais um array de
+ * transações embutido (item #7 do plano de correções).
+ */
 export interface ITransactionDTO {
   id: string;
   userId: string;
-  type: TransactionType;
+  type: LedgerOperationType;
   amount: number;
   currency: string;
   description: string | undefined;
   createdAt: Date;
   metadata?: TransactionMetadata;
-}
-
-export class Transaction {
-  constructor(
-    public readonly id: string,
-    public readonly userId: string,
-    public readonly type: TransactionType,
-    public readonly amount: number,
-    public readonly currency: string,
-    public readonly description: string | undefined,
-    public readonly createdAt: Date,
-    public readonly metadata?: TransactionMetadata,
-  ) {}
-
-  toDTO(): ITransactionDTO {
-    return {
-      id: this.id,
-      userId: this.userId,
-      type: this.type,
-      amount: this.amount,
-      currency: this.currency,
-      description: this.description,
-      createdAt: this.createdAt,
-      metadata: this.metadata,
-    };
-  }
 }

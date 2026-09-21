@@ -41,7 +41,6 @@ import { Email } from '@/core/user/domain/value-objects/Email';
 import { TransactionSession } from '@/core/shared/types/Transaction';
 import type { WalletRepositoryOptions, IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
-import type { ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
 
 const runRealIntegration = process.env.RUN_REAL_INTEGRATION_TESTS === 'true';
 const describeReal = runRealIntegration ? describe : describe.skip;
@@ -95,14 +94,6 @@ class KillableWalletRepository implements IWalletRepository {
     return this.inner.delete(userId);
   }
 
-  async getHistory(
-    userId: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
-    return this.inner.getHistory(userId, limit, offset);
-  }
-
   async withTransaction<T>(work: (session: TransactionSession) => Promise<T>): Promise<T> {
     return this.inner.withTransaction!(work);
   }
@@ -131,14 +122,6 @@ class RetryConflictWalletRepository implements IWalletRepository {
 
   async delete(userId: string): Promise<void> {
     return this.inner.delete(userId);
-  }
-
-  async getHistory(
-    userId: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
-    return this.inner.getHistory(userId, limit, offset);
   }
 
   async withTransaction<T>(work: (session: TransactionSession) => Promise<T>): Promise<T> {

@@ -8,10 +8,5 @@ export interface IWalletRepository {
   save(wallet: Wallet, options?: WalletRepositoryOptions): Promise<Wallet>;
   update(wallet: Wallet, options?: WalletRepositoryOptions): Promise<Wallet>;
   delete(userId: string): Promise<void>;
-  getHistory(
-    userId: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<{ transactions: import('../entities/Transaction').ITransactionDTO[]; total: number }>;
   withTransaction?<T>(work: (session: TransactionSession) => Promise<T>): Promise<T>;
 }

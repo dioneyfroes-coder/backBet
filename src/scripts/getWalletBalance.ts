@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { createWalletRepository, createUserRepository } from '@/infrastructure/persistence/factory';
+import { createWalletRepository, createUserRepository, createLedgerRepository } from '@/infrastructure/persistence/factory';
+import { WalletService } from '@/core/finance/domain/services/WalletService';
 import {
   connectMongoDB,
   disconnectMongoDB,
@@ -102,6 +103,8 @@ async function main(): Promise<void> {
 
   try {
     const walletRepository = await createWalletRepository();
+    const ledgerRepository = await createLedgerRepository();
+    const walletService = new WalletService(walletRepository, ledgerRepository);
     let userId = options.userId;
 
     if (!userId) {
@@ -130,7 +133,7 @@ async function main(): Promise<void> {
     });
 
     if (options.includeHistory) {
-      const { transactions, total } = await walletRepository.getHistory(
+      const { transactions, total } = await walletService.getHistory(
         wallet.userId,
         options.historyLimit,
         0,
