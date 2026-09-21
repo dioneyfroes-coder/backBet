@@ -56,7 +56,26 @@ Regras garantidas sob carga: saldo nunca negativo (FI-01), débito único por sa
 
 ## Teste de crash e backup
 
-- `npm run test:crash` — derruba worker no meio do processamento e valida recuperação (estado `PROCESSING`/`FAILED` consistente, retry conclui, sem débito duplicado).
+`npm run test:crash` (ou `crash.integration.test.ts`) valida o item #15 do plano —
+**docker kill nos piores momentos** — cobrindo cada janela do plano (Mongo real, 9/9):
+
+| Caso | Janela de kill (item #15) | O que garante |
+|------|---------------------------|---------------|
+| C1a | durante transação de **depósito** | rollback total, nada órfão no ledger |
+| C1b | durante transação de **aposta** | aposta inexistente e débito+exposição revertidos (risk) |
+| C1c | durante transação de **saque** | sem hold órfão, sem request pendente |
+| C2 | **após commit / antes da response** | crédito aplicado, `PROCESSING`, reclaim não duplica |
+| C3 | **durante retry** | reexecução converge a exatamente 1 crédito |
+| C4 | durante **settlement** | prêmio creditado uma única vez |
+| C5 | durante **payout** (PSP pago antes do débito) | recuperação consulta o PSP e nunca re-paga |
+| C7 | **docker kill REAL (SIGKILL)** do worker durante payout | `PROCESSING` consistente; recuperação conclui 1 único débito |
+| C6 | síntese | `reconcileUsers` — wallet/ledger/bet/withdrawal/risk reconciliáveis |
+
+Após cada kill o estado de wallet, ledger, bets, withdrawal e risk é conferido e a
+reconciliação financeira (`FinancialReconciliationService`) é executada; o trilho de **audit**
+(idempotência/recuperação sem duplicação) é exercitado nos casos C2/C3/C5/C7 e nas
+suítes de administração (`admin.audit.integration.test.ts`, `api.integration.*`).
+
 - `npm run test:backup` — exercita `backup:create → restore → validate`; o `backup:drill` automatizado restaura em banco temporário sem tocar o original. Runbook: `docs/BACKUP_RECOVERY.mdx`.
 
 ## Matriz de cenários críticos (dinheiro)
