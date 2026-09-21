@@ -8,6 +8,7 @@ import { AppError } from '@/shared/errors/AppError';
 import { RiskRepositoryOptions } from '@/core/risk/domain/repositories/IRiskRepository';
 import { RISK_CONFIG } from '@/core/risk/config/risk-config';
 import { isRetryableTransactionError } from '../errors/retryableTransactionError';
+import { RiskExposureUnderflowError } from '@/core/risk/domain/errors/RiskExposureUnderflowError';
 
 type RiskProfileRecord = {
   _id?: string | { toString(): string };
@@ -26,13 +27,6 @@ type RiskCounterRecord = {
 
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'unknown';
-
-const normalizeRecordId = (id?: RiskProfileRecord['_id']): string | null => {
-  if (!id) {
-    return null;
-  }
-  return typeof id === 'string' ? id : id.toString();
-};
 
 const mapToDomain = (record: RiskProfileRecord): RiskProfile =>
   new RiskProfile(record.userId, record.exposureCents, record.maxExposureCents);
@@ -100,24 +94,35 @@ export class MongooseRiskRepository implements IRiskRepository {
   }
 
   async decreaseExposure(userId: string, amountCents: number, options: RiskRepositoryOptions = {}): Promise<void> {
+    if (!Number.isFinite(amountCents) || amountCents < 0) {
+      throw new AppError('VALIDATION_ERROR', 'amountCents deve ser um inteiro não-negativo', 400, {
+        amountCents,
+      });
+    }
     try {
+      // Decremento condicional atômico: só decrementa se houver exposição
+      // suficiente. Nunca satura em zero, pois isso esconderia a inconsistência.
       const query = RiskProfileModel.findOneAndUpdate(
-        { userId },
-        { $inc: { exposureCents: -Math.abs(amountCents) } },
+        { userId, $expr: { $gte: ['$exposureCents', amountCents] } },
+        { $inc: { exposureCents: -amountCents } },
         { new: true },
       );
       if (options.session) query.session(options.session as never);
       const res = await query.lean<RiskProfileRecord | null>();
 
-      if (res && res.exposureCents < 0) {
-        const normalizedId = normalizeRecordId(res._id);
-        if (normalizedId) {
-          const correction = RiskProfileModel.findByIdAndUpdate(normalizedId, { exposureCents: 0 });
-          if (options.session) correction.session(options.session as never);
-          await correction;
-        }
+      if (!res) {
+        throw new RiskExposureUnderflowError({
+          scope: 'USER',
+          refId: userId,
+          requestedCents: amountCents,
+          currentCents: await this.readUserExposure(userId, options),
+          recordExists: await this.userProfileExists(userId, options),
+        });
       }
     } catch (error: unknown) {
+      if (error instanceof RiskExposureUnderflowError) {
+        throw error;
+      }
       if (isRetryableTransactionError(error)) {
         throw error;
       }
@@ -125,6 +130,20 @@ export class MongooseRiskRepository implements IRiskRepository {
         originalError: getErrorMessage(error),
       });
     }
+  }
+
+  private async readUserExposure(userId: string, options: RiskRepositoryOptions): Promise<number> {
+    const query = RiskProfileModel.findOne({ userId });
+    if (options.session) query.session(options.session as never);
+    const doc = await query.lean<RiskProfileRecord | null>();
+    return doc?.exposureCents ?? 0;
+  }
+
+  private async userProfileExists(userId: string, options: RiskRepositoryOptions): Promise<boolean> {
+    const query = RiskProfileModel.findOne({ userId }).select('_id');
+    if (options.session) query.session(options.session as never);
+    const doc = await query.lean<{ _id?: unknown } | null>();
+    return doc !== null;
   }
 
   async getExposure(userId: string): Promise<number> {
@@ -283,26 +302,37 @@ export class MongooseRiskRepository implements IRiskRepository {
     amountCents: number,
     options: RiskRepositoryOptions = {},
   ): Promise<void> {
+    if (!Number.isFinite(amountCents) || amountCents < 0) {
+      throw new AppError('VALIDATION_ERROR', 'amountCents deve ser um inteiro não-negativo', 400, {
+        amountCents,
+      });
+    }
     try {
+      // Idem decreaseExposure: condicional e atômico, sem clamp em zero.
       const query = RiskExposureCounterModel.findOneAndUpdate(
-        { scope, refId },
-        { $inc: { exposureCents: -Math.abs(amountCents) } },
+        { scope, refId, $expr: { $gte: ['$exposureCents', amountCents] } },
+        { $inc: { exposureCents: -amountCents } },
         { new: true },
       );
       if (options.session) query.session(options.session as never);
       const res = await query.lean<RiskCounterRecord | null>();
 
-      if (res && res.exposureCents < 0) {
-        const normalizedId = normalizeRecordId(res._id);
-        if (normalizedId) {
-          const correction = RiskExposureCounterModel.findByIdAndUpdate(normalizedId, {
-            exposureCents: 0,
-          });
-          if (options.session) correction.session(options.session as never);
-          await correction;
-        }
+      if (!res) {
+        const currentQuery = RiskExposureCounterModel.findOne({ scope, refId });
+        if (options.session) currentQuery.session(options.session as never);
+        const current = await currentQuery.lean<RiskCounterRecord | null>();
+        throw new RiskExposureUnderflowError({
+          scope,
+          refId,
+          requestedCents: amountCents,
+          currentCents: current?.exposureCents ?? 0,
+          recordExists: current !== null,
+        });
       }
     } catch (error: unknown) {
+      if (error instanceof RiskExposureUnderflowError) {
+        throw error;
+      }
       if (isRetryableTransactionError(error)) {
         throw error;
       }

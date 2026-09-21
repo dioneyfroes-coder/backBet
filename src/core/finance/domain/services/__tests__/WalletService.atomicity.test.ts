@@ -10,7 +10,6 @@ function baseWalletRepoMock(wallet: Wallet) {
     save: jest.fn().mockImplementation((w: Wallet) => Promise.resolve(w)),
     update: jest.fn().mockImplementation((w: Wallet) => Promise.resolve(w)),
     delete: jest.fn().mockResolvedValue(undefined),
-    getHistory: jest.fn().mockResolvedValue({ transactions: [], total: 0 }),
   };
 }
 

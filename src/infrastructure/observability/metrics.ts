@@ -83,6 +83,12 @@ const withdrawalRequestProcessingFailedCounter = new Counter({
   registers: [registry],
 });
 
+const withdrawalConcurrencyConflictCounter = new Counter({
+  name: 'backbet_withdrawal_concurrency_conflicts_total',
+  help: 'Transições de withdrawal rejeitadas por conflito de concorrência (guard otimista)',
+  registers: [registry],
+});
+
 const withdrawalPayoutSuccessCounter = new Counter({
   name: 'backbet_withdrawal_payout_success_total',
   help: 'Total de pagamentos (payouts) de saque bem-sucedidos',
@@ -236,6 +242,7 @@ export {
   withdrawalRequestCreatedCounter,
   withdrawalRequestApprovedCounter,
   withdrawalRequestProcessingFailedCounter,
+  withdrawalConcurrencyConflictCounter,
   withdrawalPayoutSuccessCounter,
   withdrawalPayoutFailedCounter,
   idempotencyClaimCounter,

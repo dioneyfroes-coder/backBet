@@ -29,18 +29,48 @@ describe('MongooseRiskRepository (mocked model)', () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it('should call findOneAndUpdate on decreaseExposure and normalize negative', async () => {
-    const leanResult = { _id: 'abc', exposureCents: -1000 } as any;
+  it('decreaseExposure aplica decremento condicional atômico quando há exposição', async () => {
+    const found = { _id: 'abc', userId: 'u1', exposureCents: 1000 } as any;
     const spy = jest
       .spyOn(RiskProfileModel, 'findOneAndUpdate')
-      .mockReturnValue({ lean: jest.fn().mockResolvedValue(leanResult) } as any);
-    const findById = jest.spyOn(RiskProfileModel, 'findByIdAndUpdate').mockResolvedValue({} as any);
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue(found) } as any);
 
     const repo = new MongooseRiskRepository();
     await repo.decreaseExposure('u1', 2000);
 
-    expect(spy).toHaveBeenCalled();
-    expect(findById).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual({
+      userId: 'u1',
+      $expr: { $gte: ['$exposureCents', 2000] },
+    });
+    expect(spy.mock.calls[0][1]).toEqual({ $inc: { exposureCents: -2000 } });
+  });
+
+  it('decreaseExposure sinaliza RISK_EXPOSURE_UNDERFLOW sem clampar em zero', async () => {
+    jest
+      .spyOn(RiskProfileModel, 'findOneAndUpdate')
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue(null) } as any);
+    const selectChain = { lean: jest.fn().mockResolvedValue({ _id: 'abc' }) };
+    jest.spyOn(RiskProfileModel, 'findOne').mockImplementation(
+      () =>
+        ({
+          lean: jest.fn().mockResolvedValue({ _id: 'abc', exposureCents: 1000 }),
+          select: jest.fn().mockReturnValue(selectChain),
+        }) as any,
+    );
+
+    const repo = new MongooseRiskRepository();
+    await expect(repo.decreaseExposure('u1', 5000)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+      details: { requestedCents: 5000, currentCents: 1000, recordExists: true },
+    });
+  });
+
+  it('decreaseExposure rejeita amountCents negativo', async () => {
+    const repo = new MongooseRiskRepository();
+    await expect(repo.decreaseExposure('u1', -1)).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
   });
 
   it('should return exposure via getExposure', async () => {

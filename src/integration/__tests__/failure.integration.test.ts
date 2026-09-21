@@ -40,7 +40,6 @@ import { AppError } from '@/shared/errors/AppError';
 import type { TransactionSession } from '@/core/shared/types/Transaction';
 import type { WalletRepositoryOptions, IWalletRepository } from '@/core/finance/domain/repositories/IWalletRepository';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
-import type { ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
 import { Currency } from '@/core/finance/domain/value-objects/Currency';
 
 const runRealIntegration = process.env.RUN_REAL_INTEGRATION_TESTS === 'true';
@@ -77,15 +76,6 @@ class InterruptibleWalletRepository implements IWalletRepository {
   async delete(userId: string): Promise<void> {
     this.guard();
     return this.inner.delete(userId);
-  }
-
-  async getHistory(
-    userId: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
-    this.guard();
-    return this.inner.getHistory(userId, limit, offset);
   }
 
   async withTransaction<T>(work: (session: TransactionSession) => Promise<T>): Promise<T> {
@@ -412,9 +402,9 @@ describeReal('Fase 22 — Testes de falha (MongoDB real)', () => {
     );
     expect(adapter.attempts).toBe(1);
 
-    await expect(
-      idem.execute(key, fingerprint, () => processWithdrawalPayloadOnce(payload, adapter, wdService)),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await idem.execute(key, fingerprint, () =>
+      processWithdrawalPayloadOnce(payload, adapter, wdService),
+    );
     expect(adapter.attempts).toBe(1);
 
     const done = await wdRepo.findById(request.id);

@@ -1,5 +1,4 @@
 import { BetStatus, BetType } from '@/core/betting/types/bet.types';
-import { TransactionType } from '@/core/finance/domain/entities/Transaction';
 import {
   TreasuryLedgerDirection,
   TreasuryLedgerType,
@@ -38,17 +37,6 @@ export interface BetRecord {
   updatedAt: Date;
 }
 
-export interface WalletTransactionRecord {
-  id: string;
-  type: TransactionType;
-  amountCents: number;
-  currency: string;
-  userId: string;
-  description?: string;
-  createdAt: Date | string;
-  metadata?: Record<string, unknown> | null;
-}
-
 export interface WalletRecord {
   _id: MongoId;
   userId: string;
@@ -56,7 +44,6 @@ export interface WalletRecord {
   balanceCents: number;
   lockedBalanceCents: number;
   currency: string;
-  transactions: WalletTransactionRecord[];
   createdAt: Date;
   updatedAt: Date;
 }

@@ -7,6 +7,7 @@ import { IBetRepository } from '@/core/betting/domain/repositories/IBetRepositor
 import { BetStatus } from '@/core/betting/types/bet.types';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { RiskRepositoryOptions } from '../repositories/IRiskRepository';
+import { isRiskExposureUnderflow } from '@/core/risk/domain/errors/RiskExposureUnderflowError';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import {
   IMetricsPort,
@@ -228,15 +229,57 @@ export class RiskService {
   }
 
   async reduceExposure(userId: string, amountCents: number, options?: RiskRepositoryOptions): Promise<void> {
-    if (this.riskRepository) {
-      if (options) await this.riskRepository.decreaseExposure(userId, amountCents, options);
-      else await this.riskRepository.decreaseExposure(userId, amountCents);
-      return;
+    try {
+      if (this.riskRepository) {
+        if (options) await this.riskRepository.decreaseExposure(userId, amountCents, options);
+        else await this.riskRepository.decreaseExposure(userId, amountCents);
+        return;
+      }
+      const profile = this.profiles.get(userId);
+      if (!profile) return;
+      profile.decreaseExposure(amountCents);
+      this.profiles.set(userId, profile);
+    } catch (error: unknown) {
+      this.handleExposureUnderflow(error, {
+        kind: 'user',
+        scope: 'USER',
+        refId: userId,
+        amountCents,
+      });
     }
-    const profile = this.profiles.get(userId);
-    if (!profile) return;
-    profile.decreaseExposure(amountCents);
-    this.profiles.set(userId, profile);
+  }
+
+  /**
+   * Underflow de exposição indica inconsistência (ex.: release sem reserve,
+   * release duplicado). Não é mascarado com clamp em zero: registra métrica e
+   * log estruturado, aponta o caminho de reconciliação e propaga o erro.
+   */
+  private handleExposureUnderflow(
+    error: unknown,
+    context: {
+      kind: 'user' | 'counter';
+      scope: string;
+      refId: string;
+      amountCents: number;
+    },
+  ): never {
+    if (isRiskExposureUnderflow(error)) {
+      this.metrics.riskReconciliationMismatch.inc({ kind: context.kind });
+      writeStructuredLog(
+        {
+          event: 'risk_exposure_underflow',
+          scope: context.scope,
+          refId: context.refId,
+          requestedCents: context.amountCents,
+          currentCents: error.details?.currentCents,
+          recordExists: error.details?.recordExists,
+          reconciliationHint:
+            context.kind === 'user' ? 'recalculateUserExposure' : 'recalculateCounter',
+        },
+        'error',
+      );
+    }
+    throw error;
   }
 
   private async reserveCounter(
@@ -258,9 +301,13 @@ export class RiskService {
     amountCents: number,
     options?: RiskRepositoryOptions,
   ): Promise<void> {
-    if (this.riskRepository) {
-      if (options) await this.riskRepository.decreaseCounter(scope, refId, amountCents, options);
-      else await this.riskRepository.decreaseCounter(scope, refId, amountCents);
+    try {
+      if (this.riskRepository) {
+        if (options) await this.riskRepository.decreaseCounter(scope, refId, amountCents, options);
+        else await this.riskRepository.decreaseCounter(scope, refId, amountCents);
+      }
+    } catch (error: unknown) {
+      this.handleExposureUnderflow(error, { kind: 'counter', scope, refId, amountCents });
     }
   }
 

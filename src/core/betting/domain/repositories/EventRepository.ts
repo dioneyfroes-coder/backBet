@@ -3,6 +3,7 @@ import { IEventRepository } from '../../domain/repositories/IEventRepository';
 import { Event } from '../../domain/entities/Event';
 import { EventStatus } from '../../types/bet.types';
 import { createSampleEvents } from '../../domain/seed/sampleEvents';
+import { AppError } from '@/shared/errors/AppError';
 
 type EventFilter = {
   status?: EventStatus;
@@ -24,11 +25,21 @@ export class EventRepository implements IEventRepository {
 
   async update(event: Event): Promise<void> {
     const index = this.events.findIndex((e) => e.id === event.id);
-    if (index >= 0) {
-      this.events[index] = event;
+    if (index < 0) {
+      this.events.push(event);
       return;
     }
-    this.events.push(event);
+    const existing = this.events[index];
+    if (existing.baseVersion !== event.baseVersion) {
+      throw new AppError(
+        'CONFLICT',
+        'Evento foi modificado por outra operação; recarregue e tente novamente',
+        409,
+        { eventId: event.id, expectedVersion: event.baseVersion },
+      );
+    }
+    this.events[index] = event;
+    event.markPersisted();
   }
 
   async findById(id: string): Promise<Event | null> {

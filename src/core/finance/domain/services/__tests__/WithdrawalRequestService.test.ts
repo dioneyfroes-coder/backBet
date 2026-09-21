@@ -104,7 +104,9 @@ describe('WithdrawalRequestService', () => {
     // Money is NOT debited on approval - it stays locked (never disappears).
     expect(walletService.withdrawLocked).not.toHaveBeenCalled();
     expect(result.isTerminal).toBe(false);
-    expect(repository.update).toHaveBeenCalledWith(result);
+    expect(repository.update).toHaveBeenCalledWith(result, {
+      guard: { status: 'REQUESTED', version: 1 },
+    });
   });
 
   it('rejects a requested request and unlocks the amount back to available', async () => {
@@ -123,7 +125,9 @@ describe('WithdrawalRequestService', () => {
       expect.objectContaining({ type: 'WITHDRAWAL_REVERSED', source: 'WITHDRAWAL' }),
     );
     expect(result.status).toBe('REJECTED');
-    expect(repository.update).toHaveBeenCalledWith(result);
+    expect(repository.update).toHaveBeenCalledWith(result, {
+      guard: { status: 'REQUESTED', version: 1 },
+    });
   });
 
   it('marks an approved request as PROCESSING', async () => {

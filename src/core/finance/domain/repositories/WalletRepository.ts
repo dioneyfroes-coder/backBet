@@ -2,7 +2,6 @@
 import { IWalletRepository } from '../../domain/repositories/IWalletRepository';
 import { Wallet } from '../../domain/entities/Wallet';
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
-import { Transaction } from '../../domain/entities/Transaction';
 import { AppError } from '@/shared/errors/AppError';
 
 export class WalletRepository implements IWalletRepository {
@@ -39,29 +38,14 @@ export class WalletRepository implements IWalletRepository {
     this.wallets = this.wallets.filter((w) => w.userId !== userId);
   }
 
-  async getHistory(
-    userId: string,
-    limit = 10,
-    offset = 0,
-  ): Promise<{ transactions: import('../entities/Transaction').ITransactionDTO[]; total: number }> {
-    const wallet = this.wallets.find((w) => w.userId === userId) || null;
-    if (!wallet) return { transactions: [], total: 0 };
-    const all = wallet.getTransactions();
-    const total = all.length;
-    const slice = all.slice(offset, offset + limit).map((t) => t.toDTO());
-    return { transactions: slice, total };
-  }
-
   private clone(wallet: Wallet): Wallet {
     const cloned = new Wallet(wallet.userId, wallet.currency, wallet.version);
     const internals = cloned as unknown as {
       _balance: Money;
       _lockedBalance: Money;
-      _transactions: Transaction[];
     };
     internals._balance = Money.fromCents(wallet.balanceCents, wallet.currency as SupportedCurrency);
     internals._lockedBalance = Money.fromCents(wallet.lockedBalanceCents, wallet.currency as SupportedCurrency);
-    internals._transactions = wallet.getTransactions();
     return cloned;
   }
 }

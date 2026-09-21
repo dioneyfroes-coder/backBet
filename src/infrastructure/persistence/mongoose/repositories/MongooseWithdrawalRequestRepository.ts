@@ -7,6 +7,11 @@ import {
   IWithdrawalRequestDocument,
   WithdrawalRequestModel,
 } from '../schemas/WithdrawalRequestSchema';
+import { AppError } from '@/shared/errors/AppError';
+import { writeStructuredLog } from '@/shared/logging/structuredLogger';
+import {
+  withdrawalConcurrencyConflictCounter,
+} from '@/infrastructure/observability/metrics';
 
 export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRepository {
   private toDomain(doc: IWithdrawalRequestDocument): WithdrawalRequest {
@@ -21,6 +26,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
       doc.notes,
       doc.approvalLogs,
       doc.processingAt,
+      doc.version ?? 1,
     );
   }
 
@@ -41,6 +47,7 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
           processingAt: request.processingAt,
           notes: request.notes,
           approvalLogs: request.approvalLogs,
+          version: request.version ?? 1,
         },
       ],
       { session: options.session as never },
@@ -63,13 +70,24 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     request: WithdrawalRequest,
     options?: WithdrawalRequestRepositoryOptions,
   ): Promise<WithdrawalRequest> {
+    const filter: Record<string, unknown> = { requestId: request.id };
+    if (options?.guard) {
+      filter.status = options.guard.status;
+      if (typeof options.guard.version === 'number') {
+        filter.version = options.guard.version;
+      }
+    }
+
     const query = WithdrawalRequestModel.findOneAndUpdate(
-      { requestId: request.id },
+      filter,
       {
-        status: request.status,
-        processedAt: request.processedAt,
-        processingAt: request.processingAt,
-        approvalLogs: request.approvalLogs,
+        $set: {
+          status: request.status,
+          processedAt: request.processedAt,
+          processingAt: request.processingAt,
+          approvalLogs: request.approvalLogs,
+        },
+        $inc: { version: 1 },
       },
       { new: true },
     );
@@ -79,10 +97,57 @@ export class MongooseWithdrawalRequestRepository implements IWithdrawalRequestRe
     const updated = await query.lean<IWithdrawalRequestDocument>();
 
     if (!updated) {
+      if (options?.guard) {
+        this.recordConflict(request.id, options.guard.status);
+        throw new AppError(
+          'CONFLICT',
+          'Withdrawal request changed concurrently',
+          409,
+          { requestId: request.id },
+        );
+      }
       throw new Error('Withdrawal request could not be updated');
     }
 
     return this.toDomain(updated as IWithdrawalRequestDocument);
+  }
+
+  async claimForProcessing(
+    requestId: string,
+    options?: { session?: unknown },
+  ): Promise<WithdrawalRequest | null> {
+    const query = WithdrawalRequestModel.findOneAndUpdate(
+      { requestId, status: { $in: ['APPROVED', 'FAILED'] } },
+      {
+        $set: { status: 'PROCESSING', processingAt: new Date() },
+        $inc: { version: 1 },
+      },
+      { new: true },
+    );
+    if (options?.session) {
+      query.session(options.session as never);
+    }
+    const updated = await query.lean<IWithdrawalRequestDocument>();
+
+    if (!updated) {
+      this.recordConflict(requestId, 'APPROVED');
+      return null;
+    }
+
+    return this.toDomain(updated as IWithdrawalRequestDocument);
+  }
+
+  private recordConflict(requestId: string, expectedStatus: string): void {
+    try {
+      withdrawalConcurrencyConflictCounter.inc();
+    } catch (error) {
+      console.debug('withdrawalConcurrencyConflictCounter inc failed', error);
+    }
+    writeStructuredLog({
+      event: 'withdrawal_concurrency_conflict',
+      requestId,
+      expectedStatus,
+    });
   }
 
   async findById(id: string): Promise<WithdrawalRequest | null> {

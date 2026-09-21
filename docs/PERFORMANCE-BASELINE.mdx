@@ -1,0 +1,96 @@
+---
+title: "Baseline de Performance"
+description: "Item #14 do plano — benchmark de percentis (50..500 concorrentes), CPU/RAM e latências de Mongo/Redis pós-correções críticas; como rodar e o que registrar."
+slug: "/docs/performance-baseline"
+sidebar_label: "Performance Baseline"
+---
+
+# Baseline de Performance
+
+## Objetivo
+
+Registrar o comportamento operacional do modelo atual depois das correções críticas
+(itens #1–#13): sobre quais níveis de concorrência o sistema ainda é **correto** e onde
+a latência/throughput começa a degradar. É medição, não otimização — a fase de
+otimização fica para depois deste baseline.
+
+Medidas registradas por onda:
+
+- throughput (ops/s);
+- latência por operação: p50, p95, p99, mean, max;
+- conflitos (AppError `CONFLICT` 409 do CAS de versão) e retries (reexecuções);
+- tempo de transação (duração da onda);
+- CPU e RAM do processo da suíte (containers de infra via `docker stats`);
+- latência de round-trip de **Mongo** e **Redis** (pings amostrados durante a onda).
+
+## Como rodar
+
+O benchmark roda dentro da rede do `docker-compose.test.yml` (serviço
+`integration-tests`), com a infra auto-contida (Mongo replica set `rs0` + Redis) —
+o mesmo caminho do CI:
+
+```bash
+PERC_LEVELS=50 node scripts/percentile-driver.cjs        # subconjunto (default 50..500)
+node scripts/percentile-driver.cjs                        # níveis completos
+PERC_LEVELS=50,100,200 PERC_MAX_WAVE_MS=300000 node scripts/percentile-driver.cjs
+```
+
+O driver:
+
+1. reconstrói/usa a imagem `backbet:test`;
+2. sobe a infra e roda `src/integration/__tests__/load.percentiles.integration.test.ts`;
+3. amostra `docker stats` dos containers `mongodb`, `redis` e do próprio runner durante a corrida;
+4. grava `scripts/load-results/fase14/<runId>/report.{json,md}` (pasta
+   versionada sob `.gitignore`, artefato de medição);
+5. faz `down -v` ao final (preservar a infra com `PERC_KEEP_INFRA=1`).
+
+Cenários por nível: **contenção** (N depósitos na *mesma* carteira → serialização de
+documento único + CAS/retry) e **distribuído** (N carteiras distintas → eixo horizontal).
+
+## Resultado — base pós-correções (21/09/2026)
+
+Run: nível **50**, depósitos de R$ 1,25. `runId 02326fa4…`, relatório detalhado em
+`scripts/load-results/fase14/02326fa4-7e5e-4185-ac00-475ecf86d9b5/`.
+
+| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | wall_ms | ops/s | cpu% | rss_peak (MB) | mongo ping (ms) | redis ping (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | contenção | 6172 | 8047 | 8077 | 5495.7 | 8077 | 50 | 0 | 8077 | 6 | 89.2 | 594.9 | 96 | 53 |
+| 50 | distribuído | 713 | 759 | 772 | 713.5 | 772 | 50 | 0 | 772 | 65 | 82.5 | 595.5 | 465 | 3 |
+
+Recursos dos containers (pico durante a corrida):
+
+| container | cpu% pico | cpu% média | RAM pico (MB) | RAM média (MB) |
+| --- | --- | --- | --- | --- |
+| mongodb | 103.3 | 23.9 | 415.8 | 276.5 |
+| redis | 7.4 | 2.4 | 7.9 | 4.1 |
+| integration-tests | 174.5 | 3.4 | 593.3 | 469.6 |
+
+Leitura:
+
+- **Correctness**: 0 rejeitadas, 0 conflitos CAS, saldo/ledger consistentes nos dois
+  cenários — o modelo continua correto sob concorrência (invariantes FI-01/FI-04 etc.).
+- **Contenção** é o gargalo patológico: mesmo com 50 ops na mesma carteira, a latência
+  já fica em segundos (p50 ≈ 6,2 s; ~6 ops/s). É a serialização do documento único +
+  reexecução de transação otimista.
+- **Distribuído** escala melhor (≈65 ops/s, p50 ≈ 0,7 s) com o app ocupando CPU
+  (~82%) — o teto neste nível é CPU do runner, não o Mongo.
+- **Mongo latency**: a sonda compete com a fila do connection pool sob carga; no
+  distribuído a mediana sobe (465 ms) porque 50 operações disputam o mesmo pool. No
+  contenção (poucas ops simultâneas) fica ~96 ms. **Redis latency** permanece estável
+  (3–53 ms).
+
+### Referência anterior (pré-fix — 19/09/2026, `scripts/load-results/fase13/final/`)
+
+O baseline antigo já mostrava a mesma degradação superlinear da contenção (p95 ≈
+13 s @50 → 449 s @200 → 22 min @300, e 174/500 rejeitadas por WriteConflict @500) e
+~97–144 ops/s no distribuído. A correção desta fase **não muda o teto de contenção**
+(o gargalo é arquitetural: 1 documento quente por carteira); as recomendações seguem
+para a fase de otimização (lock/fila por carteira, saldo agregado, particionamento).
+
+## Comandos de referência
+
+| Comando | O que mede |
+|---------|-----------|
+| `npm run test:load:percentiles` | Baseline completo (50..500) com telemetria |
+| `PERC_LEVELS=50 node scripts/percentile-driver.cjs` | Baseline de um nível |
+| `node scripts/merge-perc-reports.cjs` | Mescla runs em um relatório consolidado |

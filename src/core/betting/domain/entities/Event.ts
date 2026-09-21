@@ -97,6 +97,8 @@ export class Market {
 // ---------- EVENT ----------
 export class Event {
   private _status: EventStatus;
+  private _version: number;
+  private _baseVersion: number;
 
   constructor(
     public readonly id: string,
@@ -106,8 +108,11 @@ export class Event {
     public readonly category: string,
     public readonly participants: string[],
     public readonly markets: Map<string, Market>,
+    version: number = 1,
   ) {
     this._status = status;
+    this._version = version;
+    this._baseVersion = version;
     this.validate();
   }
 
@@ -116,12 +121,32 @@ export class Event {
     return this._status;
   }
 
+  /** Versão otimista do agregado (item #6 do plano de correções). */
+  get version(): number {
+    return this._version;
+  }
+
+  /** Versão conhecida como persistida na última leitura/escrita. */
+  get baseVersion(): number {
+    return this._baseVersion;
+  }
+
+  incrementVersion(): void {
+    this._version += 1;
+  }
+
+  /** Confirma que a versão atual ficou persistida (chamado pelo repositório após o CAS). */
+  markPersisted(): void {
+    this._baseVersion = this._version;
+  }
+
   // Domain methods
   start(): void {
     if (this._status !== 'SCHEDULED') {
       throw new DomainError({ code: 'EVENT_NOT_SCHEDULED', message: 'Event is not scheduled' });
     }
     this._status = 'LIVE';
+    this.incrementVersion();
   }
 
   finish(): void {
@@ -129,6 +154,7 @@ export class Event {
       throw new DomainError({ code: 'EVENT_NOT_LIVE', message: 'Event is not live' });
     }
     this._status = 'FINISHED';
+    this.incrementVersion();
   }
 
   cancel(): void {
@@ -142,6 +168,7 @@ export class Event {
       });
     }
     this._status = 'CANCELED';
+    this.incrementVersion();
   }
 
   addMarket(market: Market): void {
@@ -152,6 +179,39 @@ export class Event {
       });
     }
     this.markets.set(market.id, market);
+    this.incrementVersion();
+  }
+
+  suspendMarket(marketId: string): void {
+    this.getMarketOrThrow(marketId).suspend();
+    this.incrementVersion();
+  }
+
+  openMarket(marketId: string): void {
+    this.getMarketOrThrow(marketId).open();
+    this.incrementVersion();
+  }
+
+  closeMarket(marketId: string, result?: string): void {
+    this.getMarketOrThrow(marketId).close(result);
+    this.incrementVersion();
+  }
+
+  updateOdd(marketId: string, oddId: string, value: number): void {
+    this.getMarketOrThrow(marketId).updateOdd(oddId, value);
+    this.incrementVersion();
+  }
+
+  private getMarketOrThrow(marketId: string): Market {
+    const market = this.markets.get(marketId);
+    if (!market) {
+      throw new DomainError({
+        code: 'MARKET_NOT_FOUND',
+        message: 'Market not found',
+        details: { eventId: this.id, marketId },
+      });
+    }
+    return market;
   }
 
   // Validation

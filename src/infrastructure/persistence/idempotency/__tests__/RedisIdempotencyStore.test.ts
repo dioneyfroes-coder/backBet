@@ -4,6 +4,12 @@ import { IdempotencyService } from '@/shared/services/IdempotencyService';
 
 jest.mock('@/infrastructure/cache/RedisClient', () => {
   const store = new Map<string, { value: unknown; ttl?: number }>();
+  const state: { strictError: Error | null } = { strictError: null };
+  const ensureOk = () => {
+    if (state.strictError) {
+      throw state.strictError;
+    }
+  };
   return {
     redisClient: {
       async get<T>(key: string) {
@@ -23,7 +29,29 @@ jest.mock('@/infrastructure/cache/RedisClient', () => {
       async del(key: string) {
         store.delete(key);
       },
+      async getStrict<T>(key: string) {
+        ensureOk();
+        const entry = store.get(key);
+        return entry ? (entry.value as T) : null;
+      },
+      async setStrict<T>(key: string, value: T, ttlSeconds?: number) {
+        ensureOk();
+        store.set(key, { value, ttl: ttlSeconds });
+      },
+      async setIfAbsentStrict<T>(key: string, value: T, ttlSeconds?: number) {
+        ensureOk();
+        if (store.has(key)) {
+          return false;
+        }
+        store.set(key, { value, ttl: ttlSeconds });
+        return true;
+      },
+      async delStrict(key: string) {
+        ensureOk();
+        store.delete(key);
+      },
       __internalStore: store,
+      __state: state,
     },
   };
 });
@@ -34,7 +62,12 @@ describe('RedisIdempotencyStore — processingAt e reclaim (Fase 8)', () => {
     set: jest.Mock;
     setIfAbsent: jest.Mock;
     del: jest.Mock;
+    getStrict: jest.Mock;
+    setStrict: jest.Mock;
+    setIfAbsentStrict: jest.Mock;
+    delStrict: jest.Mock;
     __internalStore: Map<string, { value: unknown; ttl?: number }>;
+    __state: { strictError: Error | null };
   };
 
   const RECOVERY_MS = 5 * 60 * 1000;
@@ -42,6 +75,7 @@ describe('RedisIdempotencyStore — processingAt e reclaim (Fase 8)', () => {
 
   beforeEach(() => {
     mockedRedisClient.__internalStore.clear();
+    mockedRedisClient.__state.strictError = null;
   });
 
   afterEach(() => {
@@ -168,5 +202,43 @@ describe('RedisIdempotencyStore — processingAt e reclaim (Fase 8)', () => {
     // B reexecuta a mesma requisição (retry): replay seguro, sem duplicação.
     const replayB = await serviceB.execute(key, 'fp-1', async () => ({ id: 'duplicado' }), undefined, RECOVERY_MS);
     expect(replayB).toEqual({ id: 'op-1' });
+  });
+
+  it('item 8.1 — reclaim concorrente é atômico: só um worker assume a operação', async () => {
+    const key = 'user-1:deposit:tx-reclaim-race';
+    const storageKey = `backbet:idempotency:${key}`;
+    const storeA = new RedisIdempotencyStore();
+    const storeB = new RedisIdempotencyStore();
+
+    freeze(11_000_000);
+    await storeA.setIfAbsent(storageKey, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60);
+
+    freeze(11_000_000 + RECOVERY_MS + 1);
+    const [a, b] = await Promise.all([
+      storeA.reclaimStaleProcessing<{ id: string }>(storageKey, RECOVERY_MS),
+      storeB.reclaimStaleProcessing<{ id: string }>(storageKey, RECOVERY_MS),
+    ]);
+
+    const winners = [a, b].filter((record) => record !== null);
+    expect(winners).toHaveLength(1);
+    // O lock de reclaim é sempre liberado ao final.
+    expect(mockedRedisClient.__internalStore.has(`${storageKey}:reclaim`)).toBe(false);
+  });
+
+  it('item 8.2 — erro de Redis no caminho crítico propaga (não vira sucesso silencioso)', async () => {
+    const store = new RedisIdempotencyStore();
+    const service = new IdempotencyService(store);
+    const operation = jest.fn().mockResolvedValue({ id: 'op-1' });
+
+    mockedRedisClient.__state.strictError = new Error('redis down');
+
+    await expect(store.get(STORAGE_KEY)).rejects.toThrow('redis down');
+    await expect(
+      store.setIfAbsent(STORAGE_KEY, { fingerprint: 'fp-1', status: 'PROCESSING' }, 60),
+    ).rejects.toThrow('redis down');
+    await expect(service.execute('user-1:deposit:tx-err', 'fp-1', operation)).rejects.toThrow(
+      'redis down',
+    );
+    expect(operation).not.toHaveBeenCalled();
   });
 });

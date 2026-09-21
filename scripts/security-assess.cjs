@@ -15,10 +15,19 @@
 // "pendentes" (W) não bloqueiam: dependem de operador autorizado, provedores
 // externos ou certificação — itens documentados como dividas de produção.
 //
+// Contexto (LAB x PROD): a exposição de serviços internos (MongoDB/Redis) é
+// avaliada conforme a INTENÇÃO do ambiente, não apenas pela presença de
+// `ports:`. Defina explicitamente:
+//   SECURITY_CONTEXT=lab   -> permite bind em interface privada do laboratório
+//   SECURITY_CONTEXT=prod  -> bloqueia qualquer publicação de MongoDB/Redis
+// Sem a variável, o contexto é derivado de BACKBET_RUNTIME_ENV/NODE_ENV
+// (production => PROD, caso contrário LAB).
+//
 // Removível sem efeito colateral: apenas leitura do repositório.
 // Uso:
 //   npm run security:assess
-//   node scripts/security-assess.cjs
+//   SECURITY_CONTEXT=lab node scripts/security-assess.cjs
+//   SECURITY_CONTEXT=prod node scripts/security-assess.cjs
 // =============================================================================
 
 const fs = require('node:fs');
@@ -46,6 +55,138 @@ function packageScript(name) {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Contexto de segurança (LAB x PROD).
+// ---------------------------------------------------------------------------
+const SECURITY_CONTEXT = (() => {
+  const explicit = (process.env.SECURITY_CONTEXT || process.env.BACKBET_SECURITY_CONTEXT || '')
+    .trim()
+    .toUpperCase();
+  if (explicit === 'LAB' || explicit === 'PROD') return explicit;
+  const runtime = (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || 'development').toLowerCase();
+  return runtime === 'production' ? 'PROD' : 'LAB';
+})();
+
+// Resolve `${VAR}` / `${VAR:-default}` usando o ambiente (mesma semântica do Compose).
+function resolveComposeVar(value) {
+  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_, name, fallback) => {
+    const v = process.env[name];
+    if (v !== undefined && v !== '') return v;
+    return fallback !== undefined ? fallback : '';
+  });
+}
+
+// Extrai, por serviço, as portas publicadas (sintaxe curta do Compose).
+function parseComposeServicePorts(text) {
+  const parsed = {};
+  let current = null;
+  let inPorts = false;
+  let portsIndent = -1;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const indent = line.match(/^\s*/)[0].length;
+    const service = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*$/);
+    if (service) {
+      current = service[1];
+      parsed[current] = parsed[current] || [];
+      inPorts = false;
+      continue;
+    }
+    if (!current) continue;
+    if (/^\s+ports:\s*$/.test(line)) {
+      inPorts = true;
+      portsIndent = indent;
+      continue;
+    }
+    if (inPorts) {
+      const item = line.match(/^\s*-\s*(.+?)\s*$/);
+      if (item && indent > portsIndent) {
+        parsed[current].push(resolveComposeVar(item[1].replace(/^["']|["']$/g, '')));
+        continue;
+      }
+      inPorts = false;
+    }
+  }
+  return parsed;
+}
+
+// Interpreta `[IP:][HOST:]CONTAINER[/PROTO]` e separa bind/host/container.
+function parsePortSpec(spec) {
+  const parts = spec.split('/')[0].split(':');
+  if (parts.length >= 3) return { bind: parts[0], host: parts[1], container: parts[2] };
+  if (parts.length === 2) {
+    if (/[.]/.test(parts[0])) return { bind: parts[0], host: '', container: parts[1] };
+    return { bind: '', host: parts[0], container: parts[1] };
+  }
+  return { bind: '', host: '', container: parts[0] };
+}
+
+const INTERNAL_CONTAINER_PORT = { 27017: 'MongoDB', 6379: 'Redis' };
+
+function internalExposures() {
+  const portsByService = parseComposeServicePorts(read('docker-compose.yml'));
+  const exposures = [];
+  for (const [service, specs] of Object.entries(portsByService)) {
+    for (const spec of specs) {
+      const port = parsePortSpec(spec);
+      const label = INTERNAL_CONTAINER_PORT[port.container];
+      if (label) exposures.push({ service, label, raw: spec, ...port });
+    }
+  }
+  return exposures;
+}
+
+function isWildcardBind(bind) {
+  return !bind || bind === '0.0.0.0' || bind === '*' || bind === '::' || bind === '[::]';
+}
+
+function isPrivateBind(bind) {
+  if (bind === '127.0.0.1' || bind === '::1' || bind === 'localhost') return true;
+  const m = bind.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+  );
+}
+
+// Avalia F-04 pela intenção: bind address + contexto, e não apenas por `ports:`.
+function evaluateInternalExposure() {
+  const exposures = internalExposures();
+  if (exposures.length === 0) {
+    return {
+      pass: true,
+      evidence: `${SECURITY_CONTEXT}: docker-compose.yml não publica portas de MongoDB/Redis (nenhum serviço interno exposto).`,
+    };
+  }
+
+  const described = exposures
+    .map(
+      (e) =>
+        `${e.service} ${e.raw}${isWildcardBind(e.bind) ? ' (bind wildcard = todas as interfaces)' : ` (bind ${e.bind})`}`,
+    )
+    .join('; ');
+
+  if (SECURITY_CONTEXT === 'PROD') {
+    return {
+      pass: false,
+      evidence: `PROD: MongoDB/Redis publicados no docker-compose.yml → ${described}. Em produção remova o bloco \`ports:\` destes serviços (rede interna do Compose).`,
+    };
+  }
+
+  const allPrivate = exposures.every((e) => !isWildcardBind(e.bind) && isPrivateBind(e.bind));
+  return {
+    pass: allPrivate,
+    evidence: allPrivate
+      ? `LAB: exposição permitida em interface privada → ${described}.`
+      : `LAB: bind não-privado/ausente; use um IP privado explícito (ex.: 192.168.22.250) → ${described}.`,
+  };
 }
 
 const checks = [];
@@ -316,13 +457,14 @@ control(
   exists('deploy/proxy/Caddyfile'),
   'deploy/proxy/Caddyfile (HTTPS automático)',
 );
+const f04Exposure = evaluateInternalExposure();
 control(
   'F — Infraestrutura de produção',
   'F-04',
-  'Serviços internos não expostos na internet',
+  `Serviços internos (MongoDB/Redis) conforme contexto ${SECURITY_CONTEXT}`,
   true,
-  !/ports\s*:\s*\n\s*-.*(27017|6379)/.test(read('docker-compose.yml')),
-  'docker-compose.yml (Redis interno sem porta pública; Mongo fora do compose)',
+  f04Exposure.pass,
+  f04Exposure.evidence,
 );
 control(
   'F — Infraestrutura de produção',
@@ -394,6 +536,7 @@ let output = [];
 output.push('============================================================');
 output.push(' BackBet — Auto-avaliação de segurança e conformidade');
 output.push(' Fase 35 — preparação para operação real');
+output.push(` Contexto de segurança: ${SECURITY_CONTEXT}`);
 output.push('============================================================');
 output.push('');
 for (const domain of [...new Set(checks.map((c) => c.domain))]) {
@@ -425,6 +568,7 @@ const report = output.join('\n');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const jsonReport = {
   generatedAt: new Date().toISOString(),
+  context: SECURITY_CONTEXT,
   result: blockingFailures.length === 0 ? 'PASS' : 'FAIL',
   blockingPassed: passed.length,
   blockingFailures: blockingFailures.map((c) => c.id),

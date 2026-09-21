@@ -44,6 +44,14 @@ export class MockPaymentAdapter implements IPaymentPort {
     amount: number,
     currency: Currency,
   ): Promise<PaymentResult> {
+    // PSP idempotente no limite externo (#4): um requestId JÁ PAGO retorna o
+    // MESMO transactionId — nunca cria um segundo payout externo, mesmo se o
+    // worker republicar o job (retry pós-timeout com re-claim de PROCESSING).
+    const alreadyPaid = this.registry.get(requestId);
+    if (alreadyPaid?.paid && alreadyPaid.transactionId) {
+      return { success: true, transactionId: alreadyPaid.transactionId };
+    }
+
     // Simulate network call with retries + exponential backoff + jitter
     for (let attempt = 1; attempt <= this.attempts; attempt++) {
       try {

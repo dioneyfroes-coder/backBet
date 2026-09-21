@@ -26,14 +26,25 @@ describe('InMemoryRiskRepository', () => {
     expect(exposure).toBe(5);
   });
 
-  it('should decreaseExposure and normalize negative to zero', async () => {
+  it('should decreaseExposure and detect underflow instead of clamping to zero', async () => {
     await repo.upsert(new RiskProfile('user-3', 250, 20000));
     await repo.decreaseExposure('user-3', 125);
     expect(await repo.getExposure('user-3')).toBe(1.25);
 
-    // decrease more than current exposure -> normalize to zero
-    await repo.decreaseExposure('user-3', 1000);
-    expect(await repo.getExposure('user-3')).toBe(0);
+    // decrease more than current exposure -> inconsistência detectada
+    await expect(repo.decreaseExposure('user-3', 1000)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
+    expect(await repo.getExposure('user-3')).toBe(1.25);
+  });
+
+  it('decreaseExposure/decreaseCounter on a missing record raises underflow', async () => {
+    await expect(repo.decreaseExposure('no-profile', 1)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
+    await expect(repo.decreaseCounter('EVENT', 'no-counter', 1)).rejects.toMatchObject({
+      code: 'RISK_EXPOSURE_UNDERFLOW',
+    });
   });
 
   it('getExposure returns 0 for unknown user', async () => {

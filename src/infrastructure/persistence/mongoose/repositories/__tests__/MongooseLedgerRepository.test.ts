@@ -32,6 +32,45 @@ describe('MongooseLedgerRepository (mocked model)', () => {
     expect(filter).toEqual({ transactionId: 'tx-1' });
   });
 
+  it('sumByTypes usa aggregation ($match + $group) em vez de somar no Node', async () => {
+    const aggregateSpy = jest
+      .spyOn(LedgerEntryModel, 'aggregate')
+      .mockResolvedValue([{ total: 12345, totalCount: 3 }] as never);
+    const findSpy = jest.spyOn(LedgerEntryModel, 'find');
+
+    const repo = new MongooseLedgerRepository();
+    const result = await repo.sumByTypes('user-1', ['DEPOSIT'], {
+      from: new Date('2026-01-01T00:00:00.000Z'),
+      statuses: ['COMPLETED'],
+    });
+
+    expect(result).toEqual({ amountCents: 12345, count: 3 });
+    expect(findSpy).not.toHaveBeenCalled();
+
+    const pipeline = aggregateSpy.mock.calls[0][0] as unknown as Array<Record<string, unknown>>;
+    expect(pipeline[0]).toEqual({
+      $match: {
+        userId: 'user-1',
+        type: { $in: ['DEPOSIT'] },
+        createdAt: { $gte: new Date('2026-01-01T00:00:00.000Z') },
+        status: { $in: ['COMPLETED'] },
+      },
+    });
+    expect(pipeline[1]).toEqual({
+      $group: { _id: null, total: { $sum: '$amountCents' }, totalCount: { $sum: 1 } },
+    });
+  });
+
+  it('sumByTypes devolve zeros quando a agregação não retorna linhas', async () => {
+    jest.spyOn(LedgerEntryModel, 'aggregate').mockResolvedValue([] as never);
+
+    const repo = new MongooseLedgerRepository();
+    await expect(repo.sumByTypes('user-1', ['DEPOSIT'])).resolves.toEqual({
+      amountCents: 0,
+      count: 0,
+    });
+  });
+
   describe('falha do banco vira AppError (code/message/status corretos)', () => {
     it('append', async () => {
       jest.spyOn(LedgerEntryModel, 'findOneAndUpdate').mockRejectedValue(new Error('db down'));

@@ -78,14 +78,6 @@ export class RawWalletRepository implements IWalletRepository {
   async delete(_userId: string): Promise<void> {
     throw new UnsupportedReconciliationOp('delete');
   }
-
-  async getHistory(
-    _userId: string,
-    _limit?: number,
-    _offset?: number,
-  ): Promise<{ transactions: import('@/core/finance/domain/entities/Transaction').ITransactionDTO[]; total: number }> {
-    throw new UnsupportedReconciliationOp('getHistory');
-  }
 }
 
 /** ILedgerRepository somente-leitura: sumByTypes/countByUserId via mongo raw. */

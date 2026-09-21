@@ -40,7 +40,6 @@ describe('FinancialReconciliationService', () => {
       save: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-      getHistory: jest.fn(),
     };
     manager = new FinancialReconciliationService(walletRepo, ledgerRepo);
   });

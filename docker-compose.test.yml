@@ -1,5 +1,16 @@
 # =============================================================================
-# BackBet — Compose do ambiente de TESTE
+# BackBet — Compose do ambiente de TESTE (reproduzível, auto-contido)
+# =============================================================================
+#
+# Sobe MongoDB (replica set rs0) + Redis + o runner de integração DENTRO da rede
+# do Compose. O CI NÃO depende de MONGODB_URI/REDIS_URL externos nem de
+# localhost/127.0.0.1/IP de host: o membro do replica set é anunciado como
+# "mongodb:27017" e o Redis é alcançado como "redis:6379".
+#
+# Uso (CI e local):
+#   docker compose -f docker-compose.test.yml run --rm integration-tests
+#   docker compose -f docker-compose.test.yml down -v
+#
 # =============================================================================
 
 name: backbet-test
@@ -34,9 +45,9 @@ services:
           echo "Replica set rs0 ja iniciado (PRIMARY). Nada a fazer."
           exit 0
         fi
-        echo "Iniciando replica set rs0 (membro anunciado em 127.0.0.1:27017)..."
+        echo "Iniciando replica set rs0 (membro anunciado em mongodb:27017)..."
         mongosh "$${URI}" --quiet --eval \
-          "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: '127.0.0.1:27017' }] })" >/dev/null 2>&1 || true
+          "rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] })" >/dev/null 2>&1 || true
         i=0
         while [ "$${i}" -lt 30 ]; do
           state=$$(mongosh "$${URI}" --quiet --eval 'try { db.adminCommand({ replSetGetStatus: 1 }).myState } catch (e) { 0 }')
@@ -53,14 +64,39 @@ services:
   redis:
     image: redis:7-alpine
     restart: "no"
-    ports:
-      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping"]
       interval: 3s
       timeout: 2s
       retries: 20
       start_period: 2s
+
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tests
+    image: backbet:test
+    restart: "no"
+    init: true
+    environment:
+      NODE_ENV: test
+      BACKBET_RUNTIME_ENV: test
+      RUN_REAL_INTEGRATION_TESTS: "true"
+      # Conexões pela rede interna do Compose (nunca localhost/IP de host).
+      # MONGODB_URI já aponta para o database de teste; o runner troca apenas o
+      # database via MONGODB_TEST_DB e não assume nenhum endpoint padrão.
+      MONGODB_URI: "mongodb://mongodb:27017/backbet-test?replicaSet=rs0"
+      MONGODB_TEST_DB: "backbet-test"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: "test-secret"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      mongo-rs-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
 volumes:
   mongo_test_data:

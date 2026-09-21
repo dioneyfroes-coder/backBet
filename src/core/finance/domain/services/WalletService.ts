@@ -1,5 +1,6 @@
 import { TransactionContext, Wallet } from '../entities/Wallet';
 import { LedgerEntry, LedgerOperationType, LedgerStatus } from '../entities/LedgerEntry';
+import { ITransactionDTO } from '../entities/Transaction';
 import { IWalletRepository } from '../repositories/IWalletRepository';
 import { ILedgerRepository } from '../repositories/ILedgerRepository';
 import { ICreateWalletDTO } from '../../types/wallet.types';
@@ -75,7 +76,7 @@ export class WalletService {
   ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'DEPOSIT', options)) return wallet;
-    wallet.deposit(amount, context);
+    wallet.deposit(amount);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
@@ -91,8 +92,36 @@ export class WalletService {
       : this.walletRepository.findByUserId(userId);
   }
 
-  async getHistory(userId: string, limit = 10, offset = 0) {
-    return this.walletRepository.getHistory(userId, limit, offset);
+  async getHistory(
+    userId: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
+    if (!this.ledgerRepository) {
+      return { transactions: [], total: 0 };
+    }
+    const entries = await this.ledgerRepository.findByUserId(userId, { limit, offset });
+    const total = await this.ledgerRepository.countByUserId(userId);
+    return { transactions: entries.map((entry) => this.toHistoryDTO(entry)), total };
+  }
+
+  /**
+   * Converte uma entrada do Ledger na visão de leitura do extrato. O Ledger é a
+   * fonte de verdade do histórico financeiro (item #7 do plano).
+   */
+  private toHistoryDTO(entry: LedgerEntry): ITransactionDTO {
+    const dto = entry.toDTO();
+    const description = dto.metadata?.description;
+    return {
+      id: dto.transactionId,
+      userId: dto.userId,
+      type: dto.type,
+      amount: dto.amount,
+      currency: dto.currency,
+      description: typeof description === 'string' ? description : dto.source,
+      createdAt: dto.createdAt,
+      metadata: dto.metadata,
+    };
   }
 
   async getLedgerHistory(userId: string, limit = 50, offset = 0) {
@@ -116,7 +145,7 @@ export class WalletService {
   ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
-    wallet.withdraw(amount, context);
+    wallet.withdraw(amount);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
@@ -138,7 +167,7 @@ export class WalletService {
   ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_HOLD', options)) return wallet;
-    wallet.lock(amount, context);
+    wallet.lock(amount);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
@@ -159,7 +188,7 @@ export class WalletService {
   ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_REVERSED', options)) return wallet;
-    wallet.unlock(amount, context);
+    wallet.unlock(amount);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);
@@ -180,7 +209,7 @@ export class WalletService {
   ): Promise<Wallet> {
     const wallet = await this.ensureWalletExists(userId, options);
     if (await this.ledgerAlreadyApplied(context, 'WITHDRAWAL_COMPLETED', options)) return wallet;
-    wallet.withdrawLocked(amount, context);
+    wallet.withdrawLocked(amount);
     wallet.incrementVersion();
     if (options) await this.walletRepository.update(wallet, options);
     else await this.walletRepository.update(wallet);

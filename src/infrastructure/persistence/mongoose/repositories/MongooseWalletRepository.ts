@@ -1,10 +1,9 @@
 import { IWalletRepository, WalletRepositoryOptions } from '@/core/finance/domain/repositories/IWalletRepository';
 import { Wallet } from '@/core/finance/domain/entities/Wallet';
-import { Transaction, ITransactionDTO } from '@/core/finance/domain/entities/Transaction';
 import { Money } from '@/core/shared/domain/value-objects/Money';
 import { AppError } from '@/shared/errors/AppError';
 import { WalletModel, IWalletDocument } from '../schemas/WalletSchema';
-import { WalletRecord, WalletTransactionRecord } from '@/types/persistence';
+import { WalletRecord } from '@/types/persistence';
 import { optimisticLockConflictCounter, transactionFailuresCounter } from '@/infrastructure/observability/metrics';
 import { isInfraTransactionFailure } from '@/infrastructure/observability/transactionFailure';
 import { isRetryableTransactionError } from '../errors/retryableTransactionError';
@@ -16,7 +15,6 @@ type WalletRecordRaw = Omit<WalletRecord, '_id'> & {
 type WalletInternals = {
   _balance: Money;
   _lockedBalance: Money;
-  _transactions: Transaction[];
   _version: number;
 };
 
@@ -25,40 +23,6 @@ const sanitizeUserId = (userId: string): string => {
     throw new AppError('VALIDATION_ERROR', 'Invalid userId', 400);
   }
   return userId.trim();
-};
-
-const serializeTransactions = (transactions: Transaction[]): WalletTransactionRecord[] =>
-  transactions.map((tx) => ({
-    id: tx.id,
-    userId: tx.userId,
-    type: tx.type,
-    amountCents: Math.round(tx.amount * 100),
-    currency: tx.currency,
-    description: tx.description,
-    createdAt: tx.createdAt,
-    metadata: tx.metadata ?? undefined,
-  }));
-
-const parseTransactions = (transactions: WalletTransactionRecord[] = []): Transaction[] =>
-  transactions.map(
-    (tx) =>
-      new Transaction(
-        tx.id,
-        tx.userId,
-        tx.type,
-        tx.amountCents / 100,
-        tx.currency,
-        tx.description ?? undefined,
-        tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
-        tx.metadata ?? undefined,
-      ),
-  );
-
-const normalizePagination = (value: number | undefined, fallback: number): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.max(0, Math.floor(value));
-  }
-  return fallback;
 };
 
 export class MongooseWalletRepository implements IWalletRepository {
@@ -70,7 +34,6 @@ export class MongooseWalletRepository implements IWalletRepository {
         balanceCents: wallet.balanceCents,
         lockedBalanceCents: wallet.lockedBalanceCents,
         currency: wallet.currency,
-        transactions: serializeTransactions(wallet.getTransactions()),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -130,7 +93,6 @@ export class MongooseWalletRepository implements IWalletRepository {
         version: wallet.version,
         balanceCents: wallet.balanceCents,
         lockedBalanceCents: wallet.lockedBalanceCents,
-        transactions: serializeTransactions(wallet.getTransactions()),
         updatedAt: new Date(),
       };
 
@@ -204,52 +166,6 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
     }
   }
 
-  async getHistory(
-    userId: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<{ transactions: ITransactionDTO[]; total: number }> {
-    try {
-      const safeUserId = sanitizeUserId(userId);
-      const wallet = await WalletModel.findOne({
-        userId: safeUserId,
-      }).lean<WalletRecordRaw | null>();
-      if (!wallet) {
-        throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
-      }
-
-      const transactions = wallet.transactions ?? [];
-      const safeOffset = normalizePagination(offset, 0);
-      const safeLimit = normalizePagination(limit, transactions.length);
-      const end = safeLimit ? safeOffset + safeLimit : transactions.length;
-
-      return {
-        transactions: transactions.slice(safeOffset, end).map((tx) => ({
-          id: tx.id,
-          type: tx.type,
-          amount: tx.amountCents / 100,
-          description: tx.description ?? undefined,
-          createdAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
-          userId: tx.userId,
-          currency: tx.currency,
-          metadata: tx.metadata ?? undefined,
-        })),
-        total: transactions.length,
-      };
-    } catch (error: unknown) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-      if (isRetryableTransactionError(error)) {
-        throw error;
-      }
-      const originalError = error instanceof Error ? error.message : 'unknown';
-      throw new AppError('INTERNAL_SERVER_ERROR', 'Erro ao buscar histórico de transações', 500, {
-        originalError,
-      });
-    }
-  }
-
   private mapToDomain(data: WalletRecord): Wallet {
     const wallet = new Wallet(data.userId, data.currency as Wallet['currency']);
     const mutableWallet = wallet as unknown as WalletInternals;
@@ -258,7 +174,6 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
       data.lockedBalanceCents,
       data.currency as Wallet['currency'],
     );
-    mutableWallet._transactions = parseTransactions(data.transactions);
     mutableWallet._version = data.version ?? 1;
     return wallet;
   }
@@ -267,7 +182,6 @@ throw new AppError('NOT_FOUND', 'Carteira não encontrada', 404);
     return {
       ...data,
       _id: typeof data._id === 'string' ? data._id : data._id.toString(),
-      transactions: data.transactions ?? [],
     };
   }
 }

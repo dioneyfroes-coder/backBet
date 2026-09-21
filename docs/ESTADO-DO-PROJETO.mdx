@@ -9,13 +9,15 @@ sidebar_label: "Estado do Projeto"
 
 Este documento é a **fonte única de verdade** do status técnico e decisório do BackBet (consolida as antigas páginas *Definition of Done*, *Go/No-Go Final* e *Estratégia Comercial*).
 
-## Estado atual (20/09/2026)
+## Estado atual (21/09/2026)
 
 - **v1.0.0 consolidada** (ciclo MVP encerrado em 30/08/2026): API versionada `/api/v1` com contrato, envelope padronizado, paginação, idempotência, OpenAPI (`docs/openapi.json`) e sincronização regulatória SIGAP.
-- **Suíte**: **1105 testes** — 1071 passando, 33 skipped, **1 falha pré-existente (`FI-05`, `FinancialInvariants.test.ts`) fora do escopo atual**, tratada em separado. **142 suítes** passando.
-- **Cobertura**: ~**84,5%** statements · ~**85%** lines · ~**81%** functions · ~**71%** branches.
+- **Suíte (21/09/2026)**: **1094 testes passando**, 41 skipped (suítes de integração que exigem Docker), **0 falhas**. **145 suítes** passando.
+- **Cobertura (21/09/2026)**: ~**84%** statements · ~**84,5%** lines · ~**80,7%** functions · ~**67,4%** branches.
 - **Gates**: `npm run check` (secrets + lint + cobertura + build), typecheck e smoke **verdes**.
 - **Lab**: IP estático `192.168.22.250` (dev porta `3000`).
+- **Restart total validado (21/09/2026, item #18)**: `docker compose down` + `up -d` do lab → `/health` 200, `/readiness` `ready` (redis e mongo `up`), `/health/cache` 200; `withdrawal-worker` e `contact-worker` sobem, filas Bull presentes (`withdrawal_payouts`, `contact_queue`) e `withdrawal_recovery_run` roda na subida (scanned=0, sem request órfão); Mongo manteve-se PRIMARY (`myState=1`) com o volume persistindo; containers `backbet`/`mongodb`/`redis` `healthy`.
+- **P2 executado (21/09/2026)**: crash nos piores momentos 9/9 (`crash.integration.test.ts` C1a–C7); dois workers reais disputando o mesmo payout (`multi-worker.integration.test.ts`, 1/1); backup→checksum→restore→contagens→reconciliação == origem (`backup.integration.test.ts`, 1/1); baseline de performance nível 50 em `scripts/load-results/fase14/`; restart total do lab validado (item #18); revisão de controllers (item #19) concluiu **sem refactor** (`AdminController`, `ApiServer`, `swagger.ts`, `WithdrawalPayoutWorker` são coesos; nenhuma responsabilidade independente real para separar); documentação (item #20) e matriz de riscos (item #21) atualizadas. Detalhes em `docs/PERFORMANCE-BASELINE.mdx`.
 
 ## Definition of Done (seção 41 do plano)
 
@@ -72,16 +74,29 @@ Se não houver intenção comercial real: BackBet como **projeto de portfólio**
 - [ ] Se B2B: regulação nacional como **projeto separado de compliance** (SPA, SIGAP, certificação)
 - [ ] Toda funcionalidade nova avaliada como **produto**, não como desculpa para expandir o projeto
 
+## Matriz de riscos (item #21 do plano)
+
+| Risco | Estado | Evidência |
+|---|---|---|
+| password persistence | **CLOSED** | `user-auth-persistence.integration.test.ts` (Mongo real: senha + recovery persistem e sobrevivem restart) |
+| withdrawal race | **CLOSED** | `mongo-redis.integration.test.ts` (reclaim concorrente, 1 vence) + `WithdrawalPayoutWorker.safety.test.ts` |
+| duplicate payout | **CLOSED** | PSP/idempotência: `crash.integration.test.ts` C5/C7 + `multi-worker.integration.test.ts` (1 chamada ao PSP, 1 débito) |
+| refresh rotation race | **CLOSED** | `SessionService.test.ts` — "CAS: rotação concorrente com o MESMO token — exatamente 1 vence, família é revogada" |
+| bet vs market race | **CLOSED** | `bet-market-race.integration.test.ts` (Mongo real) |
+| Redis idempotency race | **CLOSED** | `mongo-redis.integration.test.ts` item 8.1 + `RedisIdempotencyStore.test.ts` caso 8.3 (dois workers) |
+| wallet growth | **CLOSED** | arquitetura (item #7): extrato via Ledger; Wallet sem `transactions[]`; `RawLedgerRepository`/`sumByTypes` agregados |
+| CI integration | **CLOSED** | GitHub Actions: suíte de integração na rede do `docker-compose.test.yml` (container `integration-tests`) |
+
 ## Pendências / roadmap (resume)
 
 | Item | Tipo | Ref |
 |------|------|-----|
-| Falha `FI-05` (teste) | dívida técnica pré-existente | tratada em separado |
-| Rollback real `withTransaction` na suíte de integração | teste | `docs/TESTING-ENV.mdx` |
+| FI-05 alinhado ao `resolveBet` replay-safe (mesmo resultado = no-op, divergente = `BET_NOT_PENDING`) | ✅ concluído | `FinancialInvariants.test.ts` |
+| Rollback real `withTransaction` na suíte de integração | ✅ concluído | `failure.integration.test.ts` T4 + `crash.integration.test.ts` C1a/C1b |
 | Adapter SIGAP real (mTLS/e-CNPJ) | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
 | KYC / geolocalização / PSP reais | pendência regulatória | `docs/SIGAP_CONFORMIDADE.mdx` |
 | Migração Bull → BullMQ | dívida pós-MVP | `docs/DEPLOY.mdx` |
 | Minoração de `@opentelemetry/*`, `nodemailer`, `js-yaml` | dívida de dependências | `docs/DEPLOY.mdx` |
 | Backup com upload S3 + retenção 5 anos | evolução de produção | `docs/BACKUP_RECOVERY.mdx` |
 
-**Última atualização:** 20 de setembro de 2026.
+**Última atualização:** 21 de setembro de 2026.

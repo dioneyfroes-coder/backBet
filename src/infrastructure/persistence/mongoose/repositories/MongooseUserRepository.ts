@@ -16,6 +16,7 @@ export class MongooseUserRepository implements IUserRepository {
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
         pixUpdatedAt: user.pixUpdatedAt ?? null,
+        passwordRecovery: user.passwordRecovery ?? null,
         documents: user.documents ?? [],
         preferences: user.preferences ?? {
           emailNotifications: true,
@@ -96,10 +97,12 @@ export class MongooseUserRepository implements IUserRepository {
     try {
       const userData: Partial<IUserDocument> = {
         username: user.username,
+        passwordHash: user.passwordHash,
         status: user.status,
         updatedAt: user.updatedAt,
         pixKey: user.pixKey ?? null,
         pixUpdatedAt: user.pixUpdatedAt ?? null,
+        passwordRecovery: user.passwordRecovery ?? null,
         documents: user.documents ?? [],
         preferences: user.preferences ?? {
           emailNotifications: true,
@@ -141,7 +144,7 @@ export class MongooseUserRepository implements IUserRepository {
         marketingEmails: false,
         requireWithdrawPassword: null,
       },
-      undefined,
+      data.passwordRecovery ?? undefined,
       data.pixUpdatedAt ?? null,
     );
   }

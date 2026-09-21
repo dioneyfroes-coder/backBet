@@ -1,5 +1,6 @@
 import { Money, SupportedCurrency } from '@/core/shared/domain/value-objects/Money';
 import { RiskExposureScope } from '@/core/risk/types/risk.types';
+import { RiskExposureUnderflowError } from '@/core/risk/domain/errors/RiskExposureUnderflowError';
 
 export { RiskExposureScope };
 
@@ -35,12 +36,19 @@ export class RiskExposureCounter {
   }
 
   decreaseExposure(amountCents: number): void {
-    const sub = Money.fromCents(amountCents, this._exposure.currency);
-    if (this._exposure.isGreaterThan(sub)) {
-      this._exposure = this._exposure.subtract(sub);
-    } else {
-      this._exposure = Money.fromCents(0, this._exposure.currency);
+    const currentCents = this._exposure.getCents();
+    if (amountCents < 0 || currentCents < amountCents) {
+      throw new RiskExposureUnderflowError({
+        scope: this.scope,
+        refId: this.refId,
+        requestedCents: amountCents,
+        currentCents,
+        recordExists: true,
+      });
     }
+    this._exposure = this._exposure.subtract(
+      Money.fromCents(amountCents, this._exposure.currency),
+    );
   }
 
   isOverLimit(): boolean {

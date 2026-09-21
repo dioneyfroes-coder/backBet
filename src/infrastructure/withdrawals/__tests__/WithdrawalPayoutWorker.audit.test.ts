@@ -37,8 +37,8 @@ describe('Fase 5 — dimensão Audit JUNTA com Wallet+Ledger+Risk+Bet+Withdrawal
 
   beforeEach(() => {
     service = {
-      markProcessing: jest.fn().mockResolvedValue(undefined),
       completePayout: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest.fn().mockResolvedValue({ status: 'PROCESSING' }),
     };
     adapter = {
       payWithdrawal: jest.fn().mockResolvedValue({ success: true, transactionId: 'tx-omnidim' }),
@@ -53,7 +53,7 @@ describe('Fase 5 — dimensão Audit JUNTA com Wallet+Ledger+Risk+Bet+Withdrawal
     await processWithdrawalPayloadOnce(p, adapter, service, auditService);
 
     // 1) Wallet+Ledger+Risk+Bet+Withdrawal: mutações de estado exatamente-vez na ordem certa
-    expect(service.markProcessing).toHaveBeenCalledWith(p.requestId);
+    expect(service.claimForProcessing).toHaveBeenCalledWith(p.requestId);
     expect(service.completePayout).toHaveBeenCalledWith(p.requestId);
 
     // 2) Audit: exatamente-1 evento FINANCIAL com o trilho completo

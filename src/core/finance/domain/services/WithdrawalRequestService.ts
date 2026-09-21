@@ -120,6 +120,10 @@ export class WithdrawalRequestService {
       throw new AppError('BAD_REQUEST', 'Withdrawal request already processed', 400);
     }
 
+    // Snapshot otimista do estado persistido: a atualização só é aplicada se o
+    // registro ainda estiver nesse estado/versão no banco (CAS).
+    const guard = { status: request.status, version: request.version };
+
     // Validation step: REQUESTED -> VALIDATING
     request.validateBy(adminId);
 
@@ -128,8 +132,9 @@ export class WithdrawalRequestService {
       // debit happens only when the payout is completed by the worker.
       request.approve(adminId, notes);
 
-      // persist approval before enqueuing the payout job (so workers see approved state)
-      await this.withdrawalRequestRepository.update(request);
+      // persist approval with the optimistic guard before enqueuing the payout
+      // job (so workers see the approved state and races lose the CAS).
+      const updated = await this.withdrawalRequestRepository.update(request, { guard });
 
       if (this.withdrawalQueue) {
         try {
@@ -159,25 +164,45 @@ export class WithdrawalRequestService {
       } catch (incErr) {
         console.debug('withdrawalRequestApprovedCounter inc failed', incErr);
       }
-    } else {
-      try {
-        await this.walletService.unlock(request.userId, request.amount, {
-          type: 'WITHDRAWAL_REVERSED',
-          referenceId: request.id,
-          source: 'WITHDRAWAL',
-        });
-      } catch (err) {
-        try {
-          this.metrics.withdrawalRequestProcessingFailed.inc();
-        } catch (incErr) {
-          console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
-        }
-        throw err;
-      }
-      request.reject(adminId, notes);
+      return updated;
     }
 
-    return this.withdrawalRequestRepository.update(request);
+    request.reject(adminId, notes);
+
+    // Unlock financeiro e a transição para REJECTED rodam na MESMA transação
+    // quando o repo suporta (Mongo): crash no meio reverte tudo e o CAS protege
+    // contra dois approves/rejects concorrentes desbloqueando duas vezes.
+    const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
+      const context = {
+        type: 'WITHDRAWAL_REVERSED',
+        referenceId: request.id,
+        source: 'WITHDRAWAL',
+      } as const;
+      if (session) {
+        await this.walletService.unlock(request.userId, request.amount, context, {
+          session: session as never,
+        });
+        return this.withdrawalRequestRepository.update(request, { session: session as never, guard });
+      }
+      await this.walletService.unlock(request.userId, request.amount, context);
+      return this.withdrawalRequestRepository.update(request, { guard });
+    };
+
+    try {
+      const runner = this.withdrawalRequestRepository.withTransaction;
+      return runner ? await runner(persist) : await persist(undefined);
+    } catch (err) {
+      try {
+        this.metrics.withdrawalRequestProcessingFailed.inc();
+      } catch (incErr) {
+        console.debug('withdrawalRequestProcessingFailedCounter inc failed', incErr);
+      }
+      throw err;
+    }
+  }
+
+  async claimForProcessing(requestId: string): Promise<WithdrawalRequest | null> {
+    return this.withdrawalRequestRepository.claimForProcessing(requestId);
   }
 
   async markProcessing(requestId: string): Promise<WithdrawalRequest> {
@@ -185,8 +210,9 @@ export class WithdrawalRequestService {
     if (!request) {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
+    const guard = { status: request.status, version: request.version };
     request.markProcessing();
-    return this.withdrawalRequestRepository.update(request);
+    return this.withdrawalRequestRepository.update(request, { guard });
   }
 
   async completePayout(requestId: string): Promise<WithdrawalRequest> {
@@ -194,10 +220,12 @@ export class WithdrawalRequestService {
     if (!request) {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
+    const guard = { status: request.status, version: request.version };
     // Debit the locked amount only now, when the payout actually succeeded.
     // Wallet debit + request update rodam na MESMA transação quando o repo
     // suporta (Mongo): crash no meio reverte tudo, sem wallet debitada e
     // request PRESA em PROCESSING.
+    request.completePayout();
     const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
       const context = {
         type: 'WITHDRAWAL_COMPLETED',
@@ -206,7 +234,7 @@ export class WithdrawalRequestService {
       } as const;
       try {
         if (session) {
-          await this.walletService.withdrawLocked(request.userId, request.amount, context, { session });
+          await this.walletService.withdrawLocked(request.userId, request.amount, context, { session: session as never });
         } else {
           await this.walletService.withdrawLocked(request.userId, request.amount, context);
         }
@@ -218,10 +246,9 @@ export class WithdrawalRequestService {
         }
         throw err;
       }
-      request.completePayout();
       return session
-        ? this.withdrawalRequestRepository.update(request, { session })
-        : this.withdrawalRequestRepository.update(request);
+        ? this.withdrawalRequestRepository.update(request, { session: session as never, guard })
+        : this.withdrawalRequestRepository.update(request, { guard });
     };
 
     const runner = this.withdrawalRequestRepository.withTransaction;
@@ -233,10 +260,12 @@ export class WithdrawalRequestService {
     if (!request) {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
+    const guard = { status: request.status, version: request.version };
     // Return the held amount to the available balance; payout never happened.
     // Unlock + request update rodam na MESMA transação quando o repo suporta
     // (Mongo): crash no meio reverte tudo, sem saldo devolvido 2x nem request
     // PRESA em PROCESSING.
+    request.failPayout();
     const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
       const context = {
         type: 'WITHDRAWAL_REVERSED',
@@ -245,7 +274,7 @@ export class WithdrawalRequestService {
       } as const;
       try {
         if (session) {
-          await this.walletService.unlock(request.userId, request.amount, context, { session });
+          await this.walletService.unlock(request.userId, request.amount, context, { session: session as never });
         } else {
           await this.walletService.unlock(request.userId, request.amount, context);
         }
@@ -258,10 +287,9 @@ export class WithdrawalRequestService {
         }
         throw err;
       }
-      request.failPayout();
       return session
-        ? this.withdrawalRequestRepository.update(request, { session })
-        : this.withdrawalRequestRepository.update(request);
+        ? this.withdrawalRequestRepository.update(request, { session: session as never, guard })
+        : this.withdrawalRequestRepository.update(request, { guard });
     };
 
     const runner = this.withdrawalRequestRepository.withTransaction;
@@ -273,13 +301,23 @@ export class WithdrawalRequestService {
     if (!request) {
       throw new AppError('NOT_FOUND', 'Withdrawal request not found', 404);
     }
-    await this.walletService.unlock(request.userId, request.amount, {
-      type: 'WITHDRAWAL_REVERSED',
-      referenceId: request.id,
-      source: 'WITHDRAWAL',
-    });
+    const guard = { status: request.status, version: request.version };
     request.cancel();
-    return this.withdrawalRequestRepository.update(request);
+    const persist = async (session?: unknown): Promise<WithdrawalRequest> => {
+      const context = {
+        type: 'WITHDRAWAL_REVERSED',
+        referenceId: request.id,
+        source: 'WITHDRAWAL',
+      } as const;
+      if (session) {
+        await this.walletService.unlock(request.userId, request.amount, context, { session: session as never });
+        return this.withdrawalRequestRepository.update(request, { session: session as never, guard });
+      }
+      await this.walletService.unlock(request.userId, request.amount, context);
+      return this.withdrawalRequestRepository.update(request, { guard });
+    };
+    const runner = this.withdrawalRequestRepository.withTransaction;
+    return runner ? await runner(persist) : await persist(undefined);
   }
 
   async listByUser(userId: string): Promise<WithdrawalRequest[]> {

@@ -12,7 +12,9 @@ describe('WithdrawalPayoutWorker state transitions', () => {
 
   beforeEach(() => {
     service = {
-      markProcessing: jest.fn().mockResolvedValue(undefined),
+      claimForProcessing: jest
+        .fn()
+        .mockResolvedValue({ status: 'PROCESSING', version: 1 }),
       completePayout: jest.fn().mockResolvedValue(undefined),
     };
     adapter = {
@@ -26,7 +28,7 @@ describe('WithdrawalPayoutWorker state transitions', () => {
 
     await processWithdrawalPayload(payload, adapter as IPaymentPort, service as WithdrawalRequestService);
 
-    expect(service.markProcessing).toHaveBeenCalledWith('req-succ-1');
+    expect(service.claimForProcessing).toHaveBeenCalledWith('req-succ-1');
     expect(service.completePayout).toHaveBeenCalledWith('req-succ-1');
     expect(adapter.payWithdrawal).toHaveBeenCalledTimes(1);
   });
@@ -39,13 +41,12 @@ describe('WithdrawalPayoutWorker state transitions', () => {
       processWithdrawalPayload(payload, adapter as IPaymentPort, service as WithdrawalRequestService),
     ).rejects.toThrow('provider_error');
 
-    expect(service.markProcessing).toHaveBeenCalledWith('req-fail-1');
+    expect(service.claimForProcessing).toHaveBeenCalledWith('req-fail-1');
     expect(service.completePayout).not.toHaveBeenCalled();
   });
 
   it('never re-runs the payment adapter when the state update fails after a successful payout', async () => {
     adapter.payWithdrawal.mockResolvedValue({ success: true, transactionId: 'tx-2' });
-    service.markProcessing.mockRejectedValue(new Error('state failed'));
     service.completePayout.mockRejectedValue(new Error('persist failed'));
     const payload = { requestId: 'req-guard-1', userId: 'user-1', amount: 50, currency: 'BRL' } as any;
 

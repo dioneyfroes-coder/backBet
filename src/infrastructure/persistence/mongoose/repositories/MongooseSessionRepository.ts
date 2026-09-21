@@ -55,6 +55,22 @@ export class MongooseSessionRepository implements ISessionRepository {
     );
   }
 
+  async rotateWithGuard(
+    sessionId: string,
+    expectedJti: string,
+    newSession: Session,
+  ): Promise<boolean> {
+    const res = await SessionModel.updateOne(
+      { sessionId, jwtId: expectedJti, status: 'ACTIVE' },
+      {
+        jwtId: newSession.jwtId,
+        lastUsedAt: newSession.lastUsedAt,
+        expiresAt: newSession.expiresAt,
+      },
+    );
+    return res.modifiedCount === 1;
+  }
+
   async deleteByUserId(userId: string): Promise<void> {
     await SessionModel.deleteMany({ userId });
   }

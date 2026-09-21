@@ -12,6 +12,7 @@ import { WalletService } from '@/core/finance/domain/services/WalletService';
 import { BetService } from '@/core/betting/domain/services/BetService';
 import { UserRepository } from '@/core/user/domain/repositories/UserRepository';
 import { WalletRepository } from '@/core/finance/domain/repositories/WalletRepository';
+import { InMemoryLedgerRepository } from '@/core/finance/domain/repositories/InMemoryLedgerRepository';
 import { BetRepository } from '@/core/betting/domain/repositories/BetRepository';
 import { EventRepository } from '@/core/betting/domain/repositories/EventRepository';
 import { RegisterUser } from '@/core/user/application/use-cases/RegisterUser';
@@ -45,7 +46,7 @@ describe('API expanded integration tests (isolated)', () => {
     const eventRepo = new EventRepository();
 
     const userService = new UserService(userRepo);
-    const walletService = new WalletService(walletRepo);
+    const walletService = new WalletService(walletRepo, new InMemoryLedgerRepository());
     const betService = new BetService(betRepo, eventRepo, walletService);
 
     const registerUserUseCase = new RegisterUser(userService, walletService);

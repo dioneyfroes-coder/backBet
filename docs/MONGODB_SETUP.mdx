@@ -29,7 +29,7 @@ Ambientes:
 
 - **Dev in-memory**: `USE_MONGOOSE_PERSISTENCE=false` (não toca Mongo).
 - **Dev real**: `USE_MONGOOSE_PERSISTENCE=true` + `MONGODB_URI` apontando para o compose.
-- **Teste**: `docker-compose.test.yml` (Mongo+Redis no loopback) — usado por `test:integration:full`.
+- **Teste**: `docker-compose.test.yml` (Mongo replica set + Redis + `integration-tests` na rede Docker) — usado por `test:integration:full` e pelo CI.
 - **Produção**: Mongo privado no host (compose) ou gerenciado (Atlas) via `MONGODB_URI`.
 
 ## Repositórios Mongoose (arquitetura)
