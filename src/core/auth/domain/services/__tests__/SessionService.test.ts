@@ -51,6 +51,45 @@ describe('SessionService', () => {
       expect(persisted?.revokedReason).toBe('REUSE_DETECTED');
     });
 
+    it('reusing the OLD token after a successful rotation revokes the family (item #5)', async () => {
+      const session = await openSession();
+      const oldJti = session.jwtId;
+
+      const rotated = await service.rotate(session.userId, session.sessionId, oldJti);
+      expect(rotated.status).toBe('ACTIVE');
+
+      // Replay do token antigo pós-rotação: guard jwtId !== oldJti → REUSE.
+      await expect(
+        service.rotate(session.userId, session.sessionId, oldJti),
+      ).rejects.toMatchObject({ statusCode: 401 });
+      expect((await repository.findById(session.sessionId))?.revokedReason).toBe(
+        'REUSE_DETECTED',
+      );
+    });
+
+    it('CAS: rotação concorrente com o MESMO token — exatamente 1 vence, família é revogada', async () => {
+      const session = await openSession();
+      const jti = session.jwtId;
+
+      const [winner, loser] = await Promise.allSettled([
+        service.rotate(session.userId, session.sessionId, jti),
+        service.rotate(session.userId, session.sessionId, jti),
+      ]);
+
+      const fulfilled = [winner, loser].filter((r) => r.status === 'fulfilled');
+      const rejected = [winner, loser].filter(
+        (r) => r.status === 'rejected' && (r.reason as AppError).statusCode === 401,
+      );
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+
+      // O perdedor do CAS revoga a família: a sessão termina REVOKED e nem o
+      // token do vencedor sobrevive — mesmas semânticas do reuse sequential.
+      const persisted = await repository.findById(session.sessionId);
+      expect(persisted?.status).toBe('REVOKED');
+      expect(persisted?.revokedReason).toBe('REUSE_DETECTED');
+    });
+
     it('rejects when session does not exist', async () => {
       await expect(service.rotate('user-1', 'missing-session', 'jti')).rejects.toMatchObject({
         statusCode: 401,

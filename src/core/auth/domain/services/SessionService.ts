@@ -8,8 +8,9 @@ import { AppError } from '@/shared/errors/AppError';
  *
  * - openSession: cria e persiste uma sessão quando um novo par de tokens é emitido.
  * - rotate (refresh rotation): o refresh token usado é substituído por um novo;
- *   se o jti apresentado não for o vigente (ex.: replay de token antigo, token
- *   roubado), a família é revogada imediatamente (detecção de reutilização).
+ *   a rotação é atômica (CAS no repositório): se o jti apresentado não for o
+ *   vigente — replay de token antigo/roubado ou uso concorrente do MESMO token —
+ *   a família é revogada imediatamente (detecção de reutilização).
  * - revoke / revokeAllForUser: logout e suspensão de conta.
  * - assertActiveSession: gate usado pelo protectedRoute para invalidar de
  *   imediato tokens emitidos antes de logout/suspensão.
@@ -69,6 +70,34 @@ export class SessionService {
 
     const newJti = randomUUID();
     session.rotate(newJti);
+
+    // CAS atômico (item #5 do plano): a rotação só é aplicada se a sessão
+    // continuar ACTIVE com EXATAMENTE este jwtId. Sem isso, duas requisições
+    // concorrentes com o MESMO refresh token venceriam e o replay deixaria de
+    // ser detectado. Aqui, o perdedor do CAS é tratado como reuse: a família
+    // inteira é revogada por segurança.
+    if (presentedJti) {
+      const applied = await this.repository.rotateWithGuard(
+        session.sessionId,
+        presentedJti,
+        session,
+      );
+      if (!applied) {
+        const latest = await this.repository.findById(session.sessionId);
+        if (latest && latest.isActive()) {
+          latest.revoke('REUSE_DETECTED');
+          await this.repository.update(latest);
+        }
+        throw new AppError(
+          'UNAUTHORIZED',
+          'Refresh token reutilizado. Sessão revogada por segurança. Faça login novamente.',
+          401,
+          { sessionId },
+        );
+      }
+      return session;
+    }
+
     await this.repository.update(session);
     return session;
   }
