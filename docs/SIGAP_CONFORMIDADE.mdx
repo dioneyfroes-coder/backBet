@@ -74,6 +74,8 @@ npm run security:assess
 
 O script varre o repositório, confere cada controle contra a evidência (arquivo, configuração ou código) e escreve o relatório em `reports/security-assessment-<timestamp>.txt` (e `.json`). Sai com código 1 se algum controle **bloqueante** falhar (mesmo espírito do `check:secrets`).
 
+O controle **F-04** (exposição de MongoDB/Redis) é sensível a contexto: `SECURITY_CONTEXT=lab` permite bind em interface **privada** (ex.: `192.168.22.250:27018`/`:6379`), enquanto `SECURITY_CONTEXT=prod` bloqueia qualquer publicação desses serviços. Sem a variável, o contexto é derivado de `BACKBET_RUNTIME_ENV`/`NODE_ENV` (`production` ⇒ PROD, senão LAB). A decisão considera o **bind address** de cada porta, não apenas a presença de `ports:` — bind wildcard (`0.0.0.0`) é sempre reprovado.
+
 ### Matriz de controles → evidência (PASS)
 
 **A — Segurança de acesso**: JWT obrigatório, guarda ADMIN, bcrypt custo 12, rate limit global/por rota, helmet, CORS por allowlist, payload limit `10mb`, validação Zod, `check:secrets` no CI. **Tudo PASS** com evidência em `AuthMiddleware.ts`, `adminRoutes.ts`, `ApiServer.ts` (101/131/136/157), `BaseController.ts`.
