@@ -22,6 +22,7 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 | `npm run test:load:distributed` | Carga **distribuída** (N carteiras, eixo horizontal) | infra real |
 | `npm run test:crash` | Recuperação de worker após crash | infra real |
 | `npm run test:backup` | Ciclo backup/restore/validação | infra real |
+| `npm run test:load:percentiles` | Baseline de performance 50..500 + CPU/RAM + latências (ver `docs/PERFORMANCE-BASELINE.mdx`) | Docker |
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) | — |
 | `npm run test:infra:reset` | Sobe infra de teste do zero | Docker |
 | `npm run check` | Gate completo: `check:secrets` + lint + cobertura + build | — |

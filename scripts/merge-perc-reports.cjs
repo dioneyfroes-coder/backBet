@@ -2,8 +2,8 @@
 'use strict';
 
 /**
- * Fase 13 — Funde múltiplos runs do benchmark de percentis em um relatório
- * final único (scripts/load-results/fase13/final/).
+ * Fase 14 — Funde múltiplos runs do benchmark de percentis em um relatório
+ * final único (scripts/load-results/fase14/final/).
  *
  * Cada run roda uma fatia da curva (ex.: A = níveis 50..300, B = contenção
  * 500, C = distribuído 500). Este script combina os `report.json` por
@@ -11,14 +11,13 @@
  *
  * Uso:
  *   node scripts/merge-perc-reports.cjs <runDir1> <runDir2> ...
- *   node scripts/merge-perc-reports.cjs 1a5c7260... 2026-09-19T14-57-41-810Z 2026-09-19T16-06-17-571Z
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const outRoot = path.join(root, 'scripts', 'load-results', 'fase13');
+const outRoot = path.join(root, 'scripts', 'load-results', 'fase14');
 const FINAL_DIR = 'final';
 
 function load(dir) {
@@ -76,28 +75,29 @@ function main() {
       if (!byLevel.has(r.level)) byLevel.set(r.level, {});
       byLevel.get(r.level)[r.scenario] = r;
     }
-    let md = `# Fase 13 — Benchmark de percentis (BackBet) — relatório final\n\n`;
+    let md = `# Fase 14 — Baseline de performance pós-correções (BackBet) — relatório final\n\n`;
     md += `- **runId**: ${m.runId}\n`;
     md += `- **executado em**: ${m.ranAt}\n`;
     md += `- **merged de**: ${m.mergedFrom.join(', ')}\n`;
-    md += `- **niveis**: ${m.levels.join(', ')}\n`;
+    md += `- **níveis**: ${m.levels.join(', ')}\n`;
     md += `- **carga**: N depósitos de R$ ${m.depositAmount} — contenção (mesma carteira) / distribuído (carteiras distintas)\n`;
-    md += `\n## p50/p95/p99 — latência por operação (ms)\n\n`;
-    md += `| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | capped | wall_ms | ops/s |\n`;
-    md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+    md += `\n## p50/p95/p99 + recursos (por onda)\n\n`;
+    md += `| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | capped | wall_ms | ops/s | cpu% | rss_peak_MB | mongo_ping_ms | redis_ping_ms |\n`;
+    md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
     for (const [level, pair] of [...byLevel.entries()].sort((a, b) => a[0] - b[0])) {
       const row = (scenario) => {
         const r = pair[scenario];
-        if (!r) return `| ${level} | ${scenario} | — | — | — | — | — | — | — | — | — | — |`;
+        if (!r) return `| ${level} | ${scenario} | — | — | — | — | — | — | — | — | — | — | — | — | — | — |`;
         const L = r.latencyMs;
-        return `| ${level} | ${r.scenario} | ${L.p50} | ${L.p95} | ${L.p99} | ${L.mean} | ${L.max} | ${r.fulfilled} | ${r.rejected} | ${r.capped ? 'sim' : 'não'} | ${r.wallMs} | ${r.opsPerSec} |`;
+        const T = r.telemetry ?? {};
+        return `| ${level} | ${r.scenario} | ${L.p50} | ${L.p95} | ${L.p99} | ${L.mean} | ${L.max} | ${r.fulfilled} | ${r.rejected} | ${r.capped ? 'sim' : 'não'} | ${r.wallMs} | ${r.opsPerSec} | ${T.cpuPct ?? '—'} | ${T.rssPeakMb ?? '—'} | ${T.mongoPingMs ?? '—'} | ${T.redisPingMs ?? '—'} |`;
       };
       md += `${row('contention')}\n`;
       md += `${row('distributed')}\n`;
     }
     md += `\n> Onda marcada \`capped\` estourou o orçamento (PERC_MAX_WAVE_MS);\n`;
     md += `> rejeitadas aí são WriteConflict (112) que esgotaram o retry interno do\n`;
-    md += `> driver — o modelo DERRUBOU operações sob contenção máxima.\n`;
+    md += `> driver — o modelo derruba operações sob contenção máxima.\n`;
     return md;
   };
 
@@ -106,7 +106,7 @@ function main() {
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify({ meta, reports, allReports }, null, 2));
   fs.writeFileSync(path.join(outDir, 'report.md'), global.__mergeMarkdown(reports, meta));
 
-  console.error(`[merge] ${reports.length} amostras (${allReports.length} totais) fundidas em scripts/load-results/fase13/final/`);
+  console.error(`[merge] ${reports.length} amostras (${allReports.length} totais) fundidas em scripts/load-results/fase14/final/`);
 }
 
 main();

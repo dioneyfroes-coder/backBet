@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import mongoose from 'mongoose';
+import IORedis from 'ioredis';
 import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
 import { MongooseWalletRepository } from '@/infrastructure/persistence/mongoose/repositories/MongooseWalletRepository';
 import { MongooseLedgerRepository } from '@/infrastructure/persistence/mongoose/repositories/MongooseLedgerRepository';
@@ -18,7 +20,12 @@ const describeReal = runRealIntegration ? describe : describe.skip;
 //     throughput real da API+Mongo com contenção removida.
 // Por onda mede: p50/p95/p99/mean/max de latência por operação, conflitos
 // (AppError CONFLICT 409 do CAS de versão), retries (reexecuções), tempo de
-// transação (duração da onda) e ops/sec. O gargalo de contenção pode durar
+// transação (duração da onda) e ops/sec. Também coleta telemetria de recursos
+// (item #14 do plano): CPU%/RSS do processo da suíte durante a onda (medidos com
+// process.cpuUsage/process.memoryUsage) e a latência de round-trip de Mongos e
+// Redis (pings amostrados a cada PERC_SAMPLE_MS enquanto a onda corre). O
+// CPU/RAM dos containers de infra (mongodb/redis) é amostrado pelo driver via
+// `docker stats`. O gargalo de contenção pode durar
 // muito; cada nível roda em `it` próprio com orçamento (PERC_MAX_WAVE_MS) —
 // quando estourado, a onda é marcada `capped` com N ops concluídas no orçamento
 // (medição honesta do teto, sem travar a suíte).
@@ -33,7 +40,9 @@ const SCENARIOS = (process.env.PERC_SCENARIOS ?? 'contention,distributed')
   .map((s) => s.trim())
   .filter((s) => s === 'contention' || s === 'distributed');
 const MAX_WAVE_MS = Number(process.env.PERC_MAX_WAVE_MS ?? 20 * 60 * 1000);
+const SAMPLE_MS = Number(process.env.PERC_SAMPLE_MS ?? 200);
 const DEPOSIT_AMOUNT = 1.25;
+const MB = 1024 * 1024;
 
 interface LatencyStats {
   p50: number;
@@ -41,6 +50,15 @@ interface LatencyStats {
   p99: number;
   mean: number;
   max: number;
+}
+
+interface ResourceTelemetry {
+  cpuPct: number;
+  rssStartMb: number;
+  rssPeakMb: number;
+  mongoPingMs: number;
+  redisPingMs: number;
+  samples: number;
 }
 
 interface ScenarioReport {
@@ -58,6 +76,7 @@ interface ScenarioReport {
   latencyMs: LatencyStats;
   wallMs: number;
   opsPerSec: number;
+  telemetry: ResourceTelemetry;
 }
 
 interface WaveTelemetry {
@@ -67,6 +86,7 @@ interface WaveTelemetry {
   capped: boolean;
   wallMs: number;
   sortedLatenciesMs: number[];
+  telemetry: ResourceTelemetry;
 }
 
 const isConflict = (error: unknown): boolean =>
@@ -83,6 +103,15 @@ const rejectionCode = (error: unknown): string => {
   }
   if (error instanceof Error) return error.name;
   return 'UNKNOWN';
+};
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+const medianOf = (values: number[]): number => {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 };
 
 const percentile = (sorted: number[], p: number): number => {
@@ -113,8 +142,34 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
   const ledgerRepo = new MongooseLedgerRepository();
   const walletService = new WalletService(walletRepo, ledgerRepo);
 
+  // Sonda opcional do Redis só para medir latência; se REDIS_URL não estiver
+  // definida a métrica vem zerada e a suíte segue (o benchmark é de Mongo).
+  let redisProbe: IORedis | null = null;
+
+  const pingMongo = async (): Promise<number> => {
+    const startedAt = Date.now();
+    await mongoose.connection.db!.admin().command({ ping: 1 });
+    return Date.now() - startedAt;
+  };
+
+  const pingRedis = async (): Promise<number | null> => {
+    if (!redisProbe) return null;
+    const startedAt = Date.now();
+    await redisProbe.ping();
+    return Date.now() - startedAt;
+  };
+
   beforeAll(async () => {
     await connectMongoDB(getMongoDBConfig());
+    if (runRealIntegration && process.env.REDIS_URL) {
+      redisProbe = new IORedis(process.env.REDIS_URL, {
+        maxRetriesPerRequest: 1,
+        enableOfflineQueue: false,
+      });
+      redisProbe.on('error', () => {
+        // silencia erros do probe — a métrica é opcional
+      });
+    }
   });
 
   afterAll(async () => {
@@ -123,6 +178,7 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
         WalletModel.deleteMany({ userId: { $in: resourceIds } }),
         LedgerEntryModel.deleteMany({ userId: { $in: resourceIds } }),
       ]);
+      if (redisProbe) await redisProbe.quit();
       await disconnectMongoDB();
     }
   });
@@ -133,6 +189,13 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
     let deferred = 0;
     let capped = false;
     const wallStart = Date.now();
+    const cpuStart = process.cpuUsage();
+    const rssStartMb = process.memoryUsage().rss / MB;
+    let rssPeakMb = rssStartMb;
+    const mongoRtts: number[] = [];
+    const redisRtts: number[] = [];
+    let samples = 0;
+    let sampling = false;
     const results: PromiseSettledResult<unknown>[] = new Array(operations.length);
     const started = Array.from({ length: operations.length }, () => Date.now());
 
@@ -170,8 +233,28 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
       }
     })();
 
+    const sampler = setInterval(async () => {
+      if (sampling) return;
+      sampling = true;
+      try {
+        const rss = process.memoryUsage().rss / MB;
+        if (rss > rssPeakMb) rssPeakMb = rss;
+        mongoRtts.push(await pingMongo());
+        const redisRtt = await pingRedis();
+        if (redisRtt !== null) redisRtts.push(redisRtt);
+        samples += 1;
+      } catch {
+        // sonda de latência é best-effort; nunca derruba a onda
+      } finally {
+        sampling = false;
+      }
+    }, SAMPLE_MS);
+
     await Promise.all(operations.map((_, i) => runOne(i)));
+    clearInterval(sampler);
     const wallMs = Date.now() - wallStart;
+    const cpu = process.cpuUsage(cpuStart);
+    const cpuMs = (cpu.user + cpu.system) / 1000;
     return {
       results,
       conflicts,
@@ -179,6 +262,14 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
       capped,
       wallMs,
       sortedLatenciesMs: latencies.sort((a, b) => a - b),
+      telemetry: {
+        cpuPct: wallMs > 0 ? round2((cpuMs / wallMs) * 100) : 0,
+        rssStartMb: round2(rssStartMb),
+        rssPeakMb: round2(rssPeakMb),
+        mongoPingMs: round2(medianOf(mongoRtts)),
+        redisPingMs: round2(medianOf(redisRtts)),
+        samples,
+      },
     };
   };
 
@@ -210,6 +301,7 @@ describeReal('Fase 13 — Benchmark de percentis (50..500 concorrentes) — Mong
       latencyMs: statsOf(wave.sortedLatenciesMs),
       wallMs: wave.wallMs,
       opsPerSec: Math.round((level * 1000) / Math.max(1, wave.wallMs)),
+      telemetry: wave.telemetry,
     };
     console.log(`PERC ${JSON.stringify(report)}`);
     return report;

@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const outRoot = path.join(root, 'scripts', 'load-results', 'fase13');
+const outRoot = path.join(root, 'scripts', 'load-results', 'fase14');
 
 function parsePercLines(text) {
   const reports = [];
@@ -49,15 +49,16 @@ function buildMarkdown(reports, meta) {
   if (meta.exitCode !== 0) {
     md += `- **exit**: ${meta.exitCode} (atenção: run incompleto)\n`;
   }
-  md += `\n## p50/p95/p99 — latência por operação (ms)\n\n`;
-  md += `| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | capped | wall_ms | ops/s |\n`;
-  md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
+  md += `\n## p50/p95/p99 + recursos (por onda)\n\n`;
+  md += `| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | capped | wall_ms | ops/s | cpu% | rss_peak_MB | mongo_ping_ms | redis_ping_ms |\n`;
+  md += `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n`;
   for (const [level, pair] of [...byLevel.entries()].sort((a, b) => a[0] - b[0])) {
     const row = (scenario) => {
       const r = pair[scenario];
-      if (!r) return `| ${level} | ${scenario} | — | — | — | — | — | — | — | — | — | — |`;
+      if (!r) return `| ${level} | ${scenario} | — | — | — | — | — | — | — | — | — | — | — | — | — | — |`;
       const L = r.latencyMs;
-      return `| ${level} | ${r.scenario} | ${L.p50} | ${L.p95} | ${L.p99} | ${L.mean} | ${L.max} | ${r.fulfilled} | ${r.rejected} | ${r.capped ? 'sim' : 'não'} | ${r.wallMs} | ${r.opsPerSec} |`;
+      const T = r.telemetry ?? {};
+      return `| ${level} | ${r.scenario} | ${L.p50} | ${L.p95} | ${L.p99} | ${L.mean} | ${L.max} | ${r.fulfilled} | ${r.rejected} | ${r.capped ? 'sim' : 'não'} | ${r.wallMs} | ${r.opsPerSec} | ${T.cpuPct ?? '—'} | ${T.rssPeakMb ?? '—'} | ${T.mongoPingMs ?? '—'} | ${T.redisPingMs ?? '—'} |`;
     };
     md += `${row('contention')}\n`;
     md += `${row('distributed')}\n`;
