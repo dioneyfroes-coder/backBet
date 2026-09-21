@@ -141,6 +141,62 @@ export class RedisClient {
     }
   }
 
+  // --- Caminho crítico (idempotência financeira) -------------------------
+  // Diferente do cache opcional acima, estas variantes NÃO engolem erros do
+  // Redis. Um estado de idempotência indisponível deve propagar (fail-loud)
+  // para nunca transformar erro de infraestrutura em "sucesso silencioso".
+
+  private requireClient(): Redis {
+    const client = this.getRedis();
+    if (!client) {
+      throw new Error('Redis indisponível para operação crítica de idempotência');
+    }
+    return client;
+  }
+
+  private async runStrict<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await this.runWithBreaker(operation);
+    } catch (error) {
+      recordRetryFailure('redis');
+      this.metrics.errors += 1;
+      console.error('Critical Redis operation failed', error);
+      throw error;
+    }
+  }
+
+  async getStrict<T>(key: string): Promise<T | null> {
+    const client = this.requireClient();
+    const data = await this.runStrict(() => client.get(key));
+    if (data === null) {
+      return null;
+    }
+    return JSON.parse(data) as T;
+  }
+
+  async setStrict<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+    const client = this.requireClient();
+    await this.runStrict(() => client.set(key, JSON.stringify(value), 'EX', ttlSeconds));
+    this.metrics.writes += 1;
+  }
+
+  async setIfAbsentStrict<T>(key: string, value: T, ttlSeconds: number): Promise<boolean> {
+    const client = this.requireClient();
+    const result = await this.runStrict(() =>
+      client.set(key, JSON.stringify(value), 'EX', ttlSeconds, 'NX'),
+    );
+    if (result === 'OK') {
+      this.metrics.writes += 1;
+      return true;
+    }
+    return false;
+  }
+
+  async delStrict(key: string): Promise<void> {
+    const client = this.requireClient();
+    await this.runStrict(() => client.del(key));
+  }
+
   async cached<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== null) {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { cacheConfig } from '@/shared/config/cacheConfig';
 import { redisClient } from '@/infrastructure/cache/RedisClient';
+import { RedisIdempotencyStore } from '@/infrastructure/persistence/idempotency/RedisIdempotencyStore';
 import { connectMongoDB, disconnectMongoDB, getMongoDBConfig } from '@/infrastructure/persistence/mongoose/config';
 import { HouseTreasuryModel } from '@/infrastructure/persistence/mongoose/schemas/TreasurySchema';
 import { MongooseHouseTreasuryRepository } from '@/infrastructure/persistence/mongoose/repositories/MongooseHouseTreasuryRepository';
@@ -33,6 +34,29 @@ describeReal('MongoDB + Redis integration', () => {
     expect(first).toBe(true);
     expect(second).toBe(false);
     await redisClient.del(key);
+  });
+
+  it('item 8.1 — reclaim concorrente sobre Redis real: apenas um worker vence', async () => {
+    const store = new RedisIdempotencyStore();
+    const key = `backbet:idempotency:integration:reclaim:${randomUUID()}`;
+    await redisClient.setStrict(
+      key,
+      { fingerprint: 'fp-1', status: 'PROCESSING', processingAt: Date.now() - 60_000 },
+      60,
+    );
+
+    try {
+      const results = await Promise.all([
+        store.reclaimStaleProcessing(key, 1_000),
+        store.reclaimStaleProcessing(key, 1_000),
+        store.reclaimStaleProcessing(key, 1_000),
+      ]);
+
+      expect(results.filter((record) => record !== null)).toHaveLength(1);
+    } finally {
+      await redisClient.delStrict(key);
+      await redisClient.delStrict(`${key}:reclaim`);
+    }
   });
 
   it('rejects one of two concurrent Mongo updates with a stale version', async () => {
