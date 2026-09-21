@@ -74,6 +74,7 @@ Ambientes, env vars e troubleshooting: `docs/QUICKSTART.mdx` e `docs/MONGODB_SET
 | `npm run smoke` | `build` + verificação pós-build (`scripts/smoke-api.cjs`) |
 | `npm run test:integration` | Suíte real (MongoDB replica set + Redis via `docker-compose.test.yml`) |
 | `npm run test:integration:full` | Integração completa + verificação de endpoints |
+| `npm run test:integration:docker` | Integração dentro da rede Docker do `docker-compose.test.yml` |
 | `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) contra a infra real |
 | `npm run test:load:distributed` | Carga **distribuída** (N carteiras distintas, eixo horizontal) |
 | `npm run test:crash` | Teste de recuperação (crash) de worker |
@@ -99,7 +100,7 @@ Contrato completo (códigos de erro, exemplos e fluxos): `docs/API_CONTRACT.mdx`
 | Compose | Finalidade |
 |---------|-----------|
 | `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers |
-| `docker-compose.test.yml` | Infra de teste isolada (Mongo + Redis no loopback) |
+| `docker-compose.test.yml` | Infra de teste isolada (Mongo replica set + Redis + `integration-tests` na rede Docker) |
 | `docker-compose.proxy.yml` | Reverse proxy (Caddy/TLS) opcional |
 | `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional, liga o `/metrics`) |
 

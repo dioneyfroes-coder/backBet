@@ -17,6 +17,7 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 | `npm run test:coverage` | Unitários + relatório de cobertura | nenhuma |
 | `npm run test:integration` | Integração real (subset) | Mongo replica set + Redis |
 | `npm run test:integration:full` | Integração completa + verificação de endpoints | Mongo replica set + Redis |
+| `npm run test:integration:docker` | Integração dentro da rede Docker (container `integration-tests`) | Docker |
 | `npm run test:load` | Carga de **contenção** (N ops na mesma carteira) | infra real |
 | `npm run test:load:distributed` | Carga **distribuída** (N carteiras, eixo horizontal) | infra real |
 | `npm run test:crash` | Recuperação de worker após crash | infra real |
@@ -29,12 +30,17 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 
 ### Infra de teste
 
-`docker-compose.test.yml` sobe MongoDB como **replica set `rs0`** + Redis no loopback:
+`docker-compose.test.yml` sobe MongoDB (**replica set `rs0`**, anunciado como `mongodb:27017`) + Redis (`redis:6379`) + o serviço `integration-tests`. A suíte roda **dentro da rede Docker**, sem depender de `localhost`/`127.0.0.1`/IP do host — o mesmo caminho usado pelo CI:
 
 ```bash
-npm run test:infra:reset   # sobe/limpa a infra
-npm run test:integration:full
+npm run test:integration:full   # build do backbet:test + suíte na rede Docker + teardown
+# ou, manualmente:
+npm run test:infra:up           # sobe mongodb + redis + mongo-rs-init
+npm run test:integration:docker # roda o container integration-tests
+npm run test:infra:down
 ```
+
+> Para inspecionar a infra pelo host, publique as portas via `LAB_BIND_IP` (ver `docker-compose.yml`) — o compose de teste é intencionalmente fechado na rede interna.
 
 > Transações Mongo, locking otimista, workers Bull e idempotência **só fazem sentido** contra o replica set — as suítes de integração/carga exigem esta infra.
 

@@ -58,29 +58,21 @@ jobs:
   integration:
     runs-on: ubuntu-latest
 
-    # Fase 18 — Ambiente de testes reproduzível: a suíte de integração real
-    # (MongoDB replica set + Redis) roda contra a INFRAESTRUTURA VERSIONADA do
-    # docker-compose.test.yml, sem depender de MongoDB/Redis pessoais.
+    # Fase 18/28 — Ambiente de testes reproduzível: a suíte de integração real
+    # (MongoDB replica set + Redis) roda DENTRO da rede do docker-compose.test.yml
+    # (serviço `integration-tests`). O CI não injeta MONGODB_URI/REDIS_URL nem
+    # depende de localhost/127.0.0.1/IP do host: o replica set é anunciado como
+    # `mongodb:27017` e o Redis como `redis:6379`, ambos resolvíveis pela rede
+    # interna do Compose.
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
+      - name: Build test image (backbet:test)
+        run: docker compose -f docker-compose.test.yml build integration-tests
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Start test infrastructure (MongoDB replica set + Redis)
-        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
-
-      - name: Run real integration tests
-        run: npm run test:integration
+      - name: Run real integration tests (container network)
+        run: docker compose -f docker-compose.test.yml run --rm integration-tests
 
       - name: Teardown test infrastructure
-        run: docker compose -f docker-compose.test.yml down
         if: always()
+        run: docker compose -f docker-compose.test.yml down -v

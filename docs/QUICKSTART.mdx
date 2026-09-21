@@ -53,7 +53,7 @@ docker compose up -d --build
 
 Sobe o host único: Mongo (rs0) + Redis + API + workers. A API fica em `http://localhost:3000`.
 
-- `docker-compose.test.yml` — infra de teste isolada (loopback).
+- `docker-compose.test.yml` — infra de teste isolada (Mongo replica set + Redis + `integration-tests` na rede Docker).
 - `docker-compose.proxy.yml` — Caddy/TLS opcional.
 - `docker-compose.observability.yml` — Prometheus/Grafana/OTEL opcional (habilita `/metrics` com `OBS_ENABLE_PROMETHEUS=true`).
 

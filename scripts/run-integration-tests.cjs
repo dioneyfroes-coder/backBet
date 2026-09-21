@@ -14,14 +14,16 @@
  *  - NÃO existem fallbacks para localhost/IP fixo aqui: se faltar URI, o erro
  *    aparece imediatamente (nunca se tenta conectar em localhost dentro de
  *    container ou na infra publicada).
- *  - SEM argumentos: apenas roda a suíte (a infra deve já estar de pé).
- *  - Com --with-infra: sobe o docker-compose.test.yml (up -d --wait), roda a
- *    suíte e derruba a infra (down) mesmo em caso de falha.
+ *  - SEM argumentos: apenas roda a suíte no host (a infra deve já estar de pé e
+ *    acessível pelas URIs do ambiente).
+ *  - Com --with-infra: constrói a imagem backbet:test, roda a suíte DENTRO da
+ *    rede do docker-compose.test.yml (sem depender de localhost/IP do host) e
+ *    derruba a infra (down -v) mesmo em caso de falha.
  *
  * Uso:
  *   npm run test:integration
  *   npm run test:integration:full
- *   docker compose --profile tests run --rm integration-tests
+ *   docker compose -f docker-compose.test.yml run --rm integration-tests
  *   node scripts/run-integration-tests.cjs -- src/integration/...
  *
  * Cross-platform (Windows/PowerShell, macOS, Linux). Docker Compose v2.20+ é
@@ -97,7 +99,10 @@ function loadTestConnectionEnv() {
 
 const DEFAULTS = loadTestConnectionEnv();
 
-if (!DEFAULTS.MONGODB_URI || !DEFAULTS.REDIS_URL) {
+// No modo --with-infra as conexões são injetadas pelo próprio compose
+// (MONGODB_URI=...mongodb:27017..., REDIS_URL=redis://redis:6379) dentro da rede
+// Docker, então não exigimos .env/URIs no host.
+if (!withInfra && (!DEFAULTS.MONGODB_URI || !DEFAULTS.REDIS_URL)) {
   console.error(
     '[integration] MONGODB_URI e REDIS_URL são obrigatórias para a suíte de ' +
     'integração. Defina-as no .env (host/porta/auth da infra real) ou exporte ' +
@@ -144,24 +149,34 @@ if (!withInfra) {
   process.exit(runJest());
 }
 
-const up = runDocker(composeArgs('up', ['-d', '--wait', '--wait-timeout', '180']), { cwd: root });
-if (up.error) {
-  console.error(
-    '[integration] Docker não está disponível no PATH. Instale o Docker Engine + ' +
-    'Docker Compose v2 (veja docs/TESTING-ENV.mdx) e rode `npm run test:infra:up`, ' +
-    'ou forneça MONGODB_URI/REDIS_URL para rodar a suíte contra outra infra.',
-  );
-  process.exit(up.status ?? 1);
+const dockerUnavailable =
+  'Docker não está disponível no PATH. Instale o Docker Engine + Docker Compose v2 ' +
+  '(veja docs/TESTING-ENV.mdx) ou forneça MONGODB_URI/REDIS_URL para rodar a suíte ' +
+  'no host contra outra infra.';
+
+const build = runDocker(composeArgs('build', ['integration-tests']), { cwd: root });
+if (build.error) {
+  console.error(`[integration] ${dockerUnavailable}`);
+  process.exit(build.status ?? 1);
 }
-if (up.status !== 0) {
-  process.exit(up.status ?? 1);
+if (build.status !== 0) {
+  process.exit(build.status ?? 1);
 }
+
+// Os specs/flags escolhidos no host são repassados como COMMAND para o container
+// (a imagem já tem o runner como CMD). As conexões vêm do compose, não do host.
+const containerCommand = ['node', 'scripts/run-integration-tests.cjs', ...specArgs, ...extraArgs];
+const run = composeArgs('run', ['--rm', 'integration-tests', ...containerCommand]);
 
 let exitCode;
 try {
-  exitCode = runJest();
+  const result = runDocker(run, { cwd: root });
+  if (result.error) {
+    console.error(`[integration] ${dockerUnavailable}`);
+  }
+  exitCode = result.status ?? 1;
 } finally {
-  runDocker(composeArgs('down'), { cwd: root });
+  runDocker(composeArgs('down', ['-v']), { cwd: root });
 }
 
 process.exit(exitCode);

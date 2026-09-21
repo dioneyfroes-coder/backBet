@@ -14,7 +14,7 @@ Guia de implantação do BackBet: Docker Compose, reverse proxy/TLS, política d
 | Compose | Finalidade |
 |---------|-----------|
 | `docker-compose.yml` | Host único: MongoDB (replica set `rs0`) + Redis + `backbet` + workers |
-| `docker-compose.test.yml` | Infra de teste isolada (Mongo + Redis no loopback) |
+| `docker-compose.test.yml` | Infra de teste isolada (Mongo replica set + Redis + `integration-tests` na rede Docker) |
 | `docker-compose.proxy.yml` | Reverse proxy (Caddy/TLS) opcional |
 | `docker-compose.observability.yml` | Prometheus + Grafana + OpenTelemetry Collector (opcional, liga o `/metrics`) |
 
