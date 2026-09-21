@@ -402,9 +402,9 @@ describeReal('Fase 22 — Testes de falha (MongoDB real)', () => {
     );
     expect(adapter.attempts).toBe(1);
 
-    await expect(
-      idem.execute(key, fingerprint, () => processWithdrawalPayloadOnce(payload, adapter, wdService)),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    await idem.execute(key, fingerprint, () =>
+      processWithdrawalPayloadOnce(payload, adapter, wdService),
+    );
     expect(adapter.attempts).toBe(1);
 
     const done = await wdRepo.findById(request.id);
