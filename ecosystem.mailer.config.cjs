@@ -1,5 +1,6 @@
 /* eslint-env node */
 const path = require('node:path');
+const workerInstances = require('./scripts/pm2-worker-instances.cjs');
 
 module.exports = {
   apps: [
@@ -8,7 +9,9 @@ module.exports = {
       // Production: use built dist JS. Do not fallback to TS in production.
       script: './dist/scripts/start-contact-worker.js',
       cwd: path.resolve(__dirname),
-      instances: 1,
+      instances: workerInstances(),
+      exec_mode: 'cluster',
+      max_memory_restart: '512M',
       autorestart: true,
       watch: false,
       merge_logs: true,

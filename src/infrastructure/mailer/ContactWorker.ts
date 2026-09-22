@@ -1,13 +1,12 @@
 import nodemailer from 'nodemailer';
 import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
-import Queue from 'bull';
-import type { Queue as BullQueue } from 'bull';
+import { Worker } from 'bullmq';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
 import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { canonicalFingerprint } from '@/shared/services/fingerprint';
-import { getRedisUrl } from '@/shared/config/connections';
+import { createBullMqConnection } from '@/infrastructure/queues/bullMqConnection';
 
 const CONTACT_TO = process.env.CONTACT_TO_EMAIL || 'support@example.com';
 
@@ -49,23 +48,27 @@ export async function processContactPayload(payload: ContactPayload): Promise<vo
   );
 }
 
-export function startContactWorker(): BullQueue {
-  const queue = new Queue('contact_queue', getRedisUrl()) as BullQueue;
-  // using named processor 'contact'
-  queue.process('contact', async (job) => {
-    const payload = job.data as ContactPayload;
-    try {
-      await processContactPayload(payload);
-      return Promise.resolve();
-    } catch (err) {
-      writeStructuredLog({
-        event: 'contact_send_failed',
-        ticketId: payload.ticketId,
-        err,
-      });
-      return Promise.reject(err);
-    }
-  });
+export function startContactWorker(): Worker {
+  const queue = new Worker(
+    'contact_queue',
+    async (job) => {
+      // bullmq runs the processor for every job name unless jobs[] restricts it
+      const payload = job.data as ContactPayload;
+      try {
+        await processContactPayload(payload);
+      } catch (err) {
+        writeStructuredLog({
+          event: 'contact_send_failed',
+          ticketId: payload.ticketId,
+          err,
+        });
+        throw err;
+      }
+    },
+    {
+      connection: createBullMqConnection(),
+    },
+  );
 
   queue.on('failed', (job, err) => {
     const payload = job?.data as ContactPayload | undefined;
