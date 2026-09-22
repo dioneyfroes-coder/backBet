@@ -28,7 +28,7 @@ Guia de todas as suítes, ambientes e cenários críticos cobertos por testes no
 | `npm run test:infra:reset` | Sobe infra de teste do zero | Docker |
 | `npm run check` | Gate completo: `check:secrets` + lint + cobertura + build | — |
 
-**Estado atual (22/09/2026)**: **1173 testes passando**, 41 skipped (suítes de integração que exigem Docker), **0 falhas**; **153 suítes passando**; cobertura **~85,5% stmts / ~86% lines / ~82,8% fns / ~70,2% branches**; `npm run check` verde.
+**Estado atual (22/09/2026)**: **1173 testes passando**, 41 skipped (suítes de integração que exigem Docker), **0 falhas**; **153 suítes passando**; cobertura **~85,5% stmts / ~86% lines / ~82,8% fns / ~70,2% branches**; `npm run check` verde. O check agora tem **gate de cobertura**: `jest.config.js` exige **≥65% de branches globais** — regressão faz o `npm run check` falhar.
 
 ### Infra de teste
 
