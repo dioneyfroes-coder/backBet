@@ -1,87 +1,74 @@
-# Fase de Otimização de Performance — Plano
+# Plano de Encerramento e Congelamento do Projeto
 
-> Fase seguinte ao baseline de performance (item #14 do plano `BackBet-Correcoes-Passo-a-Passo.md`).
-> Objetivo: reduzir o gargalo de contenção na mesma carteira e melhorar o uso de recursos,
-> mantendo invariantes financeiros e **0 rejeitadas** sob concorrência.
+> Este arquivo substitui o antigo *Fase de Otimização de Performance — Plano*. A fase de
+> performance foi concluída (baseline validado, `docs/PERFORMANCE-BASELINE.mdx` e
+> `docs/TESTING-ENV.mdx` atualizados; contenção @500 sem rejeitadas, distribuído ~81 ops/s) e
+> a fase Bull→BullMQ encerrada. O novo trabalho é o **encerramento e freeze** do projeto,
+> conforme as 5 etapas abaixo (espelho do checklist `BackBet-Correcoes-Passo-a-Passo.md`).
 
-## Contexto (baseline 21/09/2026 — nível 50)
+## Etapa 1 — Corrigir `docs/ESTADO-DO-PROJETO.mdx`
 
-| cenário | p50 | p95 | p99 | mean | ops/s | mongo cpu pico | rejeitadas |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| contenção (1 carteira) | 6172 ms | 8047 ms | 8077 ms | 5495.7 ms | 6 | 103.3% | 0 |
-| distribuído (N carteiras) | 713 ms | 759 ms | 772 ms | 713.5 ms | 65 | — | 0 |
+O doc é a fonte única de verdade de status e decisões e encontra-se defasado. Correções
+obrigatórias antes de qualquer release:
 
-- **Correção**: 0 rejeitadas, 0 conflitos CAS, saldo/ledger consistentes.
-- **Gargalo patológico**: serialização do documento único por carteira + reexecução de transação otimista (retry de `WriteConflict`).
-- **Distribuído**: teto é CPU do runner, não o Mongo.
-- Referência pré-fix (`fase13/final`): p95 ≈ 13 s @50 → 449 s @200 → 22 min @300; 174/500 rejeitadas por WriteConflict @500.
+1. Atualizar a seção "Estado atual" para 22/09/2026: **1173 testes passando / 41 skipped /
+   153 de 164 suítes**; cobertura ~85,5% stmts / ~70,2% branches; gate `branches ≥ 65%`
+   travado pelo `npm run check`.
+2. Documentar a validação de integração no lab (18/18, via URIs publicadas com
+   `directConnection=true`) e o fix de CI (`--coverage=false` no runner de integração).
+3. Documentar o bench PM2 e a comparação **500 jobs com vs sem PM2** (speedup ~3,4x com 4
+   instâncias; overhead ~25% de boot; zero falhas em todas as variantes).
+4. **Condicionar** afirmações dependentes dos passos 3 e 4 (CI verde no GitHub, stack Docker
+   do clone) — nada de "concluído" sem prova executada nesta fase.
+5. Linkar os 4 ADRs (etapa 2) e esta fase de encerramento.
 
-## Passo 1 — Lock distribuído por carteira (Redis)
+**Critério**: nenhuma claim sem evidência; datas/contagens exatas.
 
-- Criar interface `WalletLockService` em `src/core/finance/domain/services/`:
+## Etapa 2 — Criar os 4 ADRs
 
-  ```ts
-  interface WalletLockService {
-    withLock<T>(userId: string, fn: () => Promise<T>): Promise<T>;
-  }
-  ```
+Formato: `docs/adr/ADR-XXXX-<slug>.md` com **Status / Contexto / Decisão / Consequências**
+(incluindo alternativas consideradas e evidências).
 
-- Implementar `RedisWalletLockService` em `src/infrastructure/persistence/locks/` usando `RedisClient.setIfAbsentStrict` (`SET NX EX`):
-  - chave: `wallet:lock:<userId>`;
-  - valor: token aleatório do dono;
-  - `LOCK_TTL_MS` (default 5000) — se o dono morre, o lock expira sozinho;
-  - release **seguro** via Lua script (`del` somente se o token bater) — evita delegar lock de outro owner após TTL;
-  - `WAIT_MAX_MS` (default 200) — spin com backoff; timeout lança `DOMAIN_ERROR WALLET_LOCK_BUSY`.
-- `WalletService.run()` passa a envolver a transação com o lock **somente quando nenhum `WalletRepositoryOptions`/session externo é fornecido**:
-  - requests HTTP (sem session) → lock + transação;
-  - workers/filas que já passam `session` (transação Mongo controlada externamente) → comportamento atual preservado (evita deadlock lock-dentro-transação).
-- Timeout mapeado para 409/429 pelo caller (a definir na rota/controller).
+| ADR | Decisão congelada |
+|-----|-------------------|
+| ADR-0001 | **Persistência transacional**: MongoDB replica set + transações multi-documento (wallet/ledger/bet); documento de carteira enxuto com extrato via Ledger. |
+| ADR-0002 | **Concorrência financeira**: idempotência + lock otimista (`version`/CAS) + retry transitório + claim atômico `APPROVED → PROCESSING`; concorrência paralela de workers disputando o mesmo payout com exatamente 1 vencedor. |
+| ADR-0003 | **Filas de worker**: BullMQ (migração de Bull), conexão ioredis com `maxRetriesPerRequest: null`, `lockDuration`/`stalledInterval`, escalabilidade por `PM2_WORKER_INSTANCES` (cluster) e `USE_REDIS_QUEUE=true` obrigatório. |
+| ADR-0004 | **Entrega B2B + freeze**: plataforma para operadores autorizados; P2 regulatório (KYC/PSP/SIGAP/certificação) adiado; tag `v1.0.0` e congelamento do repositório. |
 
-## Passo 2 — Métricas
+**Critério**: 4 ADRs criados, revisados e referenciados no ESTADO-DO-PROJETO.
 
-- Novos contadores em `src/shared/observability/IMetricsPort`:
-  - `walletLockAcquired` (counter);
-  - `walletLockWaitMs` (histogram);
-  - `walletLockTimedOut` (counter).
-- Integrados ao `RedisWalletLockService` e expostos em `/metrics` quando `OBS_ENABLE_PROMETHEUS=true`.
+## Etapa 3 — Confirmar o CI final
 
-## Passo 3 — Testes
+Reproduzir localmente e confirmar no GitHub Actions, no **mesmo commit da tag**:
 
-- `WalletLockService.test.ts` (unit, store in-memory mockado):
-  - mutual exclusion entre 2 chamadas concorrentes para o mesmo userId;
-  - wallet distintas não bloqueiam entre si;
-  - timeout após `WAIT_MAX_MS` → `WALLET_LOCK_BUSY`;
-  - release libera para o próximo (`withLock` sequencial roda);
-  - callback lançando erro libera o lock (finally).
-- `wallet-lock.integration.test.ts` (Redis real na rede do `docker-compose.test.yml`):
-  - duas corrotinas disputam a mesma chave → exatamente 1 executou por vez (flag de in-progress);
-  - simulação de crash: lock expira após TTL e outro processo consegue adquirir;
-  - release com token errado não remove o lock de outro owner.
-- Estender `multi-worker.integration.test.ts`: dois processos reais disputando a **mesma carteira** (não só o mesmo payout) com lock ativo.
+- `npm run check` → secrets + lint + 1173 testes + cobertura branch ≥65% + build, sem falhas.
+- `npm run typecheck` → verde.
+- Job de integração reproduzido: `docker compose -f docker-compose.test.yml build integration-tests`
+  e `docker compose -f docker-compose.test.yml run --rm integration-tests` → 0 falhas, `exit 0`.
+- Conferir ausência de alertas no Actions e que o fix `--coverage=false` impede o falso
+  negativo de cobertura em specs parciais.
 
-## Passo 4 — Re-baseline
+**Critério**: jobs `test` e `integration` verdes no GitHub Actions.
 
-- Rodar `PERC_LEVELS=50 node scripts/percentile-driver.cjs`.
-- Comparar contrário a `scripts/load-results/fase14/02326fa4-7e5e-4185-ac00-475ecf86d9b5/`.
-- Métricas de comparação: p50/p95/p99, mean, wall, ops/s, rejeitadas, conflitos CAS, CPU/RAM Mongo/Redis/runner, pings Mongo/Redis.
-- Atualizar `docs/PERFORMANCE-BASELINE.mdx` com a nova rodada e leitura.
+## Etapa 4 — Fazer um clone limpo + execução Docker
 
-## Passo 5 — Próximos candidatos (se necessário)
+Provar que o repositório é autossuficiente (sem estado/cache do ambiente de dev):
 
-- **Saldo agregado "de jogo"**: doc separado com saldo de jogo grudado na sessão de aposta; reduz escritas no doc principal da carteira (pós-lock, o próximo gargalo de contenção é a escrita do doc quente).
-- **Particionamento por moeda/escopo**: dividir o documento da carteira por moeda/CCC.
-- **Bull → BullMQ** (dívida técnica — worker mais robusto, backoff e DLQ nativos).
+1. `git clone` do branch de release em diretório novo e neutro.
+2. `npm ci`; preparar `.env` a partir do `.env.example`.
+3. `docker compose up -d --build`; aguardar `healthy` (mongo, redis e app) e `mongo-rs-init`.
+4. Validar `/health` e `/readiness` (mongo e redis `up`).
+5. Registrar `runId` e logs; anexar como evidência no release.
 
-## Critérios de saída (Definition of Done desta fase)
+**Critério**: a stack sobe do zero em Docker; saúde/readiness respondem 200.
 
-- [ ] `npm test` verde (0 falhas) e `npm run check` verde.
-- [ ] Lock validado em suíte de integração com Redis real (rede Docker) e no `multi-worker`.
-- [ ] Nova rodada de baseline registrada com `runId` em `scripts/load-results/fase15/`.
-- [ ] `docs/PERFORMANCE-BASELINE.mdx` e `docs/TESTING-ENV.mdx` atualizados.
-- [ ] matriz de riscos atualizada se aplicável.
+## Etapa 5 — Criar release/tag e congelar o projeto
 
-## Decisões em aberto (para confirmar antes do Passo 1)
+1. Tag anotada no commit consolidado: `git tag -a v1.0.0 -m "BackBet v1.0.0 — GO condicionado B2B"`.
+2. `git push origin v1.0.0` e publicação do GitHub Release com evidências (docs atualizados,
+   baseline, runIDs, resultados do CI/docker).
+3. Congelamento: branch protection (sem push direto), repo em manutenção — apenas
+   bug-fix/segurança até a decisão comercial (B2B vs portfólio, ADR-0004).
 
-1. Lock opcional (feature flag `FINANCE_WALLET_LOCK=true`) ou sempre ativo quando Redis estiver habilitado?
-2. Timeout `WALLET_LOCK_BUSY` → mapear para HTTP 409 ou 429?
-3. Colocar o lock em `WalletService.run()` (todos os callers) ou apenas nos use-cases de request HTTP?
+**Critério**: tag e Release públicos; política de manutenção aplicada no repositório.
