@@ -1,5 +1,6 @@
 import {
   compareReconciliations,
+  describeSummary,
   RawLedgerRepository,
   RawWalletRepository,
 } from '@/infrastructure/backup/financeReconciliation';
@@ -97,5 +98,136 @@ describe('financeReconciliation adapters somente-leitura', () => {
     const repo = new RawLedgerRepository(stubDb);
     await expect(repo.append({} as never)).rejects.toThrow('não é usada pela reconciliação');
     await expect(repo.exists('tx')).rejects.toThrow('não é usada pela reconciliação');
+  });
+});
+
+describe('financeReconciliation adapters — leitura via mongo raw', () => {
+  const walletDb = (doc: unknown) =>
+    ({
+      collection: jest.fn(() => ({ findOne: jest.fn().mockResolvedValue(doc) })),
+    }) as never;
+
+  it('RawWalletRepository devolve null quando não há carteira', async () => {
+    const repo = new RawWalletRepository(walletDb(null));
+    await expect(repo.findByUserId('u-sem-carteira')).resolves.toBeNull();
+  });
+
+  it('RawWalletRepository monta a Wallet com balance/locked/version do doc', async () => {
+    const repo = new RawWalletRepository(
+      walletDb({
+        _id: 'w1',
+        userId: 'u1',
+        balanceCents: 1234,
+        lockedBalanceCents: 56,
+        currency: 'BRL',
+        version: 7,
+      }),
+    );
+    const wallet = await repo.findByUserId('u1');
+    expect(wallet?.balance).toBe(12.34);
+    expect(wallet?.lockedBalance).toBe(0.56);
+    expect((wallet as any)._version).toBe(7);
+  });
+
+  it('RawWalletRepository usa version default 1 quando ausente', async () => {
+    const repo = new RawWalletRepository(
+      walletDb({ _id: 'w1', userId: 'u1', balanceCents: 100, lockedBalanceCents: 0, currency: 'BRL' }),
+    );
+    const wallet = await repo.findByUserId('u1');
+    expect((wallet as any)._version).toBe(1);
+  });
+
+  const sumDb = (rows: unknown[]) => {
+    const aggregate = jest.fn(() => ({ toArray: jest.fn().mockResolvedValue(rows) }));
+    return { aggregate, db: { collection: jest.fn(() => ({ aggregate })) } as never };
+  };
+
+  it('sumByTypes soma e conta quando há linhas', async () => {
+    const { db } = sumDb([{ amountCents: 300, count: 2 }]);
+    const repo = new RawLedgerRepository(db);
+    await expect(repo.sumByTypes('u1', ['DEPOSIT', 'BET_PLACED'] as any)).resolves.toEqual({
+      amountCents: 300,
+      count: 2,
+    });
+  });
+
+  it('sumByTypes sem linhas devolve zero', async () => {
+    const { db } = sumDb([]);
+    const repo = new RawLedgerRepository(db);
+    await expect(repo.sumByTypes('u1', ['DEPOSIT'] as any)).resolves.toEqual({
+      amountCents: 0,
+      count: 0,
+    });
+  });
+
+  it('sumByTypes com amountCents nulo normaliza para 0', async () => {
+    const { db } = sumDb([{ amountCents: null, count: 0 }]);
+    const repo = new RawLedgerRepository(db);
+    await expect(repo.sumByTypes('u1', ['DEPOSIT'] as any)).resolves.toEqual({
+      amountCents: 0,
+      count: 0,
+    });
+  });
+
+  it('sumTypeGroup propaga from e statuses para o $match', async () => {
+    const from = new Date('2026-01-01T00:00:00Z');
+    const { aggregate, db } = sumDb([{ amountCents: 1, count: 1 }]);
+    const repo = new RawLedgerRepository(db);
+    await repo.sumByTypes('u1', ['DEPOSIT'] as any, { from, statuses: ['COMPLETED'] });
+
+    expect(aggregate).toHaveBeenCalledWith([
+      {
+        $match: {
+          userId: 'u1',
+          type: { $in: ['DEPOSIT'] },
+          createdAt: { $gte: from },
+          status: { $in: ['COMPLETED'] },
+        },
+      },
+      expect.anything(),
+    ]);
+  });
+
+  it('countByUserId conta documentos do ledger', async () => {
+    const countDocuments = jest.fn().mockResolvedValue(5);
+    const repo = new RawLedgerRepository({ collection: jest.fn(() => ({ countDocuments })) } as never);
+    await expect(repo.countByUserId('u1')).resolves.toBe(5);
+  });
+
+  it('RawLedgerRepository rejeita findByUserId e aggregateByTypes', async () => {
+    const repo = new RawLedgerRepository({} as never);
+    await expect(repo.findByUserId('u1')).rejects.toThrow('não é usada pela reconciliação');
+    await expect(repo.aggregateByTypes()).rejects.toThrow('não é usada pela reconciliação');
+  });
+});
+
+describe('financeReconciliation — casos de borda de compareReconciliations', () => {
+  it('reconciliações com currency ausente são iguais (assinatura normaliza vazio)', () => {
+    const a = summary([userResult({ userId: 'u1', currency: undefined as never, entries: 3 })]);
+    const b = summary([userResult({ userId: 'u1', currency: undefined as never, entries: 3 })]);
+    const comparison = compareReconciliations(a, b);
+    expect(comparison.equal).toBe(true);
+    expect(comparison.diffs).toHaveLength(0);
+  });
+
+  it('lista divergência por usuário', () => {
+    const a = summary([userResult({ userId: 'u1', balanceCents: 100 })]);
+    const b = summary([userResult({ userId: 'u1', balanceCents: 99 })]);
+    const comparison = compareReconciliations(a, b);
+    expect(comparison.diffs.some((d) => d.includes('divergência em "u1"'))).toBe(true);
+  });
+
+  it('ambos vazios são iguais e passam', () => {
+    const comparison = compareReconciliations(summary([]), summary([]));
+    expect(comparison).toEqual({ equal: true, sourcePassed: true, restoredPassed: true, diffs: [] });
+  });
+});
+
+describe('financeReconciliation describeSummary', () => {
+  it('imprime o resumo no console', () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    describeSummary('origem', summary([userResult({ userId: 'u1' })]) as ReconciliationSummary);
+    expect(log).toHaveBeenCalledWith('origem: 1 usuário(s), 1 ok, 0 falhas');
+    log.mockRestore();
   });
 });
