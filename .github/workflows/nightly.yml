@@ -41,27 +41,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
+      - name: Build test image (backbet:test)
+        run: docker compose -f docker-compose.test.yml build integration-tests
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Start test infrastructure (MongoDB replica set + Redis)
-        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
-
-      - name: Carga distribuída ${{
-          matrix.scale }}x
-        run: LOAD_SCALE=${{ matrix.scale }} npm run test:load:distributed
+      - name: Carga distribuída ${{ matrix.scale }}x
+        run: |
+          docker compose -f docker-compose.test.yml run --rm \
+            -e LOAD_SCALE=${{ matrix.scale }} \
+            integration-tests node scripts/run-integration-tests.cjs -- \
+            src/integration/__tests__/load.distributed.integration.test.ts
 
       - name: Teardown test infrastructure
-        run: docker compose -f docker-compose.test.yml down
         if: always()
+        run: docker compose -f docker-compose.test.yml down -v
 
   docker-rebuild:
     name: Docker clean rebuild (Fase 17)
@@ -69,17 +61,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
-
-      - name: Gerar keyfile do MongoDB (ignorado no Git)
-        run: |
-          mkdir -p deploy/mongo
-          openssl rand -base64 756 > deploy/mongo/mongodb-keyfile
-          chmod 400 deploy/mongo/mongodb-keyfile
 
       - name: Montar .env de laboratório a partir do exemplo
         run: cp .env.example .env
@@ -96,31 +77,23 @@ jobs:
       matrix:
         suite:
           - name: Chaos (crash testing — Fase 14)
-            script: test:crash
+            spec: src/integration/__tests__/crash.integration.test.ts
           - name: Load (contention — Fase 4)
-            script: test:load
+            spec: src/integration/__tests__/load.concurrency.integration.test.ts
           - name: Backup drill (Fase 15)
-            script: test:backup
+            spec: src/integration/__tests__/backup.integration.test.ts
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Start test infrastructure (MongoDB replica set + Redis)
-        run: docker compose -f docker-compose.test.yml up -d --wait --wait-timeout 180
+      - name: Build test image (backbet:test)
+        run: docker compose -f docker-compose.test.yml build integration-tests
 
       - name: ${{ matrix.suite.name }}
-        run: npm run ${{ matrix.suite.script }}
+        run: |
+          docker compose -f docker-compose.test.yml run --rm \
+            integration-tests node scripts/run-integration-tests.cjs -- \
+            ${{ matrix.suite.spec }}
 
       - name: Teardown test infrastructure
-        run: docker compose -f docker-compose.test.yml down
         if: always()
+        run: docker compose -f docker-compose.test.yml down -v

@@ -7,13 +7,6 @@ test:crash
 test:backup
 docker:rebuild:ci
 ou alterar o workflow para os comandos reais.
-2. Corrigir .env.example
-Substituir todos os valores secretos por:
-CHANGE_ME
-example
-TROQUE_AQUI
-e criar um mecanismo separado para gerar ambiente CI.
-Como os valores atuais estão em um repositório público, eu trataria qualquer credencial já utilizada como comprometida.
 P1 — próxima fase
 1. completar baseline 50/100/200/300/500
 2. executar baseline específico no server01
