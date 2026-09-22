@@ -68,6 +68,8 @@
     "worker:contact": "tsx src/scripts/start-contact-worker.ts",
     "worker:withdrawal": "tsx src/scripts/start-withdrawal-worker.ts",
     "pm2:start:withdrawal": "npm run build && pm2 start ecosystem.withdrawal.config.cjs --env production",
+    "pm2:bench": "node scripts/run-pm2-bench.cjs",
+    "pm2:bench:fast": "BENCH_FAST=1 node scripts/run-pm2-bench.cjs",
     "pm2:kill": "bash ./scripts/pm2-kill.sh"
   },
   "dependencies": {

@@ -89,6 +89,28 @@ chamada ao PSP via marcador compartilhado), **ledger** (1 `WITHDRAWAL_COMPLETED`
 **state transition** (`COMPLETED`) e **idempotência** (uma 3ª entrega não re-paga),
 fechando com reconciliação financeira wallet vs ledger.
 
+### PM2 e filas sob processo real (bench)
+
+Valida os workers reais **sob PM2** contra Mongo/Redis do lab (containers de app parados;
+Mongo/Redis seguem no Docker). Orquestrador: `scripts/run-pm2-bench.cjs`.
+Rodar: `npm run pm2:bench` ou `npm run pm2:bench:fast` (`BENCH_FAST=1`, lock/stall reduzidos).
+
+- **E2E real** (`e2e`, driver `src/scripts/bench-e2e.ts`): deposit 1000 → request 200 →
+  `APPROVED` → payout enfileirado → **`COMPLETED`** por instância PM2 (balance 800, 1
+  `WITHDRAWAL_COMPLETED`).
+- **Throughput de fila** (`throughput`): 400 jobs, **1 instância vs 4 instâncias**
+  (`PM2_WORKER_INSTANCES`): 29-31 jobs/s vs ~100 jobs/s → **speedup ≈ 3,3-3,5x** em 4 cores.
+- **Interrupção/continuação** (`interrupt`): escala 4 → 1 no meio do batch; 300/300 com zero falhas.
+- **Troca de worker** (`switch`): app A → app B em pleno vôo; 200/200 com zero falhas.
+- **Crash + autorestart** (`crash`): `process.exit(1)` sintético → PM2 reinicia o worker
+  (re-processa backlog seguro pelo peering `locked` do BullMQ v6) e o retry conclui; 100/100,
+  `restart_time` incrementado, zero falhas.
+
+**Caveats descobertos no lab** (importantes para quem subir o bench):
+- **BullMQ v6 NÃO aceita `connection` como string de URL**: `Object.assign({port:6379, host:'127.0.0.1',...}, 'redis://...')` cai no localhost (`node_modules/bullmq/dist/cjs/classes/redis-connection.js:114`). Passar **cliente ioredis** (`new IORedis(url, { maxRetriesPerRequest: null })`), como o `createBullMqConnection()` da aplicação.
+- O **replica set `rs0` anuncia `mongodb:27017`** (hostname do container), irresolvível do host: a porta publicada `192.168.22.250:27018` exige **`directConnection=true`** na URI do host (driver conecta direto; transações ok em rs de membro único). `rs.reconfig` para o IP falha com `MongoServerError: No host ... maps to this node`.
+- `scripts/pm2-bench-env.cjs` reescreve `@mongodb:` → `@<LAB_HOST>:27018` (`LAB_MONGODB_PORT`) e `@redis:` → `@<LAB_HOST>:6379`, adiciona `directConnection=true` e injeta `PORT=3100`, `USE_REDIS_QUEUE=true`, fila `bench_ping`.
+
 ## Matriz de cenários críticos (dinheiro)
 
 Legenda: **Coberto** = teste automático; **Novo (Fase 20)** = adicionado na Fase 20; **Parcial** = caminho principal coberto com detalhe pendente.
