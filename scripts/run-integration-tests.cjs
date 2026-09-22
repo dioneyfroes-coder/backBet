@@ -121,7 +121,11 @@ function runDocker(args, opts) {
 }
 
 function runJest() {
-  const args = [jestBin, '--runInBand', ...specArgs, ...extraArgs];
+  // A suíte de integração roda um subconjunto de specs contra infra real; a
+  // cobertura nessa amostra não representa o projeto inteiro, então jamais pode
+  // acionar o threshold global (jest.config.js: 65% branches). Sem isso, o job
+  // de integração do CI falharia (exit 1) mesmo com todos os testes verdes.
+  const args = [jestBin, '--runInBand', '--coverage=false', ...specArgs, ...extraArgs];
 
   const env = { ...process.env };
   env.RUN_REAL_INTEGRATION_TESTS = 'true';

@@ -89,6 +89,19 @@ chamada ao PSP via marcador compartilhado), **ledger** (1 `WITHDRAWAL_COMPLETED`
 **state transition** (`COMPLETED`) e **idempotência** (uma 3ª entrega não re-paga),
 fechando com reconciliação financeira wallet vs ledger.
 
+> **Rodando a integração no host do lab** (em vez de Docker): a suíte usa as URIs do
+> ambiente (`MONGODB_URI`, `REDIS_URL`). No lab o `.env` aponta para hostnames de
+> container (`mongodb:27017`/`redis:6379`) — exporte antes as URIs acessíveis do host
+> (`192.168.22.250:27018` e `192.168.22.250:6379`, com `directConnection=true` no Mongo)
+> ou use `scripts/pm2-bench-env.cjs`. Execução validada em 22/09/2026: **18/18 verdes**
+> (`mongo-redis`, `user-auth-persistence`, `event-category-query`, `load.concurrency`,
+> `failure`).
+>
+> A suíte de integração roda specs parciais contra infra real; a **cobertura é desligada**
+> (`--coverage=false` em `run-integration-tests.cjs`), senão o threshold global de 65% de
+> branches (pensado para a suíte unitária do `npm run check`) estouraria em 32% e o job de
+> **integração do CI falharia mesmo com todos os testes verdes**.
+
 ### PM2 e filas sob processo real (bench)
 
 Valida os workers reais **sob PM2** contra Mongo/Redis do lab (containers de app parados;
