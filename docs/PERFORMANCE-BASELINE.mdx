@@ -47,37 +47,63 @@ O driver:
 Cenários por nível: **contenção** (N depósitos na *mesma* carteira → serialização de
 documento único + CAS/retry) e **distribuído** (N carteiras distintas → eixo horizontal).
 
-## Resultado — base pós-correções (21/09/2026)
+## Resultado — base completa pós-correções (22/09/2026)
 
-Run: nível **50**, depósitos de R$ 1,25. `runId 02326fa4…`, relatório detalhado em
-`scripts/load-results/fase14/02326fa4-7e5e-4185-ac00-475ecf86d9b5/`.
+Run completo: níveis **50/100/200/300/500**, depósitos de R$ 1,25, `runId 302fc891…`,
+relatório detalhado em `scripts/load-results/fase14/302fc891-bb01-47da-9e00-9bd0c44a153d/`.
 
-| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | wall_ms | ops/s | cpu% | rss_peak (MB) | mongo ping (ms) | redis ping (ms) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 50 | contenção | 6172 | 8047 | 8077 | 5495.7 | 8077 | 50 | 0 | 8077 | 6 | 89.2 | 594.9 | 96 | 53 |
-| 50 | distribuído | 713 | 759 | 772 | 713.5 | 772 | 50 | 0 | 772 | 65 | 82.5 | 595.5 | 465 | 3 |
+| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | capped | wall_ms | ops/s | cpu% | rss_peak (MB) | mongo ping (ms) | redis ping (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | contenção | 7581 | 10018 | 10042 | 7152 | 10042 | 50 | 0 | não | 10042 | 5 | 80.4 | 597 | 99.5 | 82.5 |
+| 50 | distribuído | 348 | 526 | 527 | 406 | 527 | 50 | 0 | não | 527 | 95 | 85.1 | 597 | 143 | 83 |
+| 100 | contenção | 16164 | 21192 | 21292 | 14622 | 21298 | 100 | 0 | não | 21298 | 5 | 82.0 | 618 | 120 | 68.5 |
+| 100 | distribuído | 657 | 669 | 677 | 621 | 679 | 100 | 0 | não | 679 | 147 | 96.2 | 619 | 184 | 167 |
+| 200 | contenção | 68740 | 89952 | 90141 | 60694 | 90181 | 200 | 0 | não | 90181 | 2 | 83.4 | 808 | 195.5 | 179.5 |
+| 200 | distribuído | 1525 | 1585 | 1592 | 1509 | 1603 | 200 | 0 | não | 1604 | 125 | 85.1 | 603 | 327.5 | 521 |
+| 300 | contenção | 156215 | 204861 | 205249 | 138573 | 205276 | 300 | 0 | não | 205276 | 1 | 82.4 | 1029 | 274 | 183 |
+| 300 | distribuído | 1798 | 1876 | 1882 | 1790 | 1883 | 300 | 0 | não | 1884 | 159 | 101.3 | 1012 | 472 | 196.5 |
+| 500 | contenção | 449039 | 594989 | 596229 | 399173 | 596312 | 500 | 0 | não | 596313 | 1 | 84.0 | 1024 | 452 | 197 |
+| 500 | distribuído | 5724 | 6124 | 6148 | 5730 | 6154 | 500 | 0 | não | 6154 | 81 | 87.2 | 678 | 1557 | 496.5 |
 
 Recursos dos containers (pico durante a corrida):
 
 | container | cpu% pico | cpu% média | RAM pico (MB) | RAM média (MB) |
 | --- | --- | --- | --- | --- |
-| mongodb | 103.3 | 23.9 | 415.8 | 276.5 |
-| redis | 7.4 | 2.4 | 7.9 | 4.1 |
-| integration-tests | 174.5 | 3.4 | 593.3 | 469.6 |
+| mongodb | 151.7 | 48.5 | 495.2 | 335.0 |
+| redis | 10.2 | 2.3 | 8.2 | 3.5 |
+| integration-tests | 171.3 | 38.0 | 1015.0 | 661.0 |
 
-Leitura:
+Leitura da rodada completa:
 
-- **Correctness**: 0 rejeitadas, 0 conflitos CAS, saldo/ledger consistentes nos dois
-  cenários — o modelo continua correto sob concorrência (invariantes FI-01/FI-04 etc.).
-- **Contenção** é o gargalo patológico: mesmo com 50 ops na mesma carteira, a latência
-  já fica em segundos (p50 ≈ 6,2 s; ~6 ops/s). É a serialização do documento único +
-  reexecução de transação otimista.
-- **Distribuído** escala melhor (≈65 ops/s, p50 ≈ 0,7 s) com o app ocupando CPU
-  (~82%) — o teto neste nível é CPU do runner, não o Mongo.
-- **Mongo latency**: a sonda compete com a fila do connection pool sob carga; no
-  distribuído a mediana sobe (465 ms) porque 50 operações disputam o mesmo pool. No
-  contenção (poucas ops simultâneas) fica ~96 ms. **Redis latency** permanece estável
-  (3–53 ms).
+- **Correctness**: **0 rejeitadas, 0 conflitos CAS, 0 ondas capped em TODOS os
+  níveis** — o modelo continua correto sob concorrência até 500 ops simultâneas
+  (invariantes FI-01/FI-04 etc.). Isso inclui o nível 500 de contenção, que no
+  pré-fix rejeitava 174/500.
+- **Contenção** degrada **superlinearmente**: p50 ≈ 7,6 s @50 → 16 s @100 → 69 s @200
+  → 156 s @300 → **449 s @500** (p95 ≈ 595 s @500; ~1 ops/s). É a serialização do
+  documento único por carteira + reexecução de transação otimista — o teto
+  patológico confirma-se, e o modelo suporta 500 sem perder invariantes, mas a
+  latência é inviável para tráfego real nesse cenário.
+- **Distribuído** escala até ~147–159 ops/s (p50 ≈ 0,3–1,8 s) nos níveis 50–300; no
+  nível 500 cai para ~81 ops/s com p50 ≈ 5,7 s e ping de Mongo ≈ 1,56 s — sinal de
+  saturação de infra (connection pool + host compartilhado), não de bug financeiro.
+- **Recursos**: Mongo foi ao pico de 151% CPU com RAM média 335 MB; o runner
+  (integration-tests) oscilou até 171% CPU com RSS pico ≈ 1 GB @300/500.
+- **Diferenças vs. a rodada de 50x isolada** (21/09): nesta rodada o host também
+  rodava a stack de produção (`backbet-*`), elevando a latência base — por isso os
+  números @50 ficaram ~20% acima do run isolado. No server01, executar o baseline
+  com a stack ativa mede o cenário realista.
+
+### Rodada anterior — 50x isolado (21/09/2026)
+
+Run: nível **50**, `runId 02326fa4…`, relatório em
+`scripts/load-results/fase14/02326fa4-7e5e-4185-ac00-475ecf86d9b5/` (sem stack de
+produção no host).
+
+| level | cenário | p50 | p95 | p99 | mean | max | concluídas | rejeitadas | wall_ms | ops/s | cpu% | rss_peak (MB) | mongo ping (ms) | redis ping (ms) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 50 | contenção | 6172 | 8047 | 8077 | 5495.7 | 8077 | 50 | 0 | 8077 | 6 | 89.2 | 594.9 | 96 | 53 |
+| 50 | distribuído | 713 | 759 | 772 | 713.5 | 772 | 50 | 0 | 772 | 65 | 82.5 | 595.5 | 465 | 3 |
 
 ### Referência anterior (pré-fix — 19/09/2026, `scripts/load-results/fase13/final/`)
 
