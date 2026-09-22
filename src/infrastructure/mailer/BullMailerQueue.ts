@@ -1,16 +1,16 @@
-import Queue from 'bull';
-import type { Queue as BullQueue } from 'bull';
+import { Queue } from 'bullmq';
 import type { ContactPayload } from '@/core/contact/domain/types/ContactMessage';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { contactEnqueuedCounter } from '@/infrastructure/observability/metrics';
-import { getRedisUrl } from '@/shared/config/connections';
+import { createBullMqConnection } from '@/infrastructure/queues/bullMqConnection';
 
 export class BullMailerQueue {
-  private queue: BullQueue;
+  private queue: Queue;
 
   constructor() {
-    // bull accepts a connection string as the second argument
-    this.queue = new Queue('contact_queue', getRedisUrl()) as BullQueue;
+    this.queue = new Queue('contact_queue', {
+      connection: createBullMqConnection(),
+    });
   }
 
   async enqueueContact(payload: ContactPayload): Promise<void> {
@@ -31,5 +31,5 @@ export class BullMailerQueue {
     }
   }
 
-  // not implementing drain helpers for bull adapter
+  // not implementing drain helpers for bullmq adapter
 }

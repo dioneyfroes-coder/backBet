@@ -14,14 +14,6 @@ jest.mock('@/infrastructure/payments/factory', () => ({
   }),
 }));
 
-jest.mock('bull', () => {
-  return function MockQueue(this: { name: string; process: jest.Mock; on: jest.Mock }, name: string) {
-    this.name = name;
-    this.process = jest.fn();
-    this.on = jest.fn();
-  };
-});
-
 const payload = (): WithdrawalPayoutPayload => ({
   requestId: randomUUID(),
   userId: 'user-audit-1',

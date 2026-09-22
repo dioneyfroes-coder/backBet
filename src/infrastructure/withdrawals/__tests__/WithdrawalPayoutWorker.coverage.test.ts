@@ -13,6 +13,7 @@ import {
   withdrawalPayoutFailedCounter,
 } from '@/infrastructure/observability/metrics';
 import type { WithdrawalPayoutPayload } from '@/core/finance/domain/ports/IWithdrawalQueue';
+import * as BullMQ from 'bullmq';
 
 jest.mock('@/infrastructure/payments/factory', () => ({
   __esModule: true,
@@ -21,11 +22,20 @@ jest.mock('@/infrastructure/payments/factory', () => ({
   }),
 }));
 
-jest.mock('bull', () => {
-  return function MockQueue(this: { name: string; process: jest.Mock; on: jest.Mock }, name: string) {
-    this.name = name;
-    this.process = jest.fn();
-    this.on = jest.fn();
+jest.mock('@/infrastructure/queues/bullMqConnection', () => ({
+  __esModule: true,
+  createBullMqConnection: () => ({ host: 'localhost', port: 6379 }),
+}));
+
+jest.mock('bullmq', () => {
+  return {
+    Worker: jest.fn(function (this: any, name: string, processor: any, opts: any) {
+      this.name = name;
+      this.processor = processor;
+      this.opts = opts;
+      this.on = jest.fn();
+      this.close = jest.fn().mockResolvedValue(undefined);
+    }),
   };
 });
 
@@ -281,16 +291,17 @@ describe('WithdrawalPayoutWorker — startWithdrawalWorker', () => {
     } as any;
 
     const queue = startWithdrawalWorker(service) as any;
-    expect(queue.process).toHaveBeenCalledWith('payout', expect.any(Function));
+    const WorkerCtor = BullMQ.Worker as unknown as jest.Mock;
+    const processor = WorkerCtor.mock.calls[0][1];
+
     expect(queue.on).toHaveBeenCalledWith('failed', expect.any(Function));
 
-    const processor = queue.process.mock.calls[0][1];
     const p = payload();
-    await processor({ data: p });
+    await processor({ data: p, attemptsMade: 0 });
     expect(service.claimForProcessing).toHaveBeenCalledWith(p.requestId);
     expect(service.completePayout).toHaveBeenCalledWith(p.requestId);
 
     const failedHandler = queue.on.mock.calls[0][1];
-    expect(() => failedHandler({ data: p }, new Error('provider down'))).not.toThrow();
+    expect(() => failedHandler({ data: p }, 'provider down')).not.toThrow();
   }, 10000);
 });

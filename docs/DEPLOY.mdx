@@ -99,14 +99,10 @@ A troca não altera código — `env.ts` continua lendo `process.env`.
 | `npm run audit:prod` | Só produção | Prioridade de deploy |
 | `npm run audit:prod:critical` | Produção + crítica | Gate do CI |
 
-Situação atual (22/09/2026): **produção 2 vulnerabilidades, 0 críticas, 0 altas** — os clusters HIGH
-(`@opentelemetry/*`, `nodemailer`, `js-yaml`) foram resolvidos com major bump (`npm audit --omit=dev`).
-
-Dívidas monitoradas (restam só moderadas):
-
-| Pacote | Severidade | Plano |
-|---|---|---|
-| `bull` (uuid transitivo) | moderada | Bull deprecated → migrar p/ BullMQ (item P1-4) |
+Situação atual (22/09/2026): **produção 0 vulnerabilidades, 0 críticas, 0 altas** — os clusters
+HIGH (`@opentelemetry/*`, `nodemailer`, `js-yaml`) foram resolvidos com major bump (`npm audit
+--omit=dev`); a última moderada (`uuid` transitiva via `bull`) foi eliminada na migração
+Bull → BullMQ (item P1-4).
 
 ## Endurecimento do servidor
 

@@ -1,15 +1,16 @@
-import Queue from 'bull';
-import type { Queue as BullQueue } from 'bull';
+import { Queue } from 'bullmq';
 import IWithdrawalQueue, {
   WithdrawalPayoutPayload,
 } from '@/core/finance/domain/ports/IWithdrawalQueue';
-import { getRedisUrl } from '@/shared/config/connections';
+import { createBullMqConnection } from '@/infrastructure/queues/bullMqConnection';
 
 export class BullWithdrawalQueue implements IWithdrawalQueue {
-  private queue: BullQueue;
+  private queue: Queue;
 
   constructor() {
-    this.queue = new Queue('withdrawal_payouts', getRedisUrl()) as BullQueue;
+    this.queue = new Queue('withdrawal_payouts', {
+      connection: createBullMqConnection(),
+    });
   }
 
   async getPendingCount(): Promise<number> {

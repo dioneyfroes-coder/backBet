@@ -26,7 +26,7 @@ export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
   try {
     await client.ping();
     await client.quit();
-    writeStructuredLog({ event: 'withdrawal_queue_backend', backend: 'bull', redis: REDIS_URL });
+    writeStructuredLog({ event: 'withdrawal_queue_backend', backend: 'bullmq', redis: REDIS_URL });
     return new BullWithdrawalQueue();
   } catch (err) {
     try {

@@ -1,5 +1,4 @@
-import Queue from 'bull';
-import type { Queue as BullQueue } from 'bull';
+import { Worker } from 'bullmq';
 import { createPaymentAdapter } from '@/infrastructure/payments/factory';
 import {
   withdrawalPayoutSuccessCounter,
@@ -20,7 +19,7 @@ import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 import { IDEMPOTENCY_PROCESSING_RECOVERY_MS } from '@/shared/services/IdempotencyService';
 import { idempotencyService } from '@/infrastructure/persistence/idempotencyFactory';
 import { canonicalFingerprint } from '@/shared/services/fingerprint';
-import { getRedisUrl } from '@/shared/config/connections';
+import { createBullMqConnection } from '@/infrastructure/queues/bullMqConnection';
 
 export async function processWithdrawalPayloadOnce(
   payload: WithdrawalPayoutPayload,
@@ -233,7 +232,7 @@ export async function recoverWithdrawalProcessing(
  * Recupera um withdrawal aprovado e preso (job de payout perdido: nunca foi
  * processado após o approve, ex.: enqueue perdido / worker morto antes de
  * marcar PROCESSING). Re-enfileira o job reutilizando o mesmo jobId=requestId,
- * que é idempotente na fila (Bull) e tem o processamento deduplicado pelo
+ * que é idempotente na fila (BullMQ) e tem o processamento deduplicado pelo
  * idempotencyService no processWithdrawalPayload. Não consulta o PSP porque o
  * pagamento só acontece depois de markProcessing.
  */
@@ -447,23 +446,26 @@ export function startWithdrawalRecovery(options: {
   return { stop() { clearInterval(timer); } };
 }
 
-export function startWithdrawalWorker(service?: WithdrawalRequestService): BullQueue {
-  const queue = new Queue('withdrawal_payouts', getRedisUrl()) as BullQueue;
-
-  queue.process('payout', async (job) => {
-    const started = process.hrtime();
-    if (job.attemptsMade > 0) {
-      recordWorkerRetry('withdrawal_payouts');
-    }
-    try {
-      await processWithdrawalPayload(job.data as WithdrawalPayoutPayload, undefined, service);
-      observeWorkerJob('withdrawal_payouts', 'payout', 'succeeded', jobElapsedMs(started));
-      return Promise.resolve();
-    } catch (err) {
-      observeWorkerJob('withdrawal_payouts', 'payout', 'failed', jobElapsedMs(started));
-      throw err;
-    }
-  });
+export function startWithdrawalWorker(service?: WithdrawalRequestService): Worker {
+  const queue = new Worker(
+    'withdrawal_payouts',
+    async (job) => {
+      const started = process.hrtime();
+      if (job.attemptsMade > 0) {
+        recordWorkerRetry('withdrawal_payouts');
+      }
+      try {
+        await processWithdrawalPayload(job.data as WithdrawalPayoutPayload, undefined, service);
+        observeWorkerJob('withdrawal_payouts', 'payout', 'succeeded', jobElapsedMs(started));
+      } catch (err) {
+        observeWorkerJob('withdrawal_payouts', 'payout', 'failed', jobElapsedMs(started));
+        throw err;
+      }
+    },
+    {
+      connection: createBullMqConnection(),
+    },
+  );
 
   queue.on('failed', (job, err) => {
     const payload = job?.data as WithdrawalPayoutPayload | undefined;

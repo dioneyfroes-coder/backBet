@@ -33,7 +33,7 @@ import {
   createWithdrawalRequestRepository,
   createLedgerRepository,
 } from '@/infrastructure/persistence/factory';
-import type { Queue as BullQueue } from 'bull';
+import type { Worker as BullMQWorker } from 'bullmq';
 import { coreMetrics } from '@/infrastructure/observability/coreMetrics';
 import { registerDefaultSessionRepositoryResolver } from '@/infrastructure/persistence/sessionRepositoryFactory';
 // route creators are loaded dynamically (may be async factories)
@@ -46,8 +46,8 @@ async function main() {
   let treasuryReconciliationJob: TreasuryReconciliationJob | undefined;
   let auditRetentionJob: AuditRetentionJob | undefined;
   let sigapTransmissionJob: SigapTransmissionJob | undefined;
-  let contactQueue: BullQueue | undefined;
-  let withdrawalQueue: BullQueue | undefined;
+  let contactQueue: BullMQWorker | undefined;
+  let withdrawalQueue: BullMQWorker | undefined;
 
   const stopJobs = () => {
     treasuryJob?.stop();
