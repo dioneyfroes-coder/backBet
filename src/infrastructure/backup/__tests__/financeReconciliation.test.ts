@@ -3,8 +3,10 @@ import {
   describeSummary,
   RawLedgerRepository,
   RawWalletRepository,
+  reconcileDbFinance,
 } from '@/infrastructure/backup/financeReconciliation';
 import { ReconciliationSummary, UserReconciliationResult } from '@/core/finance/application/services/FinancialReconciliationService';
+import { ObjectId } from 'mongodb';
 
 function userResult(partial: Partial<UserReconciliationResult> & { userId: string }): UserReconciliationResult {
   return {
@@ -229,5 +231,66 @@ describe('financeReconciliation describeSummary', () => {
     describeSummary('origem', summary([userResult({ userId: 'u1' })]) as ReconciliationSummary);
     expect(log).toHaveBeenCalledWith('origem: 1 usuário(s), 1 ok, 0 falhas');
     log.mockRestore();
+  });
+});
+
+describe('financeReconciliation reconcileDbFinance (mongo raw fake)', () => {
+  function fakeDb(users: { _id: unknown }[], wallets: Record<string, unknown>, ledgerRows: unknown[]) {
+    const collections: Record<string, any> = {
+      users: {
+        find: jest.fn(() => ({ toArray: jest.fn().mockResolvedValue(users) })),
+      },
+      wallets: {
+        findOne: jest.fn((query: { userId: string }) => Promise.resolve(wallets[query.userId] ?? null)),
+      },
+      ledgerentries: {
+        aggregate: jest.fn(() => ({ toArray: jest.fn().mockResolvedValue(ledgerRows) })),
+      },
+    };
+    return {
+      collection: (name: string) => collections[name] ?? collections.ledgerentries,
+      _collections: collections,
+    } as any;
+  }
+
+  it('normaliza _id ObjectId e string e reconcilia todos os usuários', async () => {
+    const idObject = new ObjectId();
+    const db = fakeDb(
+      [{ _id: idObject }, { _id: 'plain-user' }],
+      {
+        [idObject.toHexString()]: {
+          _id: idObject,
+          userId: idObject.toHexString(),
+          balanceCents: 0,
+          lockedBalanceCents: 0,
+          currency: 'BRL',
+          version: 1,
+        },
+      },
+      [],
+    );
+
+    const result = await reconcileDbFinance(db);
+
+    expect(db._collections.users.find).toHaveBeenCalledWith({}, { projection: { _id: 1 } });
+    expect(result.checked).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(result.results[0].userId).toBe(idObject.toHexString());
+    expect(result.results[0].missingWallet).toBe(false);
+    expect(result.results[0].balancePassed).toBe(true);
+    expect(result.results[1].userId).toBe('plain-user');
+    expect(result.results[1].missingWallet).toBe(true);
+  });
+
+  it('marca usuários com entradas de ledger mas sem carteira como falha', async () => {
+    const db = fakeDb([{ _id: 'u-sem-carteira' }], {}, [{ amountCents: 10, count: 1 }]);
+
+    const result = await reconcileDbFinance(db);
+
+    expect(result.checked).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(result.results[0].passed).toBe(false);
+    expect(result.results[0].missingWallet).toBe(true);
+    expect(result.results[0].entries).toBeGreaterThan(0);
   });
 });

@@ -43,6 +43,7 @@ jest.mock('@/shared/logging/structuredLogger', () => ({
 }));
 
 import { createWithdrawalQueue } from '../withdrawalQueueFactory';
+import createWithdrawalQueueDefault from '../withdrawalQueueFactory';
 import { writeStructuredLog } from '@/shared/logging/structuredLogger';
 
 const ctorName = (value: unknown): string =>
@@ -91,5 +92,42 @@ describe('createWithdrawalQueue', () => {
     expect(writeStructuredLog).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'withdrawal_queue_fallback', backend: 'inmemory' }),
     );
+  });
+
+  it('detecta runtime de teste pelo NODE_ENV quando BACKBET_RUNTIME_ENV está ausente', async () => {
+    delete process.env.BACKBET_RUNTIME_ENV;
+    process.env.NODE_ENV = 'test';
+
+    const queue = await createWithdrawalQueue();
+
+    expect(ctorName(queue)).toBe('InMemoryWithdrawalQueue');
+    expect(mockPing).not.toHaveBeenCalled();
+  });
+
+  it('fora de teste com ambos os envs indefinidos: usa o fallback InMemory', async () => {
+    delete process.env.BACKBET_RUNTIME_ENV;
+    process.env.NODE_ENV = '';
+    mockPing.mockRejectedValue(new Error('redis unreachable'));
+
+    const queue = await createWithdrawalQueue();
+
+    expect(ctorName(queue)).toBe('InMemoryWithdrawalQueue');
+    expect(mockPing).toHaveBeenCalledTimes(1);
+  });
+
+  it('fallback ignora um erro no quit do cliente Redis', async () => {
+    process.env.BACKBET_RUNTIME_ENV = 'production';
+    mockPing.mockRejectedValue(new Error('ECONNREFUSED'));
+    mockQuit.mockRejectedValue(new Error('already closed'));
+
+    const queue = await createWithdrawalQueue();
+
+    expect(ctorName(queue)).toBe('InMemoryWithdrawalQueue');
+    expect(mockQuit).toHaveBeenCalledTimes(1);
+  });
+
+  it('o export default redireciona para o mesmo criador (uso legado)', async () => {
+    const queue = await createWithdrawalQueueDefault();
+    expect(ctorName(queue)).toBe('InMemoryWithdrawalQueue');
   });
 });
