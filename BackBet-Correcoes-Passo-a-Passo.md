@@ -12,7 +12,7 @@ P1 — próxima fase
 2. executar baseline específico no server01 ✓ executado no host server01 com a stack de produção ativa (mesma rodada do item 1)
 3. resolver vulnerabilidades HIGH principais ✓ audit --omit=dev: 0 críticas/0 altas (pm2@7, nodemailer@10, @opentelemetry/* major; fica só 1 moderada uuid via bull → BullMQ)
 4. migrar Bull → BullMQ ✓ migrado em 22/09 (bullmq@6.3.8; produtores/workers BullMQ + helper de conexão; 0 vulnerabilidades em prod; 1094 testes verdes; smoke real contra Redis OK)
-5. revisar branch coverage dos fluxos financeiros
+5. revisar branch coverage dos fluxos financeiros ✓ revisado em 22/09: cobertura global branch 67,4%→68,71% / stmts 84→84,37% / fns 80,7→81,17%; +29 testes (1123). Maiores ganhos: restoreBet 4%→89%, Withdraw 50%→100%, TransferProfitToPrize/PrizeToProfit 0%→100%, RiskExposureUnderflowError 33%→100%, BullWithdrawalQueue 0%→67% (novo, da migração P1-4), withdrawalQueueFactory 46%→96% stmt. Gaps restantes relevantes: EventCatalogService (0% br), CreditPackageRepository (15% st), financeReconciliation (54% br), WithdrawalRequestService (63% br)
 6. corrigir pm2:start:prod
 P2 — preparação para produto
 1. PSP real

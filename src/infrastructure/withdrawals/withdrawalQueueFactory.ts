@@ -5,10 +5,11 @@ import { BullWithdrawalQueue } from './BullWithdrawalQueue';
 import { getRedisUrl } from '@/shared/config/connections';
 import type IWithdrawalQueue from '@/core/finance/domain/ports/IWithdrawalQueue';
 
-const isTestRuntime = (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || '').toLowerCase() === 'test';
+const isTestRuntime = (): boolean =>
+  (process.env.BACKBET_RUNTIME_ENV || process.env.NODE_ENV || '').toLowerCase() === 'test';
 
 export async function createWithdrawalQueue(): Promise<IWithdrawalQueue> {
-  if (isTestRuntime) {
+  if (isTestRuntime()) {
     writeStructuredLog({
       event: 'withdrawal_queue_test_mode',
       backend: 'inmemory',
