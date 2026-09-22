@@ -15,6 +15,8 @@
 //               (jobs presos viram stalled e são retomados)
 //   switch      troca de worker em pleno vôo: app A derrubado, app B assume
 //   crash       crash do worker (process.exit(1)) + autorestart do PM2 + retry
+//   perf500     comparação de desempenho: 500 jobs com PM2 (4 inst) vs sem PM2
+//               (1 e 4 processos diretos spawnados sem orquestrador)
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { Queue } = require('bullmq');
@@ -25,7 +27,7 @@ const ROOT = path.resolve(__dirname, '..');
 const PING_WORKER_SCRIPT = path.join('scripts', 'bench-ping-worker.cjs');
 
 const args = process.argv.slice(2);
-const ALL_SCENARIOS = ['e2e', 'throughput', 'interrupt', 'switch', 'crash'];
+const ALL_SCENARIOS = ['e2e', 'throughput', 'interrupt', 'switch', 'crash', 'perf500'];
 const scenarios = !args.length || args.includes('all') ? ALL_SCENARIOS : args;
 const FAST = process.env.BENCH_FAST === '1';
 
@@ -179,6 +181,88 @@ const pingApp = (name, instances, extraEnv = {}) => ({
 });
 
 // ------------------------- cenários -------------------------
+function spawnDirectWorker(extraEnv = {}) {
+  const child = spawn(process.execPath, [PING_WORKER_SCRIPT], {
+    cwd: ROOT,
+    env: { ...process.env, ...pingEnv(extraEnv) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  child.stdout.on('data', (d) => {
+    out += String(d);
+    process.stdout.write(String(d));
+  });
+  child.stderr.on('data', (d) => {
+    out += String(d);
+    process.stdout.write(String(d));
+  });
+  return { child, get ready() { return out.includes('[bench-ping] ready'); } };
+}
+
+async function waitDirectWorkerReady(w, timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (w.ready) return;
+    if (w.child.exitCode !== null) throw new Error('worker direto morreu antes do ready');
+    await sleep(300);
+  }
+  throw new Error('timeout aguardando worker direto ready');
+}
+
+const waitExit = (child) => new Promise((r) => child.on('exit', () => r()));
+
+async function measureDirect(q, total, procs) {
+  await enqueue(q, total);
+  const workers = Array.from({ length: procs }, () => spawnDirectWorker());
+  try {
+    for (const w of workers) await waitDirectWorkerReady(w, 30_000);
+    const res = await waitDrain(q, total, FAST ? 120_000 : 300_000, `[sem PM2 ${procs} proc]`);
+    // jobs activos em voo terminam antes do SIGTERM
+    await sleep(1000);
+    return res;
+  } finally {
+    for (const w of workers) w.child.kill('SIGTERM');
+    try {
+      await Promise.all(workers.map((w) => waitExit(w.child)));
+    } catch {}
+  }
+}
+
+async function measureWithPm(q, total, instances) {
+  const name = 'bench-ping-pm';
+  await enqueue(q, total);
+  await startApp(pingApp(name, instances));
+  try {
+    await waitOnline(name, instances, 30_000);
+    return await waitDrain(q, total, FAST ? 120_000 : 300_000, `[PM2 ${instances}x]`);
+  } finally {
+    await deleteApp(name).catch(() => {});
+  }
+}
+
+async function scenarioPerf500() {
+  log('=== cenário: 500 jobs — PM2 (4 inst) vs sem PM2 (1 e 4 processos diretos) ===');
+  const q = makeQueue();
+  const total = 500;
+  try {
+    const r_direct1 = await measureDirect(q, total, 1);
+    const r_direct4 = await measureDirect(q, total, 4);
+    const r_pm4 = await measureWithPm(q, total, 4);
+    const rate = (ms) => (ms > 0 ? Math.round((total / ms) * 1000) : 0);
+    log('RESULTADO 500 jobs:');
+    log(`  sem PM2 (1 proc) : ${r_direct1.ms}ms (${rate(r_direct1.ms)}/s)  failed=${r_direct1.failed}`);
+    log(`  sem PM2 (4 proc) : ${r_direct4.ms}ms (${rate(r_direct4.ms)}/s)  failed=${r_direct4.failed}`);
+    log(`  com PM2 (4 inst) : ${r_pm4.ms}ms (${rate(r_pm4.ms)}/s)  failed=${r_pm4.failed}`);
+    log(`  speedup PM2 4x vs 1 proc       = ${(r_direct1.ms / r_pm4.ms).toFixed(2)}x`);
+    log(`  overhead PM2 (4x/4 proc sem)   = ${((r_pm4.ms / r_direct4.ms) * 100 - 100).toFixed(1)}%`);
+    assert(r_direct1.failed === 0 && r_direct4.failed === 0 && r_pm4.failed === 0, 'zero falhas em todas as variantes');
+  } finally {
+    try {
+      await q.close();
+    } catch {}
+  }
+}
+
 async function ensureWithdrawalWorkers() {
   if ((await onlineCount('bench-withdrawal-worker', 1)) >= 1) return;
   await deleteApp('bench-withdrawal-worker').catch(() => {});
@@ -309,6 +393,7 @@ async function main() {
       interrupt: scenarioInterrupt,
       switch: scenarioSwitch,
       crash: scenarioCrash,
+      perf500: scenarioPerf500,
     };
     for (const s of scenarios) {
       const fn = registry[s];

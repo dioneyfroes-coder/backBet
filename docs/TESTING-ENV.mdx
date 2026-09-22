@@ -105,6 +105,12 @@ Rodar: `npm run pm2:bench` ou `npm run pm2:bench:fast` (`BENCH_FAST=1`, lock/sta
 - **Crash + autorestart** (`crash`): `process.exit(1)` sintético → PM2 reinicia o worker
   (re-processa backlog seguro pelo peering `locked` do BullMQ v6) e o retry conclui; 100/100,
   `restart_time` incrementado, zero falhas.
+- **500 jobs: PM2 vs sem PM2** (`perf500`): 1 processo direto **31/s** (16,0s), 4 processos
+  diretos sem orquestrador **125/s** (4,0s), PM2 4 instâncias **100/s** (5,0s) → speedup PM2
+  vs 1 proc **3,2x**; **overhead do PM2 ≈ 25%** em rajada de 500 jobs (spawn + handshake
+  BullMQ/first-lock; some com carga contínua — o `throughput` 4x mediu 100/s em 400 jobs
+  também). Zero falhas em todas as variantes; sem nenhuma perda/lock problemático em
+  concurrency=1.
 
 **Caveats descobertos no lab** (importantes para quem subir o bench):
 - **BullMQ v6 NÃO aceita `connection` como string de URL**: `Object.assign({port:6379, host:'127.0.0.1',...}, 'redis://...')` cai no localhost (`node_modules/bullmq/dist/cjs/classes/redis-connection.js:114`). Passar **cliente ioredis** (`new IORedis(url, { maxRetriesPerRequest: null })`), como o `createBullMqConnection()` da aplicação.
